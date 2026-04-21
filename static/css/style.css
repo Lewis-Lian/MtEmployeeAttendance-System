@@ -1,0 +1,11 @@
+body {
+  background: #f7f9fb;
+}
+
+.card {
+  border: 1px solid #e7edf3;
+}
+
+.summary-card {
+  min-height: 120px;
+}

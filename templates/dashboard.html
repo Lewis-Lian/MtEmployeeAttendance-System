@@ -1,0 +1,55 @@
+{% extends 'base.html' %}
+{% block title %}员工看板{% endblock %}
+{% block content %}
+<div class="row g-3">
+  <div class="col-md-3">
+    <label class="form-label">员工</label>
+    <select class="form-select" id="empSelect">
+      {% for e in employees %}
+      <option value="{{ e.id }}">{{ e.emp_no }} - {{ e.name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="col-md-3">
+    <label class="form-label">月份</label>
+    <input type="month" class="form-control" id="monthInput">
+  </div>
+  <div class="col-md-2 d-flex align-items-end">
+    <button class="btn btn-primary w-100" id="refreshBtn">刷新</button>
+  </div>
+</div>
+
+<div class="row mt-4 g-3" id="summaryCards"></div>
+
+<div class="card mt-4">
+  <div class="card-header">每日考勤记录</div>
+  <div class="table-responsive">
+    <table class="table table-sm table-striped mb-0" id="dailyTable">
+      <thead>
+        <tr>
+          <th>日期</th><th>应出勤</th><th>实出勤</th><th>旷工</th><th>请假</th><th>加班</th><th>迟到</th><th>早退</th><th>异常</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </div>
+</div>
+
+<div class="row mt-4 g-3">
+  <div class="col-md-6">
+    <div class="card">
+      <div class="card-header">加班记录</div>
+      <ul class="list-group list-group-flush" id="overtimeList"></ul>
+    </div>
+  </div>
+  <div class="col-md-6">
+    <div class="card">
+      <div class="card-header">请假/出差记录</div>
+      <ul class="list-group list-group-flush" id="leaveList"></ul>
+    </div>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
+{% endblock %}

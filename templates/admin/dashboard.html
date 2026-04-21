@@ -1,0 +1,82 @@
+{% extends 'base.html' %}
+{% block title %}管理后台{% endblock %}
+{% block content %}
+<div class="row g-4">
+  <div class="col-lg-6">
+    <div class="card">
+      <div class="card-header">导入 Excel</div>
+      <div class="card-body">
+        <form id="uploadForm" enctype="multipart/form-data">
+          <input type="file" class="form-control mb-3" name="file" required>
+          <button class="btn btn-primary" type="submit">上传并导入</button>
+        </form>
+        <div id="uploadResult" class="small mt-2"></div>
+      </div>
+    </div>
+
+    <div class="card mt-3">
+      <div class="card-header">班次管理</div>
+      <div class="card-body">
+        <form id="shiftForm">
+          <div class="row g-2">
+            <div class="col-md-4"><input class="form-control" name="shift_no" placeholder="班次编号" required></div>
+            <div class="col-md-4"><input class="form-control" name="shift_name" placeholder="班次名称" required></div>
+            <div class="col-md-4"><input class="form-control" name="time_slots" placeholder='[["08:00","12:00"],["13:00","17:00"]]'></div>
+          </div>
+          <button class="btn btn-outline-primary mt-2" type="submit">保存班次</button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-lg-6">
+    <div class="card">
+      <div class="card-header">创建只读账号</div>
+      <div class="card-body">
+        <form id="readonlyUserForm">
+          <div class="mb-2"><input class="form-control" name="username" placeholder="用户名" required></div>
+          <div class="mb-2"><input class="form-control" name="password" placeholder="密码" required></div>
+          <div class="mb-2">
+            <label class="form-label">关联员工</label>
+            <select class="form-select" name="emp_ids" multiple size="8">
+              {% for e in employees %}
+              <option value="{{ e.id }}">{{ e.emp_no }} - {{ e.name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <button class="btn btn-outline-success" type="submit">创建账号</button>
+        </form>
+        <div id="userResult" class="small mt-2"></div>
+      </div>
+    </div>
+
+    <div class="card mt-3">
+      <div class="card-header">导出报表</div>
+      <div class="card-body d-flex gap-2 align-items-end">
+        <div>
+          <label class="form-label">月份</label>
+          <input type="month" class="form-control" id="exportMonth">
+        </div>
+        <button class="btn btn-secondary" id="exportBtn">下载每日CSV</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="card mt-4">
+  <div class="card-header">系统账号</div>
+  <div class="table-responsive">
+    <table class="table table-sm table-striped mb-0">
+      <thead><tr><th>ID</th><th>用户名</th><th>角色</th><th>创建时间</th></tr></thead>
+      <tbody>
+      {% for u in users %}
+      <tr><td>{{ u.id }}</td><td>{{ u.username }}</td><td>{{ u.role }}</td><td>{{ u.created_at }}</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/admin.js') }}"></script>
+{% endblock %}
