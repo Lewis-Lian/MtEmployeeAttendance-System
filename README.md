@@ -26,3 +26,18 @@ Admin dashboard supports importing these files:
 Parser engine:
 - `.xlsx` => `openpyxl`
 - `.xls` => `xlrd`
+
+## Karpathy Skills Integration
+
+Integrated from: <https://github.com/forrestchang/andrej-karpathy-skills>
+
+Added files:
+- `CLAUDE.md` (project-level behavior guidelines)
+- `skills/karpathy-guidelines/SKILL.md` (reusable skill definition)
+- `.cursor/rules/karpathy-guidelines.mdc` (Cursor auto-applied rule)
+- `.claude-plugin/plugin.json` and `.claude-plugin/marketplace.json`
+
+Quick usage:
+- Claude Code: keep `CLAUDE.md` at repo root (already added)
+- Cursor: open this repo and the rule in `.cursor/rules` is auto-applied
+- Codex/other agents: follow `CLAUDE.md` and `skills/karpathy-guidelines/SKILL.md` as project engineering constraints
