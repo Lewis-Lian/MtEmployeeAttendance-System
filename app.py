@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import hashlib
 
 from dotenv import load_dotenv
 from flask import Flask
@@ -50,6 +51,9 @@ def _ensure_default_admin() -> None:
         admin = User(username="admin", role="admin")
         admin.set_password("admin123")
         db.session.add(admin)
+        db.session.commit()
+    elif admin.password_hash.startswith("scrypt:") and not hasattr(hashlib, "scrypt"):
+        admin.set_password("admin123")
         db.session.commit()
 
 
