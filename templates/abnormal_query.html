@@ -57,7 +57,16 @@
         <label class="form-label">账套</label>
         <select class="form-select" id="accountSetSelect"></select>
       </div>
-      <div class="col-lg-4">
+      <div class="col-lg-2">
+        <label class="form-label">显示选项</label>
+        <div class="dashboard-check-stack">
+          <label class="dashboard-check-option">
+            <input class="form-check-input m-0" type="checkbox" id="toggleEmpNo" checked>
+            <span>人员编号</span>
+          </label>
+        </div>
+      </div>
+      <div class="col-lg-2">
         <div class="dashboard-action-group">
           <button class="btn btn-primary" id="queryBtn">查询</button>
           <button class="btn btn-outline-success" id="downloadBtn">下载XLSX</button>
@@ -141,7 +150,7 @@
       <thead>
         <tr>
           <th>部门名称</th>
-          <th>人员编号</th>
+          <th class="col-emp-no">人员编号</th>
           <th>人员姓名</th>
           <th>异常考勤次数</th>
         </tr>

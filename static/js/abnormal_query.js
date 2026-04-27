@@ -7,20 +7,30 @@ function buildQuery(employeeSelector) {
   return { query, selectedCount: ids.length };
 }
 
+let latestRows = [];
+
+function applyColumnVisibility() {
+  const showEmpNo = document.getElementById("toggleEmpNo").checked;
+  document.querySelectorAll(".col-emp-no").forEach((el) => {
+    el.style.display = showEmpNo ? "" : "none";
+  });
+}
+
 function updateAbnormalMetrics(employeeSelector, rows = null) {
   const ids = employeeSelector.getSelectedIds();
   const accountSetSelect = document.getElementById("accountSetSelect");
   const selectedOption = accountSetSelect.options[accountSetSelect.selectedIndex];
+  const showEmpNo = document.getElementById("toggleEmpNo").checked;
 
   document.getElementById("metricSelectedEmployees").textContent = String(ids.length);
   document.getElementById("metricSelectedEmployeesSub").textContent = ids.length ? `当前已选 ${ids.length} 人` : "当前未选择员工";
   document.getElementById("metricAccountSet").textContent = selectedOption ? selectedOption.textContent.trim() : "未选择";
+  document.getElementById("metricResultRowsSub").textContent = showEmpNo ? "当前显示人员编号列" : "当前隐藏人员编号列";
 
   if (!Array.isArray(rows)) {
     document.getElementById("metricAbnormalTotal").textContent = "0";
     document.getElementById("metricAbnormalTotalSub").textContent = "点击查询后更新";
     document.getElementById("metricResultRows").textContent = "0";
-    document.getElementById("metricResultRowsSub").textContent = "点击查询后更新";
     document.getElementById("abnormalMeta").textContent = "等待查询";
     return;
   }
@@ -29,14 +39,15 @@ function updateAbnormalMetrics(employeeSelector, rows = null) {
   document.getElementById("metricAbnormalTotal").textContent = String(total);
   document.getElementById("metricAbnormalTotalSub").textContent = total ? `本次累计 ${total} 次异常` : "当前条件无异常记录";
   document.getElementById("metricResultRows").textContent = String(rows.length);
-  document.getElementById("metricResultRowsSub").textContent = rows.length ? `本次返回 ${rows.length} 条记录` : "当前条件无数据";
   document.getElementById("abnormalMeta").textContent = rows.length ? `共返回 ${rows.length} 条记录` : "当前条件无数据";
 }
 
 function renderRows(rows) {
+  latestRows = Array.isArray(rows) ? rows : [];
   const body = document.getElementById("abnormalTableBody");
-  if (!rows.length) {
-    body.innerHTML = '<tr><td colspan="4" class="text-muted">暂无数据</td></tr>';
+  if (!latestRows.length) {
+    const colspan = document.getElementById("toggleEmpNo").checked ? 4 : 3;
+    body.innerHTML = `<tr><td colspan="${colspan}" class="text-muted">暂无数据</td></tr>`;
     return;
   }
   body.innerHTML = rows
@@ -44,13 +55,14 @@ function renderRows(rows) {
       (r) => `
         <tr>
           <td>${r.dept_name || ""}</td>
-          <td>${r.emp_no || ""}</td>
+          <td class="col-emp-no">${r.emp_no || ""}</td>
           <td>${r.name || ""}</td>
           <td>${r.abnormal_count ?? 0}</td>
         </tr>
       `
     )
     .join("");
+  applyColumnVisibility();
 }
 
 async function loadAccountSets() {
@@ -97,7 +109,13 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   document.getElementById("accountSetSelect").addEventListener("change", () => updateAbnormalMetrics(employeeSelector, null));
   document.getElementById("selectedEmpIds").addEventListener("change", () => updateAbnormalMetrics(employeeSelector, null));
+  document.getElementById("toggleEmpNo").addEventListener("change", () => {
+    applyColumnVisibility();
+    renderRows(latestRows);
+    updateAbnormalMetrics(employeeSelector, null);
+  });
 
+  applyColumnVisibility();
   renderRows([]);
   document.getElementById("abnormalMeta").textContent = "等待查询";
   await loadAccountSets();
