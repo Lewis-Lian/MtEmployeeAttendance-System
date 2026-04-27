@@ -2,6 +2,9 @@ from __future__ import annotations
 
 import os
 import re
+import shutil
+import subprocess
+import tempfile
 from typing import Any
 
 from models import db
@@ -28,22 +31,76 @@ from utils.helpers import (
 class ImportService:
     @staticmethod
     def import_file(file_path: str) -> dict:
-        rows = ExcelParser.read_rows(file_path)
-        if not rows:
-            return {"status": "error", "message": "Empty file"}
-
         filename = os.path.basename(file_path)
-        if "加班" in filename:
-            count = ImportService._import_overtime(rows)
-            return {"status": "ok", "file_type": "overtime", "imported": count}
-        if "请假" in filename:
-            count = ImportService._import_leave(rows)
-            return {"status": "ok", "file_type": "leave", "imported": count}
-        if "月报" in filename:
-            count = ImportService._import_monthly_report(rows, filename)
-            return {"status": "ok", "file_type": "monthly", "imported": count}
-        count = ImportService._import_daily_records(rows)
-        return {"status": "ok", "file_type": "daily", "imported": count}
+        cleanup_dir: str | None = None
+        rows: list[list[Any]] = []
+
+        try:
+            try:
+                rows = ExcelParser.read_rows(file_path)
+            except Exception:
+                rows = []
+
+            # Some legacy xls files fail in xlrd; fallback to libreoffice conversion.
+            if (not rows) and file_path.lower().endswith(".xls"):
+                converted_path, tmpdir = ImportService._convert_xls_to_xlsx(file_path)
+                if converted_path:
+                    cleanup_dir = tmpdir
+                    rows = ExcelParser.read_rows(converted_path)
+
+            if not rows:
+                return {"status": "error", "message": "Empty file or unsupported xls structure"}
+
+            if "加班" in filename:
+                stats = ImportService._import_overtime(rows)
+                return {"status": "ok", "file_type": "overtime", **stats}
+            if "请假" in filename:
+                stats = ImportService._import_leave(rows)
+                return {"status": "ok", "file_type": "leave", **stats}
+            if "月报" in filename:
+                stats = ImportService._import_monthly_report(rows, filename)
+                return {"status": "ok", "file_type": "monthly", **stats}
+            stats = ImportService._import_daily_records(rows)
+            return {"status": "ok", "file_type": "daily", **stats}
+        finally:
+            if cleanup_dir and os.path.isdir(cleanup_dir):
+                shutil.rmtree(cleanup_dir, ignore_errors=True)
+
+    @staticmethod
+    def _convert_xls_to_xlsx(file_path: str) -> tuple[str | None, str | None]:
+        tmpdir = tempfile.mkdtemp(prefix="attendance_xls_")
+        try:
+            profile_dir = os.path.join(tmpdir, "lo-profile")
+            os.makedirs(profile_dir, exist_ok=True)
+            env = os.environ.copy()
+            env["HOME"] = tmpdir
+            env["XDG_CONFIG_HOME"] = tmpdir
+            subprocess.run(
+                [
+                    "libreoffice",
+                    f"-env:UserInstallation=file://{profile_dir}",
+                    "--headless",
+                    "--convert-to",
+                    "xlsx",
+                    "--outdir",
+                    tmpdir,
+                    file_path,
+                ],
+                check=False,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                env=env,
+            )
+            basename = os.path.splitext(os.path.basename(file_path))[0]
+            converted_path = os.path.join(tmpdir, f"{basename}.xlsx")
+            if os.path.exists(converted_path):
+                return converted_path, tmpdir
+            shutil.rmtree(tmpdir, ignore_errors=True)
+            return None, None
+        except Exception:
+            shutil.rmtree(tmpdir, ignore_errors=True)
+            return None, None
 
     @staticmethod
     def _build_header_map(header: list[Any]) -> dict[str, int]:
@@ -60,6 +117,19 @@ class ImportService:
             if n in header_map:
                 return header_map[n]
         return -1
+
+    @staticmethod
+    def _find_header_row(rows: list[list[Any]], required_cols: list[str], probe_rows: int = 8) -> int:
+        limit = min(len(rows), probe_rows)
+        best_idx = 0
+        best_score = -1
+        for idx in range(limit):
+            header_map = ImportService._build_header_map(rows[idx])
+            score = sum(1 for col in required_cols if col in header_map)
+            if score > best_score:
+                best_idx = idx
+                best_score = score
+        return best_idx
 
     @staticmethod
     def _get_row_value(row: list[Any], idx: int) -> Any:
@@ -119,6 +189,25 @@ class ImportService:
         return shift
 
     @staticmethod
+    def _find_existing_employee(emp_no: str) -> Employee | None:
+        key = clean_text(emp_no)
+        if not key:
+            return None
+        return Employee.query.filter_by(emp_no=key).first()
+
+    @staticmethod
+    def _find_existing_shift(shift_no: str, shift_name: str) -> Shift | None:
+        no_key = clean_text(shift_no)
+        name_key = clean_text(shift_name)
+        if no_key:
+            shift = Shift.query.filter_by(shift_no=no_key).first()
+            if shift:
+                return shift
+        if name_key:
+            return Shift.query.filter_by(shift_name=name_key).first()
+        return None
+
+    @staticmethod
     def _parse_shift_slots(value: Any) -> list[list[str]]:
         text = clean_text(value)
         if not text:
@@ -136,21 +225,31 @@ class ImportService:
         return slots
 
     @staticmethod
-    def _import_overtime(rows: list[list[Any]]) -> int:
-        header_map = ImportService._build_header_map(rows[0])
-        count = 0
-        for row in rows[1:]:
+    def _import_overtime(rows: list[list[Any]]) -> dict[str, int]:
+        header_idx = ImportService._find_header_row(rows, ["加班单号", "工号", "开始时间", "结束时间"])
+        header_map = ImportService._build_header_map(rows[header_idx])
+        imported = 0
+        scanned = 0
+        skipped_no_key = 0
+        skipped_unknown_employee = 0
+        for row in rows[header_idx + 1 :]:
             overtime_no = clean_text(ImportService._get_row_value(row, ImportService._find_col(header_map, "加班单号")))
             if not overtime_no:
+                skipped_no_key += 1
                 continue
-            dept_name = clean_text(ImportService._get_row_value(row, ImportService._find_col(header_map, "部门")))
+            scanned += 1
             emp_name = clean_text(ImportService._get_row_value(row, ImportService._find_col(header_map, "姓名")))
             emp_no = clean_text(ImportService._get_row_value(row, ImportService._find_col(header_map, "工号")))
             if not emp_no:
+                skipped_no_key += 1
                 continue
 
-            dept = ImportService._get_or_create_department(dept_name, dept_name)
-            emp = ImportService._get_or_create_employee(emp_no, emp_name, dept)
+            emp = ImportService._find_existing_employee(emp_no)
+            if not emp:
+                skipped_unknown_employee += 1
+                continue
+            if emp_name:
+                emp.name = emp_name
 
             record = OvertimeRecord.query.filter_by(overtime_no=overtime_no).first()
             if not record:
@@ -167,28 +266,45 @@ class ImportService:
             record.reason = clean_text(ImportService._get_row_value(row, ImportService._find_col(header_map, "加班事由")))
             record.approval_comment = clean_text(ImportService._get_row_value(row, ImportService._find_col(header_map, "部门主管意见")))
             record.approval_status = "已审批" if record.approval_comment else "未知"
-            count += 1
+            imported += 1
 
         db.session.commit()
-        return count
+        return {
+            "total_rows": max(len(rows) - header_idx - 1, 0),
+            "scanned": scanned,
+            "imported": imported,
+            "skipped": scanned - imported,
+            "skipped_no_key": skipped_no_key,
+            "skipped_unknown_employee": skipped_unknown_employee,
+        }
 
     @staticmethod
-    def _import_leave(rows: list[list[Any]]) -> int:
-        header_map = ImportService._build_header_map(rows[0])
-        count = 0
-        for row in rows[1:]:
+    def _import_leave(rows: list[list[Any]]) -> dict[str, int]:
+        header_idx = ImportService._find_header_row(rows, ["请假单号", "工号", "请假类型", "开始时间", "结束时间"])
+        header_map = ImportService._build_header_map(rows[header_idx])
+        imported = 0
+        scanned = 0
+        skipped_no_key = 0
+        skipped_unknown_employee = 0
+        for row in rows[header_idx + 1 :]:
             leave_no = clean_text(ImportService._get_row_value(row, ImportService._find_col(header_map, "请假单号")))
             if not leave_no:
+                skipped_no_key += 1
                 continue
+            scanned += 1
 
             emp_no = clean_text(ImportService._get_row_value(row, ImportService._find_col(header_map, "工号")))
             emp_name = clean_text(ImportService._get_row_value(row, ImportService._find_col(header_map, "请假人")))
-            dept_name = clean_text(ImportService._get_row_value(row, ImportService._find_col(header_map, "部门", "所属部门")))
             if not emp_no:
+                skipped_no_key += 1
                 continue
 
-            dept = ImportService._get_or_create_department(dept_name, dept_name)
-            emp = ImportService._get_or_create_employee(emp_no, emp_name, dept)
+            emp = ImportService._find_existing_employee(emp_no)
+            if not emp:
+                skipped_unknown_employee += 1
+                continue
+            if emp_name:
+                emp.name = emp_name
 
             record = LeaveRecord.query.filter_by(leave_no=leave_no).first()
             if not record:
@@ -204,7 +320,7 @@ class ImportService:
             record.reason = clean_text(ImportService._get_row_value(row, ImportService._find_col(header_map, "事由文本")))
             record.approval_comment = clean_text(ImportService._get_row_value(row, ImportService._find_col(header_map, "部门主管意见")))
             record.approval_status = "已审批" if record.approval_comment else "未知"
-            count += 1
+            imported += 1
 
             if record.leave_type == "补休（调休）" and record.apply_date:
                 year = record.apply_date.year
@@ -216,27 +332,41 @@ class ImportService:
                 leave_balance.remaining_days = (leave_balance.total_days or 0) - (leave_balance.used_days or 0)
 
         db.session.commit()
-        return count
+        return {
+            "total_rows": max(len(rows) - header_idx - 1, 0),
+            "scanned": scanned,
+            "imported": imported,
+            "skipped": scanned - imported,
+            "skipped_no_key": skipped_no_key,
+            "skipped_unknown_employee": skipped_unknown_employee,
+        }
 
     @staticmethod
-    def _import_daily_records(rows: list[list[Any]]) -> int:
-        header_map = ImportService._build_header_map(rows[0])
-        count = 0
-        for row in rows[1:]:
+    def _import_daily_records(rows: list[list[Any]]) -> dict[str, int]:
+        header_idx = ImportService._find_header_row(rows, ["人员编号", "人员名称", "考勤日期"])
+        header_map = ImportService._build_header_map(rows[header_idx])
+        imported = 0
+        scanned = 0
+        skipped_no_key = 0
+        skipped_unknown_employee = 0
+        header_row = rows[header_idx]
+        for row in rows[header_idx + 1 :]:
             emp_no = clean_text(ImportService._get_row_value(row, ImportService._find_col(header_map, "人员编号", "工号")))
             if not emp_no:
+                skipped_no_key += 1
                 continue
+            scanned += 1
             emp_name = clean_text(ImportService._get_row_value(row, ImportService._find_col(header_map, "人员名称", "姓名")))
-            dept_no = clean_text(ImportService._get_row_value(row, ImportService._find_col(header_map, "部门编号")))
-            dept_name = clean_text(ImportService._get_row_value(row, ImportService._find_col(header_map, "部门名称", "部门")))
-
-            dept = ImportService._get_or_create_department(dept_no or dept_name, dept_name or dept_no)
-            emp = ImportService._get_or_create_employee(emp_no, emp_name, dept)
+            emp = ImportService._find_existing_employee(emp_no)
+            if not emp:
+                skipped_unknown_employee += 1
+                continue
+            if emp_name:
+                emp.name = emp_name
 
             shift_no = clean_text(ImportService._get_row_value(row, ImportService._find_col(header_map, "班次编号")))
             shift_name = clean_text(ImportService._get_row_value(row, ImportService._find_col(header_map, "班次名称")))
-            shift_time = ImportService._get_row_value(row, ImportService._find_col(header_map, "班次时间数据"))
-            shift = ImportService._get_or_create_shift(shift_no, shift_name, shift_time)
+            shift = ImportService._find_existing_shift(shift_no, shift_name)
 
             record_date = parse_date(ImportService._get_row_value(row, ImportService._find_col(header_map, "考勤日期")))
             if not record_date:
@@ -275,11 +405,18 @@ class ImportService:
             record.late_minutes = parse_int(ImportService._get_row_value(row, ImportService._find_col(header_map, "迟到分钟")))
             record.early_leave_minutes = parse_int(ImportService._get_row_value(row, ImportService._find_col(header_map, "早退分钟")))
             record.exception_reason = clean_text(ImportService._get_row_value(row, ImportService._find_col(header_map, "异常原因")))
-            record.raw_data = {str(rows[0][i]): row[i] if i < len(row) else None for i in range(len(rows[0]))}
-            count += 1
+            record.raw_data = {str(header_row[i]): row[i] if i < len(row) else None for i in range(len(header_row))}
+            imported += 1
 
         db.session.commit()
-        return count
+        return {
+            "total_rows": max(len(rows) - header_idx - 1, 0),
+            "scanned": scanned,
+            "imported": imported,
+            "skipped": scanned - imported,
+            "skipped_no_key": skipped_no_key,
+            "skipped_unknown_employee": skipped_unknown_employee,
+        }
 
     @staticmethod
     def _extract_report_month(filename: str) -> str:
@@ -292,11 +429,15 @@ class ImportService:
         return "1970-01"
 
     @staticmethod
-    def _import_monthly_report(rows: list[list[Any]], filename: str) -> int:
-        header = rows[0]
+    def _import_monthly_report(rows: list[list[Any]], filename: str) -> dict[str, int]:
+        header_idx = ImportService._find_header_row(rows, ["人员编号", "人员名称", "部门编号", "部门名称"])
+        header = rows[header_idx]
         header_map = ImportService._build_header_map(header)
         report_month = ImportService._extract_report_month(filename)
-        count = 0
+        imported = 0
+        scanned = 0
+        skipped_no_key = 0
+        skipped_unknown_employee = 0
 
         emp_no_idx = ImportService._find_col(header_map, "人员编号", "工号")
         emp_name_idx = ImportService._find_col(header_map, "人员名称", "姓名")
@@ -305,16 +446,20 @@ class ImportService:
 
         base_idx = {i for i in [emp_no_idx, emp_name_idx, dept_no_idx, dept_name_idx] if i >= 0}
 
-        for row in rows[1:]:
+        for row in rows[header_idx + 1 :]:
             emp_no = clean_text(ImportService._get_row_value(row, emp_no_idx))
             if not emp_no:
+                skipped_no_key += 1
                 continue
+            scanned += 1
 
             emp_name = clean_text(ImportService._get_row_value(row, emp_name_idx))
-            dept_no = clean_text(ImportService._get_row_value(row, dept_no_idx))
-            dept_name = clean_text(ImportService._get_row_value(row, dept_name_idx))
-            dept = ImportService._get_or_create_department(dept_no or dept_name, dept_name or dept_no)
-            emp = ImportService._get_or_create_employee(emp_no, emp_name, dept)
+            emp = ImportService._find_existing_employee(emp_no)
+            if not emp:
+                skipped_unknown_employee += 1
+                continue
+            if emp_name:
+                emp.name = emp_name
 
             metric_values: list[float | None] = []
             for i in range(len(header)):
@@ -338,7 +483,14 @@ class ImportService:
                 clean_text(header[i]) or f"COL_{i+1}": (row[i] if i < len(row) else None)
                 for i in range(len(header))
             }
-            count += 1
+            imported += 1
 
         db.session.commit()
-        return count
+        return {
+            "total_rows": max(len(rows) - header_idx - 1, 0),
+            "scanned": scanned,
+            "imported": imported,
+            "skipped": scanned - imported,
+            "skipped_no_key": skipped_no_key,
+            "skipped_unknown_employee": skipped_unknown_employee,
+        }

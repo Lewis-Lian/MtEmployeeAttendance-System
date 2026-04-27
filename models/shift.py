@@ -11,3 +11,4 @@ class Shift(db.Model):
     is_cross_day = db.Column(db.Boolean, default=False, nullable=False)
 
     daily_records = db.relationship("DailyRecord", back_populates="shift")
+    employee_assignments = db.relationship("EmployeeShiftAssignment", back_populates="shift")

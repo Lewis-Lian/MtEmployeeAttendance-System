@@ -1,0 +1,220 @@
+{% extends 'base.html' %}
+{% block title %}部门管理{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">部门管理</h1>
+    <p class="page-subtitle">维护部门基础信息，支持模板导入与批量清理空部门。</p>
+  </div>
+  <span class="page-tag">组织主数据</span>
+</div>
+
+<div class="row g-4">
+  <div class="col-xl-4">
+    <div class="sticky-side">
+      <div class="card">
+        <div class="card-header">新增部门</div>
+        <div class="card-body">
+          <form id="createDeptForm">
+            <div class="mb-2">
+              <label class="form-label">部门编号</label>
+              <input class="form-control" name="dept_no" required>
+            </div>
+            <div class="mb-3">
+              <label class="form-label">部门名称</label>
+              <input class="form-control" name="dept_name" required>
+            </div>
+            <div class="mb-3">
+              <label class="form-label">上级部门</label>
+              <div class="employee-lookup" id="createDeptParentLookup">
+                <div class="input-group input-group-sm">
+                  <input class="form-control" id="createDeptParentInput" placeholder="选择上级部门" autocomplete="off">
+                  <button class="btn btn-outline-secondary" id="openCreateDeptParentPickerBtn" type="button" title="选择上级部门">
+                    <span class="employee-picker-icon" aria-hidden="true">⎇</span>
+                  </button>
+                </div>
+                <input type="hidden" name="parent_id" id="createDeptParentId">
+                <div class="employee-float-list" id="createDeptParentQuickList"></div>
+              </div>
+            </div>
+            <div class="form-check mb-3">
+              <input class="form-check-input" type="checkbox" name="is_locked" id="createDeptLocked">
+              <label class="form-check-label" for="createDeptLocked">锁定部门</label>
+            </div>
+            <button class="btn btn-primary w-100" type="submit">创建部门</button>
+          </form>
+          <div id="createDeptResult" class="small text-muted mt-2"></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">导入部门（xlsx）</div>
+        <div class="card-body">
+          <form id="importDeptForm" enctype="multipart/form-data">
+            <input class="form-control mb-2" type="file" name="file" accept=".xlsx" required>
+            <div class="toolbar">
+              <button class="btn btn-outline-primary" type="submit">上传导入</button>
+              <a class="btn btn-outline-secondary" href="/admin/departments/template">下载示例模板</a>
+            </div>
+          </form>
+          <div class="panel-note mt-2 mb-0">模板字段：部门编号、部门名称、上级部门编号（可空）。</div>
+          <div id="deptImportResult" class="small text-muted mt-2"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-xl-8">
+    <div class="card table-wrap-tight">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <span>部门列表</span>
+        <div class="toolbar">
+          <span class="small text-muted align-self-center" id="deptSelectedCount">已选 0 项</span>
+          <button class="btn btn-sm btn-outline-warning" id="deleteUnboundDeptsBtn" type="button">一键删除空部门</button>
+          <select class="form-select form-select-sm" id="batchDeptActionSelect" style="width: 150px;">
+            <option value="">批量操作</option>
+            <option value="set_parent">更改上级部门</option>
+            <option value="lock">锁定部门</option>
+            <option value="unlock">取消锁定</option>
+            <option value="delete">删除部门</option>
+          </select>
+          <button class="btn btn-sm btn-outline-primary" id="applyBatchDeptActionBtn" type="button">执行</button>
+          <button class="btn btn-sm btn-outline-secondary" id="refreshDeptBtn" type="button">刷新</button>
+        </div>
+      </div>
+      <div class="table-responsive">
+        <table class="table table-sm table-striped mb-0 align-middle">
+          <thead>
+            <tr>
+              <th><input type="checkbox" id="selectAllDepts"></th>
+              <th>ID</th>
+              <th>部门编号</th>
+              <th>部门名称</th>
+              <th>上级部门</th>
+              <th>锁定</th>
+              <th>操作</th>
+            </tr>
+          </thead>
+          <tbody id="deptTableBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="batchParentDeptModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">批量更改上级部门</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <label class="form-label">上级部门</label>
+        <div class="employee-lookup" id="batchDeptParentLookup">
+          <div class="input-group input-group-sm">
+            <input class="form-control" id="batchParentDeptInput" placeholder="选择上级部门" autocomplete="off">
+            <button class="btn btn-outline-secondary" id="openBatchDeptParentPickerBtn" type="button" title="选择上级部门">
+              <span class="employee-picker-icon" aria-hidden="true">⎇</span>
+            </button>
+          </div>
+          <input type="hidden" id="batchParentDeptId">
+          <div class="employee-float-list" id="batchParentDeptQuickList"></div>
+        </div>
+        <div class="small text-muted mt-2" id="batchParentDeptHint">将应用到已选部门。</div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-outline-secondary" data-bs-dismiss="modal">取消</button>
+        <button class="btn btn-primary" id="confirmBatchParentDeptBtn">保存</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="editDeptModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">编辑部门</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <form id="editDeptForm">
+          <input type="hidden" name="id">
+          <div class="mb-2">
+            <label class="form-label">部门编号</label>
+            <input class="form-control" name="dept_no" required>
+          </div>
+          <div class="mb-2">
+            <label class="form-label">部门名称</label>
+            <input class="form-control" name="dept_name" required>
+          </div>
+          <div class="mb-2">
+            <label class="form-label">上级部门</label>
+            <div class="employee-lookup" id="editDeptParentLookup">
+              <div class="input-group input-group-sm">
+                <input class="form-control" id="editDeptParentInput" placeholder="选择上级部门" autocomplete="off">
+                <button class="btn btn-outline-secondary" id="openEditDeptParentPickerBtn" type="button" title="选择上级部门">
+                  <span class="employee-picker-icon" aria-hidden="true">⎇</span>
+                </button>
+              </div>
+              <input type="hidden" name="parent_id" id="editDeptParentId">
+              <div class="employee-float-list" id="editDeptParentQuickList"></div>
+            </div>
+          </div>
+          <div class="form-check mb-2">
+            <input class="form-check-input" type="checkbox" name="is_locked" id="editDeptLocked">
+            <label class="form-check-label" for="editDeptLocked">锁定部门</label>
+          </div>
+        </form>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-outline-secondary" data-bs-dismiss="modal">取消</button>
+        <button class="btn btn-primary" id="saveDeptBtn">保存</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade employee-picker-modal" id="departmentPickerModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-xl modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">选择上级部门</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <div class="row g-3 employee-picker-layout">
+          <div class="col-lg-7 d-flex flex-column gap-2">
+            <div class="employee-picker-panel employee-picker-tree employee-picker-selected-wrap">
+              <div class="employee-picker-panel-title">部门树</div>
+              <div class="mb-2">
+                <input type="text" class="form-control form-control-sm" id="departmentPickerSearchInput" placeholder="搜索部门名称/编号">
+              </div>
+              <div class="list-group employee-dept-list employee-dept-list-fill" id="departmentPickerTree"></div>
+            </div>
+          </div>
+          <div class="col-lg-5">
+            <div class="employee-picker-panel employee-picker-selected-wrap">
+              <div class="d-flex align-items-center justify-content-between mb-2">
+                <div class="employee-picker-panel-title mb-0">已选择部门</div>
+                <button class="btn btn-sm btn-outline-secondary" id="departmentPickerClearBtn" type="button">清空</button>
+              </div>
+              <div class="employee-selected-list" id="departmentPickerSelectedList">
+                <div class="employee-selected-empty">未选择（顶级部门）</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-outline-secondary" data-bs-dismiss="modal">取消</button>
+        <button class="btn btn-primary" id="departmentPickerConfirmBtn" type="button">确定</button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/departments.js') }}"></script>
+{% endblock %}

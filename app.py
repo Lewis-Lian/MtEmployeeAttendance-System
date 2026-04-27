@@ -5,10 +5,11 @@ import os
 from dotenv import load_dotenv
 from flask import Flask
 from flask_migrate import Migrate
+from sqlalchemy import inspect, text
 
 from config import Config
 from models import db
-from models.user import User, UserEmployeeAssignment
+from models.user import User, UserEmployeeAssignment, UserDepartmentAssignment
 from models.department import Department
 from models.employee import Employee
 from models.shift import Shift
@@ -17,6 +18,8 @@ from models.monthly_report import MonthlyReport
 from models.overtime import OvertimeRecord
 from models.leave import LeaveRecord
 from models.annual_leave import AnnualLeave
+from models.employee_shift import EmployeeShiftAssignment
+from models.account_set import AccountSet, AccountSetImport
 from routes import register_routes
 
 
@@ -35,6 +38,7 @@ def create_app() -> Flask:
 
     with app.app_context():
         db.create_all()
+        _ensure_schema_compatibility()
         _ensure_default_admin()
 
     return app
@@ -46,6 +50,21 @@ def _ensure_default_admin() -> None:
         admin = User(username="admin", role="admin")
         admin.set_password("admin123")
         db.session.add(admin)
+        db.session.commit()
+
+
+def _ensure_schema_compatibility() -> None:
+    inspector = inspect(db.engine)
+    try:
+        columns = {c["name"] for c in inspector.get_columns("departments")}
+    except Exception:
+        return
+    if "parent_id" not in columns:
+        db.session.execute(text("ALTER TABLE departments ADD COLUMN parent_id INTEGER"))
+        db.session.execute(text("CREATE INDEX IF NOT EXISTS ix_departments_parent_id ON departments(parent_id)"))
+        db.session.commit()
+    if "is_locked" not in columns:
+        db.session.execute(text("ALTER TABLE departments ADD COLUMN is_locked BOOLEAN NOT NULL DEFAULT 0"))
         db.session.commit()
 
 

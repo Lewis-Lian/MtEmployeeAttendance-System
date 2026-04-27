@@ -20,3 +20,6 @@ class Employee(db.Model):
     user_assignments = db.relationship(
         "UserEmployeeAssignment", back_populates="employee", cascade="all, delete-orphan"
     )
+    shift_assignment = db.relationship(
+        "EmployeeShiftAssignment", back_populates="employee", uselist=False, cascade="all, delete-orphan"
+    )

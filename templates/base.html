@@ -8,20 +8,42 @@
   <link href="{{ url_for('static', filename='css/style.css') }}" rel="stylesheet">
 </head>
 <body>
-<nav class="navbar navbar-expand-lg navbar-dark bg-primary">
-  <div class="container-fluid">
-    <a class="navbar-brand" href="/employee/dashboard">考勤数据处理系统</a>
-    <div class="d-flex gap-2">
-      <a class="btn btn-outline-light btn-sm" href="/employee/dashboard">员工视图</a>
-      <a class="btn btn-outline-light btn-sm" href="/admin/dashboard">管理后台</a>
-      <a class="btn btn-light btn-sm" href="/logout">退出</a>
+<nav class="top-nav">
+  <div class="container-fluid app-shell">
+    <a class="navbar-brand app-brand" href="/employee/dashboard">
+      <span class="brand-dot"></span>
+      考勤数据处理系统
+    </a>
+    <div class="app-nav-links">
+      <a class="btn btn-sm nav-link-pill {% if request.path.startswith('/employee/dashboard') %}is-active{% endif %}" href="/employee/dashboard">考勤数据查询</a>
+      <a class="btn btn-sm nav-link-pill {% if request.path.startswith('/employee/abnormal-query') %}is-active{% endif %}" href="/employee/abnormal-query">员工异常查询</a>
+      <a class="btn btn-sm nav-link-pill {% if request.path.startswith('/employee/department-hours-query') %}is-active{% endif %}" href="/employee/department-hours-query">员工部门工时查询</a>
+      <a class="btn btn-sm nav-link-pill {% if request.path.startswith('/employee/punch-records') %}is-active{% endif %}" href="/employee/punch-records">打卡数据查询</a>
+      {% if g.current_user and g.current_user.role == "admin" %}
+      <div class="dropdown">
+        <button class="btn btn-sm nav-link-pill dropdown-toggle {% if request.path.startswith('/admin/dashboard') or request.path.startswith('/admin/employees') or request.path.startswith('/admin/departments') or request.path.startswith('/admin/shifts') or request.path.startswith('/admin/accounts') %}is-active{% endif %}" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+          管理菜单
+        </button>
+        <ul class="dropdown-menu app-dropdown-menu dropdown-menu-end">
+          <li><a class="dropdown-item {% if request.path.startswith('/admin/dashboard') %}active{% endif %}" href="/admin/dashboard">账套管理</a></li>
+          <li><a class="dropdown-item {% if request.path.startswith('/admin/employees') %}active{% endif %}" href="/admin/employees/manage">员工管理</a></li>
+          <li><a class="dropdown-item {% if request.path.startswith('/admin/departments') %}active{% endif %}" href="/admin/departments/manage">部门管理</a></li>
+          <li><a class="dropdown-item {% if request.path.startswith('/admin/shifts') %}active{% endif %}" href="/admin/shifts/manage">班次管理</a></li>
+          <li><a class="dropdown-item {% if request.path.startswith('/admin/accounts') %}active{% endif %}" href="/admin/accounts">账号管理</a></li>
+        </ul>
+      </div>
+      {% endif %}
+      <a class="btn btn-sm nav-link-logout" href="/logout">退出</a>
     </div>
   </div>
 </nav>
-<div class="container py-4">
+<div class="container py-4 app-shell page-wrap">
   {% block content %}{% endblock %}
 </div>
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script src="{{ url_for('static', filename='js/ui_phase3.js') }}"></script>
+<script src="{{ url_for('static', filename='js/table_pager.js') }}"></script>
+<script src="{{ url_for('static', filename='js/selector_component.js') }}"></script>
 {% block scripts %}{% endblock %}
 </body>
 </html>

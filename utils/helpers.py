@@ -64,7 +64,14 @@ def parse_bool_zh(value: Any) -> bool:
 def clean_text(value: Any) -> str:
     if value is None:
         return ""
-    return str(value).strip()
+    text = str(value).strip()
+    try:
+        repaired = text.encode("latin1").decode("gbk")
+        if any("\u4e00" <= ch <= "\u9fff" for ch in repaired):
+            return repaired.strip()
+    except Exception:
+        pass
+    return text
 
 
 def split_time_cells(raw: str) -> list[str]:

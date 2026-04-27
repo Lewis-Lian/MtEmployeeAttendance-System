@@ -15,6 +15,9 @@ class User(db.Model):
     employee_assignments = db.relationship(
         "UserEmployeeAssignment", back_populates="user", cascade="all, delete-orphan"
     )
+    department_assignments = db.relationship(
+        "UserDepartmentAssignment", back_populates="user", cascade="all, delete-orphan"
+    )
 
     def set_password(self, password: str) -> None:
         self.password_hash = generate_password_hash(password)
@@ -35,4 +38,19 @@ class UserEmployeeAssignment(db.Model):
 
     __table_args__ = (
         db.UniqueConstraint("user_id", "emp_id", name="uq_user_employee_assignment"),
+    )
+
+
+class UserDepartmentAssignment(db.Model):
+    __tablename__ = "user_department_assignments"
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False, index=True)
+    dept_id = db.Column(db.Integer, db.ForeignKey("departments.id"), nullable=False, index=True)
+
+    user = db.relationship("User", back_populates="department_assignments")
+    department = db.relationship("Department", back_populates="user_assignments")
+
+    __table_args__ = (
+        db.UniqueConstraint("user_id", "dept_id", name="uq_user_department_assignment"),
     )

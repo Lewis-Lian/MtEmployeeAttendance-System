@@ -1,0 +1,112 @@
+{% extends 'base.html' %}
+{% block title %}班次管理{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">班次管理</h1>
+    <p class="page-subtitle">维护班次编号、跨天规则和时间段配置，用于工时计算与匹配。</p>
+  </div>
+  <span class="page-tag">排班规则</span>
+</div>
+
+<div class="row g-4">
+  <div class="col-xl-4">
+    <div class="sticky-side">
+      <div class="card">
+        <div class="card-header">新增班次</div>
+        <div class="card-body">
+          <form id="createShiftForm">
+            <div class="mb-2">
+              <label class="form-label">班次编号</label>
+              <input class="form-control" name="shift_no" required>
+            </div>
+            <div class="mb-2">
+              <label class="form-label">班次名称</label>
+              <input class="form-control" name="shift_name" required>
+            </div>
+            <div class="mb-3 form-check">
+              <input class="form-check-input" type="checkbox" id="createCrossDay" name="is_cross_day">
+              <label class="form-check-label" for="createCrossDay">跨天班次</label>
+            </div>
+            <div class="mb-3">
+              <div class="d-flex justify-content-between align-items-center mb-2">
+                <label class="form-label mb-0">班次时间段</label>
+                <button class="btn btn-sm btn-outline-secondary" type="button" id="createAddSlotBtn">新增时间段</button>
+              </div>
+              <div id="createSlotList" class="d-grid gap-2"></div>
+            </div>
+            <button class="btn btn-primary w-100" type="submit">创建班次</button>
+          </form>
+          <div id="createShiftResult" class="small text-muted mt-2"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-xl-8">
+    <div class="card table-wrap-tight">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <span>班次列表</span>
+        <button class="btn btn-sm btn-outline-secondary" id="refreshShiftsBtn">刷新</button>
+      </div>
+      <div class="table-responsive">
+        <table class="table table-sm table-striped mb-0 align-middle">
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>班次编号</th>
+              <th>班次名称</th>
+              <th>时间段</th>
+              <th>跨天</th>
+              <th>操作</th>
+            </tr>
+          </thead>
+          <tbody id="shiftTableBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="editShiftModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">编辑班次</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <form id="editShiftForm">
+          <input type="hidden" name="id">
+          <div class="mb-2">
+            <label class="form-label">班次编号</label>
+            <input class="form-control" name="shift_no" required>
+          </div>
+          <div class="mb-2">
+            <label class="form-label">班次名称</label>
+            <input class="form-control" name="shift_name" required>
+          </div>
+          <div class="mb-2 form-check">
+            <input class="form-check-input" type="checkbox" id="editCrossDay" name="is_cross_day">
+            <label class="form-check-label" for="editCrossDay">跨天班次</label>
+          </div>
+          <div class="mb-2">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+              <label class="form-label mb-0">班次时间段</label>
+              <button class="btn btn-sm btn-outline-secondary" type="button" id="editAddSlotBtn">新增时间段</button>
+            </div>
+            <div id="editSlotList" class="d-grid gap-2"></div>
+          </div>
+        </form>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-outline-secondary" data-bs-dismiss="modal">取消</button>
+        <button class="btn btn-primary" id="saveShiftBtn">保存</button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/shifts.js') }}"></script>
+{% endblock %}

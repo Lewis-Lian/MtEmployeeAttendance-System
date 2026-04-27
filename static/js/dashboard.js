@@ -1,52 +1,76 @@
-function ymNow() {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+function buildFinalDataQuery(employeeSelector) {
+  const month = document.getElementById("accountSetSelect").value;
+  const ids = employeeSelector.getSelectedIds();
+  const showLeaveCounts = document.getElementById("showLeaveCounts").checked;
+  const showLeaveDurations = document.getElementById("showLeaveDurations").checked;
+  const query = new URLSearchParams();
+  ids.forEach((id) => query.append("emp_ids", id));
+  if (month) query.set("month", month);
+  if (showLeaveCounts) query.set("show_leave_counts", "1");
+  if (showLeaveDurations) query.set("show_leave_durations", "1");
+  return { query, selectedCount: ids.length };
 }
 
-function summaryCard(title, value, unit = '') {
-  return `<div class="col-md-3"><div class="card summary-card"><div class="card-body"><div class="text-muted">${title}</div><div class="fs-4 fw-bold">${value}${unit}</div></div></div></div>`;
+async function loadFinalData(employeeSelector) {
+  const { query, selectedCount } = buildFinalDataQuery(employeeSelector);
+  if (!selectedCount) {
+    document.getElementById("finalDataHead").innerHTML = "<tr><th>暂无数据</th></tr>";
+    document.getElementById("finalDataBody").innerHTML = '<tr><td class="text-muted">请先选择员工</td></tr>';
+    return;
+  }
+
+  const res = await fetch(`/employee/api/final-data?${query.toString()}`);
+  const data = await res.json();
+  const headers = Array.isArray(data.headers) ? data.headers : [];
+  const rows = Array.isArray(data.rows) ? data.rows : [];
+
+  document.getElementById("finalDataHead").innerHTML = headers.length
+    ? `<tr>${headers.map((h) => `<th>${h || "-"}</th>`).join("")}</tr>`
+    : "<tr><th>无可展示字段</th></tr>";
+
+  if (!rows.length) {
+    document.getElementById("finalDataBody").innerHTML = `<tr><td class="text-muted" colspan="${Math.max(headers.length, 1)}">暂无数据</td></tr>`;
+    return;
+  }
+
+  document.getElementById("finalDataBody").innerHTML = rows
+    .map((row) => `<tr>${headers.map((_, i) => `<td>${row[i] ?? ""}</td>`).join("")}</tr>`)
+    .join("");
 }
 
-async function loadAll() {
-  const empId = document.getElementById('empSelect').value;
-  const month = document.getElementById('monthInput').value || ymNow();
-
-  const summaryRes = await fetch(`/employee/api/summary?emp_id=${empId}&month=${month}`);
-  const summary = await summaryRes.json();
-
-  const cards = [
-    summaryCard('应出勤小时', summary.monthly.expected_hours, 'h'),
-    summaryCard('实出勤小时', summary.monthly.actual_hours, 'h'),
-    summaryCard('旷工小时', summary.monthly.absent_hours, 'h'),
-    summaryCard('加班小时', summary.monthly.overtime_hours, 'h'),
-    summaryCard('迟到分钟', summary.monthly.late_minutes, 'm'),
-    summaryCard('早退分钟', summary.monthly.early_leave_minutes, 'm'),
-    summaryCard('本月扣款估算', summary.deduction.total_penalty, '元'),
-    summaryCard('年假余额', summary.annual_leave.remaining_days, '天'),
-  ];
-  document.getElementById('summaryCards').innerHTML = cards.join('');
-
-  const dailyRes = await fetch(`/employee/api/daily-records?emp_id=${empId}&month=${month}`);
-  const daily = await dailyRes.json();
-  document.querySelector('#dailyTable tbody').innerHTML = daily.map(r =>
-    `<tr><td>${r.date}</td><td>${r.expected_hours}</td><td>${r.actual_hours}</td><td>${r.absent_hours}</td><td>${r.leave_hours}(${r.leave_type || ''})</td><td>${r.overtime_hours}</td><td>${r.late_minutes}</td><td>${r.early_leave_minutes}</td><td>${r.exception_reason || ''}</td></tr>`
-  ).join('');
-
-  const overtimeRes = await fetch(`/employee/api/overtime?emp_id=${empId}`);
-  const overtime = await overtimeRes.json();
-  document.getElementById('overtimeList').innerHTML = overtime.slice(0, 10).map(o =>
-    `<li class="list-group-item"><div>${o.overtime_no} (${o.effective_hours}h)</div><div class="text-muted small">${o.start_time || ''} ~ ${o.end_time || ''}</div></li>`
-  ).join('') || '<li class="list-group-item text-muted">暂无数据</li>';
-
-  const leaveRes = await fetch(`/employee/api/leave?emp_id=${empId}`);
-  const leave = await leaveRes.json();
-  document.getElementById('leaveList').innerHTML = leave.slice(0, 10).map(l =>
-    `<li class="list-group-item"><div>${l.leave_type} (${l.duration}h)</div><div class="text-muted small">${l.start_time || ''} ~ ${l.end_time || ''}</div></li>`
-  ).join('') || '<li class="list-group-item text-muted">暂无数据</li>';
+function setFinalDataIdleState() {
+  document.getElementById("finalDataHead").innerHTML = "<tr><th>暂无数据</th></tr>";
+  document.getElementById("finalDataBody").innerHTML = '<tr><td class="text-muted">请点击查询</td></tr>';
 }
 
-document.addEventListener('DOMContentLoaded', () => {
-  document.getElementById('monthInput').value = ymNow();
-  document.getElementById('refreshBtn').addEventListener('click', loadAll);
-  loadAll();
+async function loadAccountSets() {
+  const select = document.getElementById("accountSetSelect");
+  const res = await fetch("/employee/api/account-sets");
+  const data = await res.json();
+  const rows = Array.isArray(data) ? data : [];
+  if (!rows.length) {
+    select.innerHTML = `<option value="">暂无账套</option>`;
+    return;
+  }
+  select.innerHTML = rows
+    .map((x) => `<option value="${x.month}" ${x.is_active ? "selected" : ""}>${x.name}${x.is_active ? "（当前）" : ""}</option>`)
+    .join("");
+}
+
+document.addEventListener("DOMContentLoaded", async () => {
+  const employeeSelector = window.SelectorComponent.createEmployeeSelector();
+  await employeeSelector.init();
+
+  document.getElementById("refreshBtn").addEventListener("click", () => loadFinalData(employeeSelector));
+  document.getElementById("downloadBtn").addEventListener("click", () => {
+    const { query, selectedCount } = buildFinalDataQuery(employeeSelector);
+    if (!selectedCount) {
+      window.alert("请先选择员工");
+      return;
+    }
+    window.location.href = `/employee/api/final-data/export?${query.toString()}`;
+  });
+
+  setFinalDataIdleState();
+  loadAccountSets();
 });
