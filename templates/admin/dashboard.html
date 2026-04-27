@@ -1,19 +1,15 @@
 {% extends 'base.html' %}
 {% block title %}账套管理{% endblock %}
+{% block page_intro %}按月维护账套，上传原始表并在确认后执行计算入库。{% endblock %}
 {% block content %}
-<div class="page-header">
-  <div>
-    <h1 class="page-title">账套管理</h1>
-    <p class="page-subtitle">按月维护账套，上传原始表并在确认后执行计算入库。</p>
-  </div>
-  <span class="page-tag">月度结算模式</span>
-</div>
-
 <div class="row g-4">
   <div class="col-xl-4">
     <div class="sticky-side">
       <div class="card">
-        <div class="card-header">月度账套</div>
+        <div class="card-header d-flex justify-content-between align-items-center">
+          <span>月度账套</span>
+          <span class="page-tag">月度结算模式</span>
+        </div>
         <div class="card-body">
           <form id="createAccountSetForm" class="row g-2 mb-3">
             <div class="col-8">

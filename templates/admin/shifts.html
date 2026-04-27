@@ -1,19 +1,15 @@
 {% extends 'base.html' %}
 {% block title %}班次管理{% endblock %}
+{% block page_intro %}维护班次编号、跨天规则和时间段配置，用于工时计算与班次匹配。{% endblock %}
 {% block content %}
-<div class="page-header">
-  <div>
-    <h1 class="page-title">班次管理</h1>
-    <p class="page-subtitle">维护班次编号、跨天规则和时间段配置，用于工时计算与匹配。</p>
-  </div>
-  <span class="page-tag">排班规则</span>
-</div>
-
 <div class="row g-4">
   <div class="col-xl-4">
     <div class="sticky-side">
       <div class="card">
-        <div class="card-header">新增班次</div>
+        <div class="card-header d-flex justify-content-between align-items-center">
+          <span>新增班次</span>
+          <span class="page-tag">排班规则</span>
+        </div>
         <div class="card-body">
           <form id="createShiftForm">
             <div class="mb-2">

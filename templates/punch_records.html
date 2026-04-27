@@ -1,34 +1,82 @@
 {% extends 'base.html' %}
 {% block title %}打卡数据查询{% endblock %}
+{% block page_intro %}按账套和员工查询打卡明细，支持原始刷卡与上下班视图。{% endblock %}
 {% block content %}
-<div class="page-header">
-  <div>
-    <h1 class="page-title">员工打卡数据查询</h1>
-    <p class="page-subtitle">按账套和员工查询打卡明细，支持原始刷卡与上下班视图。</p>
+<div class="row g-3 mb-3">
+  <div class="col-md-6 col-xl-3">
+    <div class="summary-card dashboard-metric-card">
+      <div class="dashboard-metric-label">已选员工</div>
+      <div class="dashboard-metric-value" id="metricSelectedEmployees">0</div>
+      <div class="dashboard-metric-sub" id="metricSelectedEmployeesSub">当前未选择员工</div>
+    </div>
+  </div>
+  <div class="col-md-6 col-xl-3">
+    <div class="summary-card dashboard-metric-card">
+      <div class="dashboard-metric-label">当前账套</div>
+      <div class="dashboard-metric-value dashboard-metric-text" id="metricAccountSet">未选择</div>
+      <div class="dashboard-metric-sub">按账套维度查看员工逐日打卡明细</div>
+    </div>
+  </div>
+  <div class="col-md-6 col-xl-3">
+    <div class="summary-card dashboard-metric-card">
+      <div class="dashboard-metric-label">结果记录</div>
+      <div class="dashboard-metric-value" id="metricResultRows">0</div>
+      <div class="dashboard-metric-sub" id="metricResultRowsSub">点击查询后更新</div>
+    </div>
+  </div>
+  <div class="col-md-6 col-xl-3">
+    <div class="summary-card dashboard-metric-card">
+      <div class="dashboard-metric-label">显示模式</div>
+      <div class="dashboard-metric-value dashboard-metric-text" id="metricDisplayMode">原始刷卡</div>
+      <div class="dashboard-metric-sub" id="metricDisplayModeSub">默认仅显示原始刷卡数据</div>
+    </div>
   </div>
 </div>
 
-<div class="row g-3">
-  <div class="col-md-3">
-    <label class="form-label">账套</label>
-    <select class="form-select" id="accountSetSelect"></select>
+<div class="card mb-4">
+  <div class="card-header d-flex justify-content-between align-items-center">
+    <span>查询条件</span>
+    <span class="small text-muted">支持按员工范围、账套和打卡视图组合查询</span>
   </div>
-  <div class="col-md-5">
-    <label class="form-label">员工</label>
-    <div class="employee-lookup" id="employeeLookup">
-      <div class="input-group input-group-sm">
-        <input type="text" class="form-control form-control-sm" id="empSearchInput" placeholder="搜索员工编号/姓名" autocomplete="off">
-        <button class="btn btn-outline-secondary employee-picker-trigger" type="button" id="openEmployeePickerBtn" title="选择员工">
-          <span class="employee-picker-icon" aria-hidden="true">👤</span>
-        </button>
+  <div class="card-body">
+    <div class="row g-3 align-items-end">
+      <div class="col-lg-3">
+        <label class="form-label">账套</label>
+        <select class="form-select" id="accountSetSelect"></select>
       </div>
-      <input type="hidden" id="selectedEmpIds">
-      <div class="employee-float-list" id="employeeQuickList"></div>
+      <div class="col-lg-5">
+        <label class="form-label">员工</label>
+        <div class="employee-lookup" id="employeeLookup">
+          <div class="input-group input-group-sm">
+            <input type="text" class="form-control form-control-sm" id="empSearchInput" placeholder="搜索员工编号/姓名" autocomplete="off">
+            <button class="btn btn-outline-secondary employee-picker-trigger" type="button" id="openEmployeePickerBtn" title="选择员工">
+              <span class="employee-picker-icon" aria-hidden="true">👤</span>
+            </button>
+          </div>
+          <input type="hidden" id="selectedEmpIds">
+          <div class="employee-float-list" id="employeeQuickList"></div>
+        </div>
+      </div>
+      <div class="col-lg-2">
+        <label class="form-label">显示选项</label>
+        <div class="dashboard-check-stack">
+          <label class="dashboard-check-option">
+            <input class="form-check-input m-0" type="checkbox" id="toggleRawPunch" checked>
+            <span>原始刷卡</span>
+          </label>
+          <label class="dashboard-check-option">
+            <input class="form-check-input m-0" type="checkbox" id="toggleInOutPunch">
+            <span>上下班打卡</span>
+          </label>
+        </div>
+      </div>
+      <div class="col-lg-2">
+        <div class="dashboard-action-group">
+          <button class="btn btn-primary" id="queryBtn">查询</button>
+          <button class="btn btn-outline-success" id="downloadBtn">下载XLSX</button>
+        </div>
+      </div>
     </div>
-  </div>
-  <div class="col-md-4 d-flex align-items-end gap-2">
-    <button class="btn btn-primary w-100" id="queryBtn">查询</button>
-    <button class="btn btn-outline-success w-100" id="downloadBtn">下载XLSX</button>
   </div>
 </div>
 
@@ -96,19 +144,10 @@
   </div>
 </div>
 
-<div class="card mt-4">
+<div class="card">
   <div class="card-header d-flex justify-content-between align-items-center">
     <span>打卡明细</span>
-    <div class="d-flex gap-3">
-      <label class="form-check-label small">
-        <input class="form-check-input me-1" type="checkbox" id="toggleRawPunch" checked>
-        显示原始刷卡数据
-      </label>
-      <label class="form-check-label small">
-        <input class="form-check-input me-1" type="checkbox" id="toggleInOutPunch">
-        显示上班/下班打卡数据
-      </label>
-    </div>
+    <div class="small text-muted" id="punchMeta">等待查询</div>
   </div>
   <div class="table-responsive">
     <table class="table table-sm table-striped mb-0">

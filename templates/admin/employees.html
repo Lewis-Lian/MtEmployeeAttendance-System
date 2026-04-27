@@ -1,19 +1,15 @@
 {% extends 'base.html' %}
 {% block title %}员工管理{% endblock %}
+{% block page_intro %}维护员工主数据、批量更新归属与班次，支持模板导入。{% endblock %}
 {% block content %}
-<div class="page-header">
-  <div>
-    <h1 class="page-title">员工管理</h1>
-    <p class="page-subtitle">维护员工主数据、批量更新归属与班次，支持模板导入。</p>
-  </div>
-  <span class="page-tag">支持批量操作</span>
-</div>
-
 <div class="row g-4">
   <div class="col-xl-4">
     <div class="sticky-side">
       <div class="card">
-        <div class="card-header">新增员工</div>
+        <div class="card-header d-flex justify-content-between align-items-center">
+          <span>新增员工</span>
+          <span class="page-tag">支持批量操作</span>
+        </div>
         <div class="card-body">
           <form id="createEmployeeForm">
             <div class="mb-2">

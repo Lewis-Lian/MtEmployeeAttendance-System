@@ -1,19 +1,15 @@
 {% extends 'base.html' %}
 {% block title %}部门管理{% endblock %}
+{% block page_intro %}维护部门基础信息，支持模板导入、层级调整与批量清理空部门。{% endblock %}
 {% block content %}
-<div class="page-header">
-  <div>
-    <h1 class="page-title">部门管理</h1>
-    <p class="page-subtitle">维护部门基础信息，支持模板导入与批量清理空部门。</p>
-  </div>
-  <span class="page-tag">组织主数据</span>
-</div>
-
 <div class="row g-4">
   <div class="col-xl-4">
     <div class="sticky-side">
       <div class="card">
-        <div class="card-header">新增部门</div>
+        <div class="card-header d-flex justify-content-between align-items-center">
+          <span>新增部门</span>
+          <span class="page-tag">组织主数据</span>
+        </div>
         <div class="card-body">
           <form id="createDeptForm">
             <div class="mb-2">

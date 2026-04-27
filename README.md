@@ -1,6 +1,4 @@
-# Attendance Data Processing System (考勤数据处理系统)
-
-## Setup
+# MtEmployeeAttendance-System 
 
 ```bash
 cd /home/lewis/Code/attendance_system
@@ -10,10 +8,6 @@ pip install -r requirements.txt
 cp .env.example .env
 python3 app.py
 ```
-
-Default admin:
-- username: `admin`
-- password: `admin123`
 
 ## Excel Import
 

@@ -296,6 +296,7 @@
 
     function setSelectedIds(ids) {
       hiddenEl.value = ids.join(",");
+      hiddenEl.dispatchEvent(new Event("change", { bubbles: true }));
     }
 
     function selectedNamesFromChecked() {

@@ -1,13 +1,36 @@
 (function () {
-  const STORAGE_KEY = "attendance.tableDensity";
+  const SIDEBAR_KEY = "attendance.sidebarCollapsed";
+  const SIDEBAR_GROUPS_KEY = "attendance.sidebarGroups";
 
-  function setDensity(mode) {
-    document.body.classList.toggle("density-compact", mode === "compact");
-    const btn = document.getElementById("densityToggleBtn");
+  function setSidebarCollapsed(collapsed) {
+    document.body.classList.toggle("sidebar-collapsed", collapsed);
+    const btn = document.getElementById("sidebarToggleBtn");
     if (btn) {
-      btn.textContent = mode === "compact" ? "标准表格" : "紧凑表格";
-      btn.setAttribute("aria-pressed", mode === "compact" ? "true" : "false");
+      btn.setAttribute("aria-pressed", collapsed ? "true" : "false");
+      btn.setAttribute("aria-label", collapsed ? "展开菜单" : "折叠菜单");
+      const icon = btn.querySelector(".app-sidebar-toggle-icon");
+      if (icon) icon.textContent = collapsed ? "›" : "‹";
     }
+  }
+
+  function readSidebarGroups() {
+    try {
+      return JSON.parse(localStorage.getItem(SIDEBAR_GROUPS_KEY) || "{}");
+    } catch (_) {
+      return {};
+    }
+  }
+
+  function writeSidebarGroups(state) {
+    localStorage.setItem(SIDEBAR_GROUPS_KEY, JSON.stringify(state || {}));
+  }
+
+  function setSidebarGroupCollapsed(groupEl, collapsed) {
+    if (!groupEl) return;
+    groupEl.classList.toggle("is-collapsed", collapsed);
+    groupEl.classList.toggle("is-current", Boolean(groupEl.querySelector(".app-side-link.is-active")));
+    const toggle = groupEl.querySelector("[data-sidebar-toggle]");
+    if (toggle) toggle.setAttribute("aria-expanded", collapsed ? "false" : "true");
   }
 
   function normalizeEmptyStates() {
@@ -27,20 +50,40 @@
   }
 
   document.addEventListener("DOMContentLoaded", () => {
-    const saved = localStorage.getItem(STORAGE_KEY) || "normal";
-    setDensity(saved);
+    const sidebarSaved = localStorage.getItem(SIDEBAR_KEY) === "1";
+    const groupState = readSidebarGroups();
+    setSidebarCollapsed(sidebarSaved);
     applyStickyOffset();
     normalizeEmptyStates();
 
-    const btn = document.getElementById("densityToggleBtn");
-    if (btn) {
-      btn.addEventListener("click", () => {
-        const current = document.body.classList.contains("density-compact") ? "compact" : "normal";
-        const next = current === "compact" ? "normal" : "compact";
-        localStorage.setItem(STORAGE_KEY, next);
-        setDensity(next);
+    document.querySelectorAll("[data-sidebar-group]").forEach((groupEl) => {
+      const groupName = groupEl.getAttribute("data-sidebar-group") || "";
+      const hasActive = Boolean(groupEl.querySelector(".app-side-link.is-active"));
+      const collapsed = hasActive ? false : Boolean(groupState[groupName]);
+      setSidebarGroupCollapsed(groupEl, collapsed);
+    });
+
+    const sidebarBtn = document.getElementById("sidebarToggleBtn");
+    if (sidebarBtn) {
+      sidebarBtn.addEventListener("click", () => {
+        const next = !document.body.classList.contains("sidebar-collapsed");
+        localStorage.setItem(SIDEBAR_KEY, next ? "1" : "0");
+        setSidebarCollapsed(next);
       });
     }
+
+    document.querySelectorAll("[data-sidebar-toggle]").forEach((toggleBtn) => {
+      toggleBtn.addEventListener("click", () => {
+        const groupName = toggleBtn.getAttribute("data-sidebar-toggle") || "";
+        const groupEl = document.querySelector(`[data-sidebar-group="${groupName}"]`);
+        if (!groupEl) return;
+        const nextCollapsed = !groupEl.classList.contains("is-collapsed");
+        setSidebarGroupCollapsed(groupEl, nextCollapsed);
+        const state = readSidebarGroups();
+        state[groupName] = nextCollapsed;
+        writeSidebarGroups(state);
+      });
+    });
 
     const observer = new MutationObserver(() => {
       normalizeEmptyStates();

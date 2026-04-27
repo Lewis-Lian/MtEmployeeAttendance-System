@@ -1,19 +1,15 @@
 {% extends 'base.html' %}
 {% block title %}账号管理{% endblock %}
+{% block page_intro %}维护登录账号、角色权限及员工、部门的数据访问范围。{% endblock %}
 {% block content %}
-<div class="page-header">
-  <div>
-    <h1 class="page-title">账号管理</h1>
-    <p class="page-subtitle">维护登录账号、角色权限及员工/部门关联范围。</p>
-  </div>
-  <span class="page-tag">权限与数据范围</span>
-</div>
-
 <div class="row g-4" id="accountsPage" data-current-user-id="{{ current_user_id }}">
   <div class="col-xl-5">
     <div class="sticky-side">
       <div class="card">
-        <div class="card-header">创建账号</div>
+        <div class="card-header d-flex justify-content-between align-items-center">
+          <span>创建账号</span>
+          <span class="page-tag">权限与数据范围</span>
+        </div>
         <div class="card-body">
           <form id="createUserForm">
             <div class="mb-2">
