@@ -376,12 +376,27 @@
     function renderQuickList() {
       const keyword = normalizeText(quickSearchKeyword);
       const ids = new Set(getSelectedIds());
-      const html = rows()
-        .filter((row) => {
+      const matchedRows = rows().filter((row) => {
           const key = normalizeText(row.dataset.key || "");
           return !keyword || key.includes(keyword);
-        })
-        .map((row) => {
+        });
+      if (!matchedRows.length) {
+        quickListEl.innerHTML = `<div class="small text-muted p-2">无匹配员工</div>`;
+        return;
+      }
+      const matchedIds = matchedRows.map((row) => String(row.dataset.id || "")).filter(Boolean);
+      const checkedCount = matchedIds.filter((id) => ids.has(id)).length;
+      const allChecked = checkedCount > 0 && checkedCount === matchedIds.length;
+      const selectAllLabel = allChecked ? "取消全选" : "全选";
+      const html = [
+        `
+          <button class="employee-option quick-employee-select-all ${allChecked ? "active" : ""}" type="button">
+            <input class="form-check-input quick-option-check" type="checkbox" tabindex="-1" ${allChecked ? "checked" : ""} disabled>
+            <span class="quick-option-label">${selectAllLabel}当前列表</span>
+            <span class="quick-option-count">${checkedCount}/${matchedIds.length}</span>
+          </button>
+        `,
+        ...matchedRows.map((row) => {
           const id = String(row.dataset.id || "");
           const active = ids.has(id) ? "active" : "";
           const checked = ids.has(id) ? "checked" : "";
@@ -392,9 +407,9 @@
               <span class="quick-option-label">${label}</span>
             </button>
           `;
-        })
-        .join("");
-      quickListEl.innerHTML = html || `<div class="small text-muted p-2">无匹配员工</div>`;
+        }),
+      ].join("");
+      quickListEl.innerHTML = html;
     }
 
     function collectDeptScopeIds(rootDeptId) {
@@ -557,6 +572,23 @@
     quickListEl.addEventListener("mousedown", (e) => e.preventDefault());
     quickListEl.addEventListener("click", (e) => {
       e.stopPropagation();
+      const selectAllBtn = e.target.closest(".quick-employee-select-all");
+      if (selectAllBtn) {
+        const optionIds = Array.from(quickListEl.querySelectorAll(".quick-employee-option"))
+          .map((btn) => String(btn.dataset.id || ""))
+          .filter(Boolean);
+        const selected = new Set(getSelectedIds());
+        const allSelected = optionIds.length > 0 && optionIds.every((id) => selected.has(id));
+        optionIds.forEach((id) => {
+          const box = pickerListEl.querySelector(`.employee-picker-item[data-id="${id}"]`);
+          if (box) box.checked = !allSelected;
+        });
+        persistCheckedSelection();
+        renderSelectedPanel();
+        renderQuickList();
+        showQuickList();
+        return;
+      }
       const btn = e.target.closest(".quick-employee-option");
       if (!btn) return;
       const id = String(btn.dataset.id || "");
@@ -673,8 +705,23 @@
         if (!keyword) return true;
         return normalizeText(`${getEmpCode(row)} ${getEmpName(row)} ${getEmpDeptName(row)}`).includes(keyword);
       });
-      ctx.quickEl.innerHTML = rows.length
-        ? rows.map((row) => {
+      if (!rows.length) {
+        ctx.quickEl.innerHTML = `<div class="small text-muted p-2">无匹配员工</div>`;
+        return;
+      }
+      const matchedIds = rows.map((row) => String(getEmpId(row))).filter(Boolean);
+      const checkedCount = matchedIds.filter((id) => ids.has(id)).length;
+      const allChecked = checkedCount > 0 && checkedCount === matchedIds.length;
+      const selectAllLabel = allChecked ? "取消全选" : "全选";
+      ctx.quickEl.innerHTML = [
+        `
+          <button class="employee-option quick-employee-select-all ${allChecked ? "active" : ""}" type="button">
+            <input class="form-check-input quick-option-check" type="checkbox" tabindex="-1" ${allChecked ? "checked" : ""} disabled>
+            <span class="quick-option-label">${selectAllLabel}当前列表</span>
+            <span class="quick-option-count">${checkedCount}/${matchedIds.length}</span>
+          </button>
+        `,
+        ...rows.map((row) => {
             const id = String(getEmpId(row));
             const active = ids.has(id) ? "active" : "";
             const checked = ids.has(id) ? "checked" : "";
@@ -684,8 +731,8 @@
                 <span class="quick-option-label">${getEmpCode(row)} - ${getEmpName(row)}</span>
               </button>
             `;
-          }).join("")
-        : `<div class="small text-muted p-2">无匹配员工</div>`;
+          }),
+      ].join("");
     }
 
     function collectDeptScopeIds(rootDeptId) {
@@ -807,6 +854,22 @@
       ctx.quickEl.addEventListener("mousedown", (e) => e.preventDefault());
       ctx.quickEl.addEventListener("click", (e) => {
         e.stopPropagation();
+        const selectAllBtn = e.target.closest(".quick-employee-select-all");
+        if (selectAllBtn) {
+          const optionIds = Array.from(ctx.quickEl.querySelectorAll(".quick-employee-option"))
+            .map((btn) => String(btn.dataset.id || ""))
+            .filter(Boolean);
+          const current = new Set(getCtxIds(ctx));
+          const allSelected = optionIds.length > 0 && optionIds.every((id) => current.has(id));
+          optionIds.forEach((id) => {
+            if (allSelected) current.delete(id);
+            else current.add(id);
+          });
+          setValue(ctx, Array.from(current));
+          renderQuickList(ctx);
+          showQuickList(ctx);
+          return;
+        }
         const btn = e.target.closest(".quick-employee-option");
         if (!btn) return;
         const id = String(btn.dataset.id || "");

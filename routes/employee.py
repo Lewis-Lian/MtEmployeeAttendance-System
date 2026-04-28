@@ -734,7 +734,23 @@ def dashboard():
 @employee_bp.route("/manager-query")
 @login_required
 def manager_query_page():
-    return render_template("manager_query.html")
+    emp_ids = _manager_emp_ids(_accessible_emp_ids())
+    employees = Employee.query.filter(Employee.id.in_(emp_ids)).order_by(Employee.emp_no).all() if emp_ids else []
+    return render_template("manager_query.html", employees=employees)
+
+
+@employee_bp.route("/manager-overtime-query")
+@login_required
+def manager_overtime_query_page():
+    employees = Employee.query.filter_by(is_manager=True).order_by(Employee.emp_no.asc()).all()
+    return render_template("manager_overtime_query.html", employees=employees)
+
+
+@employee_bp.route("/manager-annual-leave-query")
+@login_required
+def manager_annual_leave_query_page():
+    employees = Employee.query.filter_by(is_manager=True).order_by(Employee.emp_no.asc()).all()
+    return render_template("manager_annual_leave_query.html", employees=employees)
 
 
 @employee_bp.route("/abnormal-query")
@@ -1129,6 +1145,10 @@ def final_data_export_api():
 @login_required
 def manager_attendance_api():
     emp_ids = _manager_emp_ids(_accessible_emp_ids())
+    requested_ids = _requested_emp_ids()
+    if requested_ids:
+        allowed = set(emp_ids)
+        emp_ids = [emp_id for emp_id in requested_ids if emp_id in allowed]
     options = _manager_options()
     rows = build_manager_rows(options, emp_ids)
     return jsonify(
@@ -1138,6 +1158,44 @@ def manager_attendance_api():
             "month": options.month,
             "factory_rest_days": options.factory_rest_days,
             "monthly_benefit_days": options.monthly_benefit_days,
+        }
+    )
+
+
+@employee_bp.route("/api/manager-overtime-query", methods=["GET"])
+@login_required
+def manager_overtime_query_api():
+    from routes.admin import _manager_month_rows, _manager_overtime_values
+
+    year = request.args.get("year", type=int) or datetime.now().year
+    values = _manager_overtime_values(year)
+    requested_ids = set(_requested_emp_ids())
+    if requested_ids:
+        values = {name: row for name, row in values.items() if row.get("emp_id") in requested_ids}
+    return jsonify(
+        {
+            "year": year,
+            "headers": ["部门", "姓名", "前年累积天数", "1月", "2月", "3月", "4月", "5月", "6月", "7月", "8月", "9月", "10月", "11月", "12月", "剩余调休天数", "备注"],
+            "rows": _manager_month_rows(values, "剩余调休天数"),
+        }
+    )
+
+
+@employee_bp.route("/api/manager-annual-leave-query", methods=["GET"])
+@login_required
+def manager_annual_leave_query_api():
+    from routes.admin import _annual_leave_value_keys, _manager_annual_leave_values, _manager_month_rows
+
+    year = request.args.get("year", type=int) or datetime.now().year
+    values = _manager_annual_leave_values(year)
+    requested_ids = set(_requested_emp_ids())
+    if requested_ids:
+        values = {name: row for name, row in values.items() if row.get("emp_id") in requested_ids}
+    return jsonify(
+        {
+            "year": year,
+            "headers": ["部门", "姓名", "1月", "2月", "3月", "4月", "5月", "6月", "7月", "8月", "9月", "10月", "11月", "12月", "剩余年休天数", "备注"],
+            "rows": _manager_month_rows(values, "剩余年休天数", _annual_leave_value_keys()),
         }
     )
 
@@ -1195,6 +1253,10 @@ def _fill_manager_template(ws, rows: list[dict[str, object]]) -> None:
 @login_required
 def manager_attendance_export_api():
     emp_ids = _manager_emp_ids(_accessible_emp_ids())
+    requested_ids = _requested_emp_ids()
+    if requested_ids:
+        allowed = set(emp_ids)
+        emp_ids = [emp_id for emp_id in requested_ids if emp_id in allowed]
     options = _manager_options()
     rows = build_manager_rows(options, emp_ids)
 

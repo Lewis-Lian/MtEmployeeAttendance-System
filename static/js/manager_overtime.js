@@ -8,6 +8,20 @@ function numericInput(key, value) {
   return `<input class="form-control form-control-sm" data-field="${key}" type="text" inputmode="decimal" value="${monthValue(value)}">`;
 }
 
+function updateOvertimeMetrics(rowCount = null, status = null) {
+  const year = document.getElementById("managerOvertimeYear").value || String(new Date().getFullYear());
+  document.getElementById("managerOvertimeMetricYear").textContent = year;
+  if (rowCount !== null) {
+    document.getElementById("managerOvertimeMetricRows").textContent = String(rowCount);
+    document.getElementById("managerOvertimeMetricRowsSub").textContent = rowCount ? `当前展示 ${rowCount} 人` : "当前条件无数据";
+  }
+  if (status !== null) {
+    document.getElementById("managerOvertimeMetricStatus").textContent = status;
+    const metaEl = document.getElementById("managerOvertimeMeta");
+    if (metaEl) metaEl.textContent = status;
+  }
+}
+
 function overtimeRowHtml(row) {
   const monthCells = managerMonthKeys.map((key) => `<td>${numericInput(key, row[key])}</td>`).join("");
   return `
@@ -30,11 +44,11 @@ async function loadManagerOvertime() {
   const body = document.getElementById("managerOvertimeBody");
   if (!Array.isArray(rows) || !rows.length) {
     body.innerHTML = '<tr><td class="text-muted" colspan="17">暂无数据</td></tr>';
-    document.getElementById("managerOvertimeMeta").textContent = "当前条件无数据";
+    updateOvertimeMetrics(0, "当前条件无数据");
     return;
   }
   body.innerHTML = rows.map(overtimeRowHtml).join("");
-  document.getElementById("managerOvertimeMeta").textContent = `共 ${rows.length} 人`;
+  updateOvertimeMetrics(rows.length, `共 ${rows.length} 人`);
 }
 
 async function saveManagerOvertime() {
@@ -59,7 +73,7 @@ async function saveManagerOvertime() {
       return;
     }
   }
-  document.getElementById("managerOvertimeMeta").textContent = `已保存 ${rows.length} 人`;
+  updateOvertimeMetrics(rows.length, `已保存 ${rows.length} 人`);
   loadManagerOvertime();
 }
 
@@ -83,7 +97,7 @@ async function importManagerOvertime() {
     return;
   }
   const errorText = data.error_count ? `，失败 ${data.error_count} 条：\n${data.errors.join("\n")}` : "";
-  document.getElementById("managerOvertimeMeta").textContent = `已导入 ${data.imported} 人`;
+  updateOvertimeMetrics(data.imported || 0, `已导入 ${data.imported} 人`);
   fileInput.value = "";
   await loadManagerOvertime();
   if (errorText) window.alert(`已导入 ${data.imported} 人${errorText}`);
@@ -92,6 +106,8 @@ async function importManagerOvertime() {
 document.addEventListener("DOMContentLoaded", () => {
   const yearInput = document.getElementById("managerOvertimeYear");
   yearInput.value = String(new Date().getFullYear());
+  updateOvertimeMetrics(0, "等待查询");
+  yearInput.addEventListener("input", () => updateOvertimeMetrics(null, "等待查询"));
   document.getElementById("managerOvertimeQueryBtn").addEventListener("click", loadManagerOvertime);
   document.getElementById("managerOvertimeSaveBtn").addEventListener("click", saveManagerOvertime);
   document.getElementById("managerOvertimeImportBtn").addEventListener("click", importManagerOvertime);

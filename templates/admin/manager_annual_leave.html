@@ -2,39 +2,76 @@
 {% block title %}年休信息{% endblock %}
 {% block page_intro %}按年度查询管理人员年休统计。{% endblock %}
 {% block content %}
-<div class="card mb-3">
-  <div class="card-header">查询条件</div>
+<div class="row g-3 mb-3">
+  <div class="col-md-6 col-xl-3">
+    <div class="summary-card dashboard-metric-card">
+      <div class="dashboard-metric-label">统计年度</div>
+      <div class="dashboard-metric-value dashboard-metric-text" id="managerAnnualLeaveMetricYear">-</div>
+      <div class="dashboard-metric-sub">按年度维护管理人员年休</div>
+    </div>
+  </div>
+  <div class="col-md-6 col-xl-3">
+    <div class="summary-card dashboard-metric-card">
+      <div class="dashboard-metric-label">人员记录</div>
+      <div class="dashboard-metric-value" id="managerAnnualLeaveMetricRows">0</div>
+      <div class="dashboard-metric-sub" id="managerAnnualLeaveMetricRowsSub">点击查询后更新</div>
+    </div>
+  </div>
+  <div class="col-md-6 col-xl-3">
+    <div class="summary-card dashboard-metric-card">
+      <div class="dashboard-metric-label">维护月份</div>
+      <div class="dashboard-metric-value">12</div>
+      <div class="dashboard-metric-sub">按 1-12 月维护年休变化</div>
+    </div>
+  </div>
+  <div class="col-md-6 col-xl-3">
+    <div class="summary-card dashboard-metric-card">
+      <div class="dashboard-metric-label">当前状态</div>
+      <div class="dashboard-metric-value dashboard-metric-text" id="managerAnnualLeaveMetricStatus">等待查询</div>
+      <div class="dashboard-metric-sub">支持导入、编辑、保存、导出</div>
+    </div>
+  </div>
+</div>
+
+<div class="card mb-4 manager-info-panel">
+  <div class="card-header d-flex justify-content-between align-items-center">
+    <span>查询条件</span>
+    <span class="small text-muted">年度筛选、Excel 导入导出与批量保存</span>
+  </div>
   <div class="card-body">
     <div class="row g-3 align-items-end">
-      <div class="col-md-2">
+      <div class="col-lg-2 col-md-4">
         <label class="form-label">年份</label>
         <input class="form-control" type="number" id="managerAnnualLeaveYear" min="2000" max="2100">
       </div>
-      <div class="col-md-2">
-        <button class="btn btn-primary w-100" id="managerAnnualLeaveQueryBtn">查询</button>
+      <div class="col-lg-6 col-md-8">
+        <label class="form-label">主要操作</label>
+        <div class="manager-info-actions">
+          <button class="btn btn-primary" id="managerAnnualLeaveQueryBtn">查询</button>
+          <button class="btn btn-outline-primary" id="managerAnnualLeaveSaveBtn">保存修改</button>
+          <button class="btn btn-outline-success" id="managerAnnualLeaveExportBtn">导出XLSX</button>
+        </div>
       </div>
-      <div class="col-md-2">
-        <button class="btn btn-outline-primary w-100" id="managerAnnualLeaveSaveBtn">保存修改</button>
+    </div>
+    <div class="row g-3 align-items-end mt-1">
+      <div class="col-lg-7">
+        <label class="form-label">导入文件</label>
+        <div class="manager-info-import">
+          <input class="form-control" type="file" id="managerAnnualLeaveImportFile" accept=".xlsx">
+          <button class="btn btn-outline-warning" id="managerAnnualLeaveImportBtn">导入</button>
+          <a class="btn btn-outline-secondary" href="/admin/manager-annual-leave/template">下载示例</a>
+        </div>
       </div>
-      <div class="col-md-2">
-        <button class="btn btn-outline-success w-100" id="managerAnnualLeaveExportBtn">导出XLSX</button>
-      </div>
-      <div class="col-md-2">
-        <a class="btn btn-outline-secondary w-100" href="/admin/manager-annual-leave/template">下载示例</a>
-      </div>
-      <div class="col-md-2">
-        <input class="form-control" type="file" id="managerAnnualLeaveImportFile" accept=".xlsx">
-      </div>
-      <div class="col-md-1">
-        <button class="btn btn-outline-warning w-100" id="managerAnnualLeaveImportBtn">导入</button>
-      </div>
-      <div class="col-md-1 small text-muted" id="managerAnnualLeaveMeta">等待查询</div>
     </div>
   </div>
 </div>
 
 <div class="card table-wrap-tight">
-  <div class="table-responsive">
+  <div class="card-header d-flex justify-content-between align-items-center">
+    <span>管理人员年休明细</span>
+    <span class="small text-muted">单元格可直接编辑，保存后重新计算剩余年休</span>
+  </div>
+  <div class="table-responsive manager-info-table">
     <table class="table table-sm table-striped mb-0 align-middle">
       <thead>
         <tr>

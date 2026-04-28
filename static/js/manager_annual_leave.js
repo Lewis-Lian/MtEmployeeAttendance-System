@@ -8,6 +8,20 @@ function numericInput(key, value) {
   return `<input class="form-control form-control-sm" data-field="${key}" type="text" inputmode="decimal" value="${monthValue(value)}">`;
 }
 
+function updateAnnualLeaveMetrics(rowCount = null, status = null) {
+  const year = document.getElementById("managerAnnualLeaveYear").value || String(new Date().getFullYear());
+  document.getElementById("managerAnnualLeaveMetricYear").textContent = year;
+  if (rowCount !== null) {
+    document.getElementById("managerAnnualLeaveMetricRows").textContent = String(rowCount);
+    document.getElementById("managerAnnualLeaveMetricRowsSub").textContent = rowCount ? `当前展示 ${rowCount} 人` : "当前条件无数据";
+  }
+  if (status !== null) {
+    document.getElementById("managerAnnualLeaveMetricStatus").textContent = status;
+    const metaEl = document.getElementById("managerAnnualLeaveMeta");
+    if (metaEl) metaEl.textContent = status;
+  }
+}
+
 function annualLeaveRowHtml(row) {
   const monthCells = managerMonthKeys.map((key) => `<td>${numericInput(key, row[key])}</td>`).join("");
   return `
@@ -30,11 +44,11 @@ async function loadManagerAnnualLeave() {
   const body = document.getElementById("managerAnnualLeaveBody");
   if (!Array.isArray(rows) || !rows.length) {
     body.innerHTML = '<tr><td class="text-muted" colspan="16">暂无数据</td></tr>';
-    document.getElementById("managerAnnualLeaveMeta").textContent = "当前条件无数据";
+    updateAnnualLeaveMetrics(0, "当前条件无数据");
     return;
   }
   body.innerHTML = rows.map(annualLeaveRowHtml).join("");
-  document.getElementById("managerAnnualLeaveMeta").textContent = `共 ${rows.length} 人`;
+  updateAnnualLeaveMetrics(rows.length, `共 ${rows.length} 人`);
 }
 
 async function saveManagerAnnualLeave() {
@@ -59,7 +73,7 @@ async function saveManagerAnnualLeave() {
       return;
     }
   }
-  document.getElementById("managerAnnualLeaveMeta").textContent = `已保存 ${rows.length} 人`;
+  updateAnnualLeaveMetrics(rows.length, `已保存 ${rows.length} 人`);
   loadManagerAnnualLeave();
 }
 
@@ -83,14 +97,17 @@ async function importManagerAnnualLeave() {
     return;
   }
   const errorText = data.error_count ? `，失败 ${data.error_count} 条：\n${data.errors.join("\n")}` : "";
-  document.getElementById("managerAnnualLeaveMeta").textContent = `已导入 ${data.imported} 人`;
+  updateAnnualLeaveMetrics(data.imported || 0, `已导入 ${data.imported} 人`);
   fileInput.value = "";
   await loadManagerAnnualLeave();
   if (errorText) window.alert(`已导入 ${data.imported} 人${errorText}`);
 }
 
 document.addEventListener("DOMContentLoaded", () => {
-  document.getElementById("managerAnnualLeaveYear").value = String(new Date().getFullYear());
+  const yearInput = document.getElementById("managerAnnualLeaveYear");
+  yearInput.value = String(new Date().getFullYear());
+  updateAnnualLeaveMetrics(0, "等待查询");
+  yearInput.addEventListener("input", () => updateAnnualLeaveMetrics(null, "等待查询"));
   document.getElementById("managerAnnualLeaveQueryBtn").addEventListener("click", loadManagerAnnualLeave);
   document.getElementById("managerAnnualLeaveSaveBtn").addEventListener("click", saveManagerAnnualLeave);
   document.getElementById("managerAnnualLeaveImportBtn").addEventListener("click", importManagerAnnualLeave);

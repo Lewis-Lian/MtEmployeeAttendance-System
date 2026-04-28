@@ -5,10 +5,22 @@ async function loadManagerAccountSets() {
   const rows = Array.isArray(data) ? data : [];
   if (!rows.length) {
     select.innerHTML = `<option value="">暂无账套</option>`;
+    updateManagerMetrics(null, null);
     return;
   }
   select.innerHTML = rows
-    .map((x) => `<option value="${x.month}" ${x.is_active ? "selected" : ""}>${x.name}${x.is_active ? "（当前）" : ""}</option>`)
+    .map(
+      (x) => `
+        <option
+          value="${x.month}"
+          data-factory-rest-days="${x.factory_rest_days || 0}"
+          data-monthly-benefit-days="${x.monthly_benefit_days || 0}"
+          ${x.is_active ? "selected" : ""}
+        >
+          ${x.name}${x.is_active ? "（当前）" : ""}
+        </option>
+      `
+    )
     .join("");
   renderAccountSetParams(rows);
   select.addEventListener("change", () => renderAccountSetParams(rows));
@@ -17,15 +29,36 @@ async function loadManagerAccountSets() {
 function renderAccountSetParams(rows) {
   const month = document.getElementById("managerAccountSetSelect").value;
   const row = rows.find((x) => x.month === month);
-  const text = row
-    ? `账套参数：本月厂休 ${row.factory_rest_days || 0} 天，本月可用福利 ${row.monthly_benefit_days || 0} 天`
-    : "厂休天数和福利天数来自账套管理页面。";
-  document.getElementById("managerAccountSetParams").textContent = text;
+  updateManagerMetrics(row, null);
 }
 
-function buildManagerQuery() {
+function updateManagerMetrics(accountSetRow = null, resultRows = null) {
+  const select = document.getElementById("managerAccountSetSelect");
+  const selectedOption = select.options[select.selectedIndex];
+  const factoryRestDays = accountSetRow ? accountSetRow.factory_rest_days || 0 : 0;
+  const benefitDays = accountSetRow ? accountSetRow.monthly_benefit_days || 0 : 0;
+
+  document.getElementById("managerMetricAccountSet").textContent = selectedOption ? selectedOption.textContent.trim() : "未选择";
+  document.getElementById("managerMetricFactoryRest").textContent = String(factoryRestDays);
+  document.getElementById("managerMetricBenefitDays").textContent = String(benefitDays);
+
+  if (resultRows === null) {
+    document.getElementById("managerMetricResultRows").textContent = "0";
+    document.getElementById("managerMetricResultRowsSub").textContent = "点击查询后更新";
+    document.getElementById("managerQueryMeta").textContent = "等待查询";
+    return;
+  }
+
+  document.getElementById("managerMetricResultRows").textContent = String(resultRows);
+  document.getElementById("managerMetricResultRowsSub").textContent = resultRows ? `本次返回 ${resultRows} 条记录` : "当前条件无数据";
+  document.getElementById("managerQueryMeta").textContent = resultRows ? `共返回 ${resultRows} 条记录` : "当前条件无数据";
+}
+
+function buildManagerQuery(employeeSelector = null) {
   const query = new URLSearchParams();
   const month = document.getElementById("managerAccountSetSelect").value;
+  const ids = employeeSelector ? employeeSelector.getSelectedIds() : [];
+  ids.forEach((id) => query.append("emp_ids", id));
   if (month) query.set("month", month);
   return query;
 }
@@ -39,28 +72,39 @@ function renderManagerRows(headers, rows) {
 
   if (!rows.length) {
     body.innerHTML = `<tr><td class="text-muted" colspan="${Math.max(headers.length, 1)}">暂无数据</td></tr>`;
-    document.getElementById("managerQueryMeta").textContent = "当前条件无数据";
+    updateManagerMetrics(currentAccountSetRow(), 0);
     return;
   }
 
   body.innerHTML = rows
     .map((row) => `<tr>${headers.map((_, index) => `<td>${row[index] ?? ""}</td>`).join("")}</tr>`)
     .join("");
-  document.getElementById("managerQueryMeta").textContent = `共返回 ${rows.length} 条记录`;
+  updateManagerMetrics(currentAccountSetRow(), rows.length);
 }
 
-async function queryManagerAttendance() {
-  const query = buildManagerQuery();
+function currentAccountSetRow() {
+  const select = document.getElementById("managerAccountSetSelect");
+  return {
+    factory_rest_days: Number(select.selectedOptions[0]?.dataset.factoryRestDays || 0),
+    monthly_benefit_days: Number(select.selectedOptions[0]?.dataset.monthlyBenefitDays || 0),
+  };
+}
+
+async function queryManagerAttendance(employeeSelector) {
+  const query = buildManagerQuery(employeeSelector);
   const res = await fetch(`/employee/api/manager-attendance?${query.toString()}`);
   const data = await res.json();
   renderManagerRows(Array.isArray(data.headers) ? data.headers : [], Array.isArray(data.rows) ? data.rows : []);
 }
 
 document.addEventListener("DOMContentLoaded", async () => {
+  const employeeSelector = window.SelectorComponent.createEmployeeSelector();
+  await employeeSelector.init();
   await loadManagerAccountSets();
-  document.getElementById("managerQueryBtn").addEventListener("click", queryManagerAttendance);
+  document.getElementById("managerQueryBtn").addEventListener("click", () => queryManagerAttendance(employeeSelector));
   document.getElementById("managerDownloadBtn").addEventListener("click", () => {
-    const query = buildManagerQuery();
+    const query = buildManagerQuery(employeeSelector);
     window.location.href = `/employee/api/manager-attendance/export?${query.toString()}`;
   });
+  document.getElementById("selectedEmpIds").addEventListener("change", () => updateManagerMetrics(currentAccountSetRow(), null));
 });

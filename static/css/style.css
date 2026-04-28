@@ -1090,6 +1090,80 @@ h5,
   gap: 10px;
 }
 
+.manager-info-panel .form-label {
+  font-size: 13px;
+  font-weight: 700;
+  color: #475569;
+}
+
+.manager-info-actions,
+.manager-info-import {
+  display: grid;
+  gap: 10px;
+}
+
+.manager-info-actions {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.manager-info-import {
+  grid-template-columns: minmax(180px, 1fr) auto auto;
+}
+
+.manager-info-actions .btn,
+.manager-info-import .btn {
+  white-space: nowrap;
+}
+
+.manager-info-status {
+  min-height: 38px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 10px;
+  border: 1px solid #e4ebf5;
+  border-radius: 8px;
+  background: #f8fafc;
+  color: #64748b;
+  font-size: 13px;
+  font-weight: 600;
+  text-align: center;
+}
+
+.manager-info-table {
+  max-height: calc(100vh - 330px);
+}
+
+.manager-info-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+}
+
+.manager-info-table tbody td:first-child,
+.manager-info-table tbody td:nth-child(2),
+.manager-info-table thead th:first-child,
+.manager-info-table thead th:nth-child(2) {
+  white-space: nowrap;
+}
+
+.manager-info-table input.form-control-sm {
+  min-width: 72px;
+  border-color: #d9e2ef;
+  background: #ffffff;
+}
+
+.manager-info-table input[data-field="remark"] {
+  min-width: 150px;
+}
+
+@media (max-width: 992px) {
+  .manager-info-actions,
+  .manager-info-import {
+    grid-template-columns: 1fr;
+  }
+}
+
 @media (max-width: 992px) {
   .app-layout {
     grid-template-columns: 1fr;
@@ -1552,6 +1626,15 @@ h5,
   gap: 8px;
 }
 
+.quick-employee-select-all {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border-bottom: 1px solid #e4ebf5;
+  margin-bottom: 4px;
+  font-weight: 600;
+}
+
 .quick-option-check {
   margin: 0;
   pointer-events: none;
@@ -1559,6 +1642,12 @@ h5,
 
 .quick-option-label {
   flex: 1;
+}
+
+.quick-option-count {
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 500;
 }
 
 .selected-emp-tags {

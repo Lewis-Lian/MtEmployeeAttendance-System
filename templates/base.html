@@ -26,6 +26,12 @@
         <a class="app-side-link {% if request.path.startswith('/employee/manager-query') %}is-active{% endif %}" href="/employee/manager-query" title="管理人员查询">
           <span class="app-side-icon icon-manager" aria-hidden="true"></span><span class="app-side-label">管理人员查询</span>
         </a>
+        <a class="app-side-link {% if request.path.startswith('/employee/manager-overtime-query') %}is-active{% endif %}" href="/employee/manager-overtime-query" title="查询加班">
+          <span class="app-side-icon icon-hours" aria-hidden="true"></span><span class="app-side-label">查询加班</span>
+        </a>
+        <a class="app-side-link {% if request.path.startswith('/employee/manager-annual-leave-query') %}is-active{% endif %}" href="/employee/manager-annual-leave-query" title="查询年休">
+          <span class="app-side-icon icon-attendance" aria-hidden="true"></span><span class="app-side-label">查询年休</span>
+        </a>
       </nav>
     </div>
     <div class="app-sidebar-group" data-sidebar-group="query">
