@@ -359,6 +359,27 @@ body {
   background: transparent;
 }
 
+.icon-manager::before {
+  width: 8px;
+  height: 8px;
+  top: 4px;
+  left: 7px;
+  border: 2px solid currentColor;
+  border-radius: 999px;
+  background: transparent;
+}
+
+.icon-manager::after {
+  width: 14px;
+  height: 8px;
+  top: 12px;
+  left: 4px;
+  border: 2px solid currentColor;
+  border-top: 0;
+  border-radius: 0 0 8px 8px;
+  background: transparent;
+}
+
 .icon-department::before {
   width: 4px;
   height: 4px;
@@ -933,35 +954,20 @@ h5,
 }
 
 .login-eye-icon {
-  position: relative;
-  display: inline-block;
   width: 18px;
-  height: 12px;
-  border: 2px solid #64748b;
-  border-radius: 999px / 80%;
+  height: 18px;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
-.login-eye-icon::before {
-  content: "";
-  position: absolute;
-  width: 4px;
-  height: 4px;
-  left: 50%;
-  top: 50%;
-  transform: translate(-50%, -50%);
-  border-radius: 999px;
-  background: #64748b;
+.login-eye-slash {
+  display: none;
 }
 
-.login-eye-btn.is-visible .login-eye-icon::after {
-  content: "";
-  position: absolute;
-  left: 50%;
-  top: -1px;
-  width: 2px;
-  height: 14px;
-  background: #64748b;
-  transform: translateX(-50%) rotate(45deg);
+.login-eye-btn.is-visible .login-eye-slash {
+  display: block;
 }
 
 .login-submit-btn {

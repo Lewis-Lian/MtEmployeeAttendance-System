@@ -632,6 +632,12 @@ def dashboard():
     return render_template("dashboard.html", employees=employees)
 
 
+@employee_bp.route("/manager-query")
+@login_required
+def manager_query_page():
+    return render_template("manager_query.html")
+
+
 @employee_bp.route("/abnormal-query")
 @login_required
 def abnormal_query_page():

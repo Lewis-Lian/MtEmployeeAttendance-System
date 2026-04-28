@@ -17,6 +17,17 @@
       </a>
       <div class="app-brand-subtitle">Attendance Admin</div>
     </div>
+    <div class="app-sidebar-group" data-sidebar-group="manager-query">
+      <button class="app-sidebar-group-toggle" type="button" data-sidebar-toggle="manager-query" aria-expanded="true">
+        <span class="app-sidebar-title">查询管理人员</span>
+        <span class="app-sidebar-group-arrow" aria-hidden="true">▾</span>
+      </button>
+      <nav class="app-sidebar-nav" data-sidebar-panel="manager-query">
+        <a class="app-side-link {% if request.path.startswith('/employee/manager-query') %}is-active{% endif %}" href="/employee/manager-query" title="管理人员查询">
+          <span class="app-side-icon icon-manager" aria-hidden="true"></span><span class="app-side-label">管理人员查询</span>
+        </a>
+      </nav>
+    </div>
     <div class="app-sidebar-group" data-sidebar-group="query">
       <button class="app-sidebar-group-toggle" type="button" data-sidebar-toggle="query" aria-expanded="true">
         <span class="app-sidebar-title">查询员工</span>
