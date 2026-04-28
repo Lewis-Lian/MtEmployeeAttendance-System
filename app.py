@@ -19,6 +19,7 @@ from models.monthly_report import MonthlyReport
 from models.overtime import OvertimeRecord
 from models.leave import LeaveRecord
 from models.annual_leave import AnnualLeave
+from models.manager_month_stat import ManagerMonthStat
 from models.employee_shift import EmployeeShiftAssignment
 from models.account_set import AccountSet, AccountSetImport
 from routes import register_routes
@@ -69,6 +70,22 @@ def _ensure_schema_compatibility() -> None:
         db.session.commit()
     if "is_locked" not in columns:
         db.session.execute(text("ALTER TABLE departments ADD COLUMN is_locked BOOLEAN NOT NULL DEFAULT 0"))
+        db.session.commit()
+
+    employee_columns = {c["name"] for c in inspector.get_columns("employees")}
+    if "is_manager" not in employee_columns:
+        db.session.execute(text("ALTER TABLE employees ADD COLUMN is_manager BOOLEAN NOT NULL DEFAULT 0"))
+        db.session.commit()
+    if "is_nursing" not in employee_columns:
+        db.session.execute(text("ALTER TABLE employees ADD COLUMN is_nursing BOOLEAN NOT NULL DEFAULT 0"))
+        db.session.commit()
+
+    account_set_columns = {c["name"] for c in inspector.get_columns("account_sets")}
+    if "factory_rest_days" not in account_set_columns:
+        db.session.execute(text("ALTER TABLE account_sets ADD COLUMN factory_rest_days FLOAT NOT NULL DEFAULT 0"))
+        db.session.commit()
+    if "monthly_benefit_days" not in account_set_columns:
+        db.session.execute(text("ALTER TABLE account_sets ADD COLUMN monthly_benefit_days FLOAT NOT NULL DEFAULT 0"))
         db.session.commit()
 
 

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from datetime import datetime, timedelta
 import math
 import re
@@ -19,6 +20,12 @@ from models.monthly_report import MonthlyReport
 from models.account_set import AccountSet
 from models.user import UserEmployeeAssignment, UserDepartmentAssignment
 from services.attendance_service import AttendanceService
+from services.manager_attendance_service import (
+    MANAGER_HEADERS,
+    ManagerAttendanceOptions,
+    build_manager_rows,
+    rows_as_table,
+)
 from routes.auth import login_required
 
 
@@ -446,9 +453,43 @@ def _accessible_emp_ids() -> list[int]:
     return list(ids)
 
 
+def _non_manager_emp_ids(emp_ids: list[int]) -> list[int]:
+    if not emp_ids:
+        return []
+    rows = (
+        Employee.query.with_entities(Employee.id)
+        .filter(Employee.id.in_(emp_ids), Employee.is_manager.is_(False))
+        .all()
+    )
+    allowed = {row.id for row in rows}
+    return [emp_id for emp_id in emp_ids if emp_id in allowed]
+
+
+def _manager_emp_ids(emp_ids: list[int]) -> list[int]:
+    if not emp_ids:
+        return []
+    rows = (
+        Employee.query.with_entities(Employee.id)
+        .filter(Employee.id.in_(emp_ids), Employee.is_manager.is_(True))
+        .all()
+    )
+    allowed = {row.id for row in rows}
+    return [emp_id for emp_id in emp_ids if emp_id in allowed]
+
+
+def _manager_options() -> ManagerAttendanceOptions:
+    month = _resolve_query_month()
+    account_set = AccountSet.query.filter_by(month=month).first()
+    return ManagerAttendanceOptions(
+        month=month,
+        factory_rest_days=(account_set.factory_rest_days if account_set else 0.0) or 0.0,
+        monthly_benefit_days=(account_set.monthly_benefit_days if account_set else 0.0) or 0.0,
+    )
+
+
 def _pick_emp_id() -> int | None:
     requested = request.args.get("emp_id", type=int)
-    allowed = _accessible_emp_ids()
+    allowed = _non_manager_emp_ids(_accessible_emp_ids())
     if requested and requested in allowed:
         return requested
     return allowed[0] if allowed else None
@@ -493,7 +534,7 @@ def _keyword_filtered_emp_ids(base_ids: list[int]) -> list[int]:
 
 def _pick_emp_ids() -> list[int]:
     requested = _requested_emp_ids()
-    allowed = _accessible_emp_ids()
+    allowed = _non_manager_emp_ids(_accessible_emp_ids())
     if requested:
         allowed_set = set(allowed)
         filtered = [emp_id for emp_id in requested if emp_id in allowed_set]
@@ -627,7 +668,7 @@ def _build_department_hours_rows(month: str, emp_ids: list[int]) -> list[dict[st
 @employee_bp.route("/dashboard")
 @login_required
 def dashboard():
-    emp_ids = _accessible_emp_ids()
+    emp_ids = _non_manager_emp_ids(_accessible_emp_ids())
     employees = Employee.query.filter(Employee.id.in_(emp_ids)).order_by(Employee.emp_no).all() if emp_ids else []
     return render_template("dashboard.html", employees=employees)
 
@@ -641,7 +682,7 @@ def manager_query_page():
 @employee_bp.route("/abnormal-query")
 @login_required
 def abnormal_query_page():
-    emp_ids = _accessible_emp_ids()
+    emp_ids = _non_manager_emp_ids(_accessible_emp_ids())
     employees = Employee.query.filter(Employee.id.in_(emp_ids)).order_by(Employee.emp_no).all() if emp_ids else []
     return render_template("abnormal_query.html", employees=employees)
 
@@ -655,7 +696,7 @@ def department_hours_query_page():
 @employee_bp.route("/punch-records")
 @login_required
 def punch_records_page():
-    emp_ids = _accessible_emp_ids()
+    emp_ids = _non_manager_emp_ids(_accessible_emp_ids())
     employees = Employee.query.filter(Employee.id.in_(emp_ids)).order_by(Employee.emp_no).all() if emp_ids else []
     return render_template("punch_records.html", employees=employees)
 
@@ -671,6 +712,8 @@ def account_sets_api():
                 "month": r.month,
                 "name": r.name,
                 "is_active": r.is_active,
+                "factory_rest_days": r.factory_rest_days or 0,
+                "monthly_benefit_days": r.monthly_benefit_days or 0,
             }
             for r in rows
         ]
@@ -680,7 +723,7 @@ def account_sets_api():
 @employee_bp.route("/api/departments", methods=["GET"])
 @login_required
 def departments_api():
-    emp_ids = _accessible_emp_ids()
+    emp_ids = _non_manager_emp_ids(_accessible_emp_ids())
     if not emp_ids:
         return jsonify([])
 
@@ -1010,6 +1053,103 @@ def final_data_export_api():
     )
 
 
+@employee_bp.route("/api/manager-attendance", methods=["GET"])
+@login_required
+def manager_attendance_api():
+    emp_ids = _manager_emp_ids(_accessible_emp_ids())
+    options = _manager_options()
+    rows = build_manager_rows(options, emp_ids)
+    return jsonify(
+        {
+            "headers": MANAGER_HEADERS,
+            "rows": rows_as_table(rows),
+            "month": options.month,
+            "factory_rest_days": options.factory_rest_days,
+            "monthly_benefit_days": options.monthly_benefit_days,
+        }
+    )
+
+
+def _fill_manager_template(ws, rows: list[dict[str, object]]) -> None:
+    by_name = {str(row.get("name", "")).strip(): row for row in rows}
+    filled_names: set[str] = set()
+
+    for row_idx in range(2, ws.max_row + 1):
+        name = str(ws.cell(row_idx, 2).value or "").strip()
+        if not name or name not in by_name:
+            continue
+        item = by_name[name]
+        values = [
+            item.get("attendance_days", 0),
+            item.get("personal_sick_days", 0),
+            item.get("injury_days", 0),
+            item.get("business_trip_days", 0),
+            item.get("marriage_days", 0),
+            item.get("funeral_days", 0),
+            item.get("late_early_minutes", 0),
+            item.get("summary", ""),
+            item.get("benefit_days", 0),
+            item.get("overtime_change", 0),
+            item.get("remark", ""),
+        ]
+        for offset, value in enumerate(values, start=3):
+            ws.cell(row_idx, offset).value = value
+        filled_names.add(name)
+
+    for item in rows:
+        name = str(item.get("name", "")).strip()
+        if not name or name in filled_names:
+            continue
+        ws.append(
+            [
+                item.get("dept_name", ""),
+                name,
+                item.get("attendance_days", 0),
+                item.get("personal_sick_days", 0),
+                item.get("injury_days", 0),
+                item.get("business_trip_days", 0),
+                item.get("marriage_days", 0),
+                item.get("funeral_days", 0),
+                item.get("late_early_minutes", 0),
+                item.get("summary", ""),
+                item.get("benefit_days", 0),
+                item.get("overtime_change", 0),
+                item.get("remark", ""),
+            ]
+        )
+
+
+@employee_bp.route("/api/manager-attendance/export", methods=["GET"])
+@login_required
+def manager_attendance_export_api():
+    emp_ids = _manager_emp_ids(_accessible_emp_ids())
+    options = _manager_options()
+    rows = build_manager_rows(options, emp_ids)
+
+    template_path = "/home/lewis/文档/考勤/管理人员最终输出输出模板.xlsx"
+    if os.path.exists(template_path):
+        wb = openpyxl.load_workbook(template_path)
+        ws = wb.active
+        _fill_manager_template(ws, rows)
+    else:
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "管理人员查询"
+        ws.append(MANAGER_HEADERS)
+        for row in rows_as_table(rows):
+            ws.append(row)
+
+    output = BytesIO()
+    wb.save(output)
+    output.seek(0)
+    return send_file(
+        output,
+        as_attachment=True,
+        download_name=f"管理人员考勤查询_{options.month}.xlsx",
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+
+
 @employee_bp.route("/api/abnormal-attendance", methods=["GET"])
 @login_required
 def abnormal_attendance_api():
@@ -1053,7 +1193,7 @@ def abnormal_attendance_export_api():
 @employee_bp.route("/api/department-hours", methods=["GET"])
 @login_required
 def department_hours_api():
-    emp_ids = _accessible_emp_ids()
+    emp_ids = _non_manager_emp_ids(_accessible_emp_ids())
     if not emp_ids:
         return jsonify([])
 
@@ -1064,7 +1204,7 @@ def department_hours_api():
 @employee_bp.route("/api/department-hours/export", methods=["GET"])
 @login_required
 def department_hours_export_api():
-    emp_ids = _accessible_emp_ids()
+    emp_ids = _non_manager_emp_ids(_accessible_emp_ids())
     if not emp_ids:
         return jsonify({"error": "No employee assigned"}), 400
 

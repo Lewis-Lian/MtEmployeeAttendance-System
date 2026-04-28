@@ -1,36 +1,38 @@
 #!/bin/bash
 
-set -e
+set -euo pipefail
 
-cd "$(dirname "$0")"
+PROJECT_DIR="$(cd "$(dirname "$0")" && pwd)"
+cd "$PROJECT_DIR"
 
 HOST="${HOST:-127.0.0.1}"
 PORT="${PORT:-8000}"
-VENV_DIR="${VENV_DIR:-.venv-local}"
+VENV_DIR="${VENV_DIR:-.venv-mac}"
+PYTHON_BIN="$VENV_DIR/bin/python3"
+
+export FLASK_ENV="${FLASK_ENV:-development}"
+export FLASK_DEBUG="${FLASK_DEBUG:-1}"
 export PIP_DISABLE_PIP_VERSION_CHECK=1
 export PIP_NO_CACHE_DIR=1
 
-# 创建虚拟环境（如果不存在）
 if [ ! -d "$VENV_DIR" ]; then
     python3 -m venv "$VENV_DIR"
 fi
 
-# 激活虚拟环境
-source "$VENV_DIR/bin/activate"
-
-# 确保虚拟环境内 pip 可用
-if ! python -m pip --version >/dev/null 2>&1; then
-    python -m ensurepip --upgrade
+if [ ! -x "$PYTHON_BIN" ]; then
+    echo "Python not found in $VENV_DIR. Remove the broken venv or set VENV_DIR to a valid one." >&2
+    exit 1
 fi
 
-# 安装依赖
-python -m pip install -r requirements.txt
+if ! "$PYTHON_BIN" -m pip --version >/dev/null 2>&1; then
+    "$PYTHON_BIN" -m ensurepip --upgrade
+fi
 
-# 复制环境变量文件
+"$PYTHON_BIN" -m pip install -r requirements.txt
+
 if [ -f ".env.example" ] && [ ! -f ".env" ]; then
     cp .env.example .env
 fi
 
-# 启动生产服务器
-echo "Starting attendance system at http://localhost:${PORT}"
-python -m waitress --host="$HOST" --port="$PORT" app:app
+echo "Starting attendance system development server at http://${HOST}:${PORT}"
+"$PYTHON_BIN" -m flask --app app:app run --debug --host="$HOST" --port="$PORT"

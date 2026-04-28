@@ -1,10 +1,14 @@
 document.addEventListener("DOMContentLoaded", () => {
   const importRawForm = document.getElementById("importRawForm");
   const importRawBtn = document.getElementById("importRawBtn");
-  const calculateBtn = document.getElementById("calculateBtn");
+  const calculateEmployeeBtn = document.getElementById("calculateEmployeeBtn");
+  const calculateManagerBtn = document.getElementById("calculateManagerBtn");
   const uploadResult = document.getElementById("uploadResult");
   const createAccountSetForm = document.getElementById("createAccountSetForm");
   const accountSetSelect = document.getElementById("accountSetSelect");
+  const factoryRestDaysInput = document.getElementById("factoryRestDaysInput");
+  const monthlyBenefitDaysInput = document.getElementById("monthlyBenefitDaysInput");
+  const saveAccountSetParamsBtn = document.getElementById("saveAccountSetParamsBtn");
   const activateAccountSetBtn = document.getElementById("activateAccountSetBtn");
   const deleteAccountSetBtn = document.getElementById("deleteAccountSetBtn");
   const refreshAccountSetsBtn = document.getElementById("refreshAccountSetsBtn");
@@ -18,9 +22,21 @@ document.addEventListener("DOMContentLoaded", () => {
     return Number(accountSetSelect.value || 0);
   }
 
+  function currentAccountSet() {
+    const id = currentAccountSetId();
+    return accountSets.find((x) => Number(x.id) === id) || null;
+  }
+
+  function renderAccountSetParams() {
+    const row = currentAccountSet();
+    factoryRestDaysInput.value = row ? String(row.factory_rest_days || 0) : "0";
+    monthlyBenefitDaysInput.value = row ? String(row.monthly_benefit_days || 0) : "0";
+  }
+
   function renderAccountSets() {
     if (!accountSets.length) {
       accountSetSelect.innerHTML = `<option value="">暂无账套，请先创建</option>`;
+      renderAccountSetParams();
       return;
     }
     accountSetSelect.innerHTML = accountSets
@@ -29,6 +45,7 @@ document.addEventListener("DOMContentLoaded", () => {
           `<option value="${x.id}" ${x.is_active ? "selected" : ""}>${x.name}${x.is_active ? "（当前）" : ""} [待计算${x.pending_count || 0}]</option>`
       )
       .join("");
+    renderAccountSetParams();
   }
 
   function renderImports(rows) {
@@ -75,7 +92,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
   createAccountSetForm.addEventListener("submit", async (e) => {
     e.preventDefault();
-    const month = new FormData(createAccountSetForm).get("month");
+    const fd = new FormData(createAccountSetForm);
+    const month = fd.get("month");
     const res = await fetch("/admin/account-sets", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -90,6 +108,32 @@ document.addEventListener("DOMContentLoaded", () => {
     accountSetResult.className = "small mt-2 text-success";
     accountSetResult.textContent = `创建成功：${data.account_set.name}`;
     createAccountSetForm.reset();
+    await loadAccountSets();
+  });
+
+  saveAccountSetParamsBtn.addEventListener("click", async () => {
+    const id = currentAccountSetId();
+    if (!id) {
+      accountSetResult.className = "small mt-2 text-danger";
+      accountSetResult.textContent = "请先选择账套";
+      return;
+    }
+    const res = await fetch(`/admin/account-sets/${id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        factory_rest_days: factoryRestDaysInput.value || "0",
+        monthly_benefit_days: monthlyBenefitDaysInput.value || "0",
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      accountSetResult.className = "small mt-2 text-danger";
+      accountSetResult.textContent = data.error || "保存账套参数失败";
+      return;
+    }
+    accountSetResult.className = "small mt-2 text-success";
+    accountSetResult.textContent = "账套参数已保存";
     await loadAccountSets();
   });
 
@@ -134,7 +178,10 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   refreshAccountSetsBtn.addEventListener("click", loadAccountSets);
-  accountSetSelect.addEventListener("change", loadAccountSetImports);
+  accountSetSelect.addEventListener("change", async () => {
+    renderAccountSetParams();
+    await loadAccountSetImports();
+  });
 
   importRawForm.addEventListener("submit", async (e) => {
     e.preventDefault();
@@ -156,7 +203,7 @@ document.addEventListener("DOMContentLoaded", () => {
       const results = Array.isArray(data.results) ? data.results : [];
       const failedRows = results.filter((x) => x.status !== "ok");
 
-      if (res.ok && failedRows.length === 0) {
+      if (res.ok && failedRows.length === 0 && (data.failed || 0) === 0) {
         uploadResult.className = "small mt-2 text-success";
         uploadResult.textContent = "上传成功，已归档到账套，点击“开始计算”后才会生成考勤数据。";
       } else {
@@ -175,17 +222,18 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   });
 
-  calculateBtn.addEventListener("click", async () => {
+  async function runCalculation(mode, button, label) {
     const accountSetId = currentAccountSetId();
     if (!accountSetId) {
       uploadResult.className = "small mt-2 text-danger";
       uploadResult.textContent = "请先选择账套";
       return;
     }
-    calculateBtn.disabled = true;
-    calculateBtn.textContent = "计算中...";
+    calculateEmployeeBtn.disabled = true;
+    calculateManagerBtn.disabled = true;
+    button.textContent = "计算中...";
     try {
-      const res = await fetch(`/admin/account-sets/${accountSetId}/calculate`, { method: "POST" });
+      const res = await fetch(`/admin/account-sets/${accountSetId}/calculate?mode=${encodeURIComponent(mode)}`, { method: "POST" });
       const data = await res.json();
       const results = Array.isArray(data.results) ? data.results : [];
       const failedRows = results.filter((x) => x.status !== "ok");
@@ -197,25 +245,36 @@ document.addEventListener("DOMContentLoaded", () => {
         const unknown = r.skipped_unknown_employee ?? "-";
         return `${i + 1}. ${x.file || "未知文件"}: 导入${imported} / 原始${total} / 跳过${skipped} / 未匹配员工${unknown}`;
       });
+      const sync = data.manager_stats_sync || null;
+      if (sync) {
+        summaryLines.push(`管理人员加班/年休回写: 加班${sync.overtime_synced || 0}人 / 年休${sync.annual_leave_synced || 0}人 / 失败${sync.error_count || 0}条`);
+        if (Array.isArray(sync.errors) && sync.errors.length) {
+          summaryLines.push(`回写失败明细:\n${sync.errors.join("\n")}`);
+        }
+      }
 
       if (res.ok && failedRows.length === 0) {
         uploadResult.className = "small mt-2 text-success";
-        uploadResult.textContent = `计算成功\n${summaryLines.join("\n")}`;
+        uploadResult.textContent = `${label}成功\n${summaryLines.join("\n")}`;
       } else {
         const details = failedRows.map((x, i) => `${i + 1}. ${x.file || "未知文件"}: ${x.error || "计算失败"}`);
         uploadResult.className = "small mt-2 text-danger";
-        uploadResult.textContent = `计算失败，错误明细：\n${details.join("\n")}\n\n已处理统计：\n${summaryLines.join("\n")}`;
+        uploadResult.textContent = `${label}失败，错误明细：\n${details.join("\n")}\n\n已处理统计：\n${summaryLines.join("\n")}`;
       }
       await loadAccountSets();
       await loadAccountSetImports();
     } catch (err) {
       uploadResult.className = "small mt-2 text-danger";
-      uploadResult.textContent = `计算失败：${err?.message || "网络或服务异常"}`;
+      uploadResult.textContent = `${label}失败：${err?.message || "网络或服务异常"}`;
     } finally {
-      calculateBtn.disabled = false;
-      calculateBtn.textContent = "开始计算";
+      calculateEmployeeBtn.disabled = false;
+      calculateManagerBtn.disabled = false;
+      button.textContent = label;
     }
-  });
+  }
+
+  calculateEmployeeBtn.addEventListener("click", () => runCalculation("employee", calculateEmployeeBtn, "员工计算"));
+  calculateManagerBtn.addEventListener("click", () => runCalculation("manager", calculateManagerBtn, "管理人员计算"));
 
   loadAccountSets();
 });

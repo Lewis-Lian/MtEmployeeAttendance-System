@@ -12,17 +12,29 @@
         </div>
         <div class="card-body">
           <form id="createAccountSetForm" class="row g-2 mb-3">
-            <div class="col-8">
+            <div class="col-12">
+              <label class="form-label small mb-1">账套月份</label>
               <input type="month" class="form-control" name="month" required>
             </div>
-            <div class="col-4">
+            <div class="col-12">
               <button class="btn btn-primary w-100" type="submit">创建</button>
             </div>
           </form>
 
           <label class="form-label small mb-1">当前账套</label>
           <select class="form-select mb-2" id="accountSetSelect"></select>
+          <div class="row g-2 mb-2">
+            <div class="col-6">
+              <label class="form-label small mb-1">本月厂休天数</label>
+              <input type="number" class="form-control form-control-sm" id="factoryRestDaysInput" min="0" step="0.5" value="0">
+            </div>
+            <div class="col-6">
+              <label class="form-label small mb-1">本月可用福利天数</label>
+              <input type="number" class="form-control form-control-sm" id="monthlyBenefitDaysInput" min="0" step="0.5" value="0">
+            </div>
+          </div>
           <div class="toolbar">
+            <button class="btn btn-outline-primary btn-sm" id="saveAccountSetParamsBtn" type="button">保存参数</button>
             <button class="btn btn-outline-secondary btn-sm" id="activateAccountSetBtn" type="button">设为当前</button>
             <button class="btn btn-outline-danger btn-sm" id="deleteAccountSetBtn" type="button">删除</button>
             <button class="btn btn-outline-secondary btn-sm" id="refreshAccountSetsBtn" type="button">刷新</button>
@@ -34,8 +46,9 @@
       <div class="card">
         <div class="card-header">导入考勤原始表</div>
         <div class="card-body">
-          <div class="panel-note">上传只归档原始文件，点击“开始计算”后才会生成并持久化考勤数据。</div>
+          <div class="panel-note">上传只归档原始文件，点击“开始计算”后才会生成并持久化考勤数据；员工与管理人员会按文件类型分别计算。</div>
           <form id="importRawForm" enctype="multipart/form-data">
+            <div class="small fw-semibold mb-2">员工原始数据</div>
             <label class="form-label small mb-1">1. 请假单</label>
             <input class="form-control mb-2" type="file" name="files" required>
             <label class="form-label small mb-1">2. 加班单</label>
@@ -44,9 +57,16 @@
             <input class="form-control mb-2" type="file" name="files" required>
             <label class="form-label small mb-1">4. 员工基础数据</label>
             <input class="form-control mb-3" type="file" name="files" required>
+
+            <div class="small fw-semibold mb-2">管理人员原始数据</div>
+            <label class="form-label small mb-1">5. 管理人员基础数据月报</label>
+            <input class="form-control mb-2" type="file" name="files" required>
+            <label class="form-label small mb-1">6. 管理人员基础数据</label>
+            <input class="form-control mb-3" type="file" name="files" required>
             <div class="toolbar">
               <button class="btn btn-primary" id="importRawBtn" type="submit">上传原始文件</button>
-              <button class="btn btn-success" id="calculateBtn" type="button">开始计算</button>
+              <button class="btn btn-success" id="calculateEmployeeBtn" type="button">员工计算</button>
+              <button class="btn btn-warning" id="calculateManagerBtn" type="button">管理人员计算</button>
             </div>
           </form>
           <div id="uploadResult" class="small mt-2"></div>

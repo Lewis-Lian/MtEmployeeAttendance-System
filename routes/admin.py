@@ -7,7 +7,6 @@ from datetime import datetime
 from typing import Any
 
 from flask import Blueprint, current_app, jsonify, redirect, render_template, request, send_file, g
-from sqlalchemy import func
 import openpyxl
 
 from models import db
@@ -17,9 +16,14 @@ from models.employee_shift import EmployeeShiftAssignment
 from models.shift import Shift
 from models.daily_record import DailyRecord
 from models.account_set import AccountSet, AccountSetImport
+from models.overtime import OvertimeRecord
+from models.annual_leave import AnnualLeave
+from models.manager_month_stat import ManagerMonthStat
 from models.user import User, UserEmployeeAssignment, UserDepartmentAssignment
 from services.import_service import ImportService
+from services.manager_attendance_service import ManagerAttendanceOptions, build_manager_rows
 from routes.auth import admin_required
+from utils.helpers import parse_bool_zh
 
 
 admin_bp = Blueprint("admin", __name__, url_prefix="/admin")
@@ -108,6 +112,8 @@ def _serialize_employee(employee: Employee) -> dict:
         "id": employee.id,
         "emp_no": employee.emp_no,
         "name": employee.name,
+        "is_manager": bool(employee.is_manager),
+        "is_nursing": bool(employee.is_nursing),
         "dept_id": employee.dept_id,
         "dept_no": employee.department.dept_no if employee.department else "",
         "dept_name": employee.department.dept_name if employee.department else "",
@@ -138,6 +144,8 @@ def _serialize_account_set(row: AccountSet) -> dict:
         "month": row.month,
         "name": row.name,
         "is_active": row.is_active,
+        "factory_rest_days": row.factory_rest_days or 0,
+        "monthly_benefit_days": row.monthly_benefit_days or 0,
         "created_at": row.created_at.isoformat() if row.created_at else None,
         "imports_count": len(row.imports),
         "pending_count": pending_count,
@@ -271,15 +279,33 @@ def list_account_sets():
 def create_account_set():
     data = request.json or {}
     month = (data.get("month") or "").strip()
+    factory_rest_days = request.json.get("factory_rest_days", 0) if request.json else 0
+    monthly_benefit_days = request.json.get("monthly_benefit_days", 0) if request.json else 0
     if not month or len(month) != 7:
         return jsonify({"error": "month is required in YYYY-MM format"}), 400
     if AccountSet.query.filter_by(month=month).first():
         return jsonify({"error": "该月份账套已存在"}), 400
 
-    row = AccountSet(month=month, name=f"{month} 账套")
+    row = AccountSet(
+        month=month,
+        name=f"{month} 账套",
+        factory_rest_days=float(factory_rest_days or 0),
+        monthly_benefit_days=float(monthly_benefit_days or 0),
+    )
     if AccountSet.query.count() == 0:
         row.is_active = True
     db.session.add(row)
+    db.session.commit()
+    return jsonify({"status": "ok", "account_set": _serialize_account_set(row)})
+
+
+@admin_bp.route("/account-sets/<int:account_set_id>", methods=["PUT"])
+@admin_required
+def update_account_set(account_set_id: int):
+    row = AccountSet.query.get_or_404(account_set_id)
+    data = request.json or {}
+    row.factory_rest_days = float(data.get("factory_rest_days") or 0)
+    row.monthly_benefit_days = float(data.get("monthly_benefit_days") or 0)
     db.session.commit()
     return jsonify({"status": "ok", "account_set": _serialize_account_set(row)})
 
@@ -348,10 +374,16 @@ def list_account_set_imports(account_set_id: int):
 @admin_required
 def calculate_account_set(account_set_id: int):
     row = AccountSet.query.get_or_404(account_set_id)
-    records = AccountSetImport.query.filter_by(account_set_id=row.id).order_by(AccountSetImport.id.asc()).all()
+    mode = (request.args.get("mode") or "all").strip()
+    records_query = AccountSetImport.query.filter_by(account_set_id=row.id)
+    if mode == "employee":
+        records_query = records_query.filter(AccountSetImport.file_type.in_(["leave", "overtime", "monthly", "daily"]))
+    elif mode == "manager":
+        records_query = records_query.filter(AccountSetImport.file_type.in_(["leave", "overtime", "manager_monthly", "manager_daily"]))
+    records = records_query.order_by(AccountSetImport.id.asc()).all()
 
     if not records:
-        return jsonify({"status": "error", "message": "该账套暂无可计算文件"}), 400
+        return jsonify({"status": "error", "message": "该账套暂无可计算文件", "mode": mode}), 400
 
     success = 0
     failed = 0
@@ -392,13 +424,27 @@ def calculate_account_set(account_set_id: int):
             results.append({"file": filename, "status": "error", "error": str(exc)})
         db.session.commit()
 
+    manager_stats_sync = None
+    if mode == "manager" and failed == 0:
+        manager_options = ManagerAttendanceOptions(
+            month=row.month,
+            factory_rest_days=row.factory_rest_days or 0,
+            monthly_benefit_days=row.monthly_benefit_days or 0,
+        )
+        manager_rows = build_manager_rows(manager_options)
+        manager_stats_sync = _sync_manager_stats_from_manager_rows(row.month, manager_rows)
+        if manager_stats_sync["error_count"]:
+            failed += manager_stats_sync["error_count"]
+
     return jsonify(
         {
             "status": "ok" if failed == 0 else "partial",
             "account_set": _serialize_account_set(row),
+            "mode": mode,
             "total": len(records),
             "success": success,
             "failed": failed,
+            "manager_stats_sync": manager_stats_sync,
             "results": results,
         }
     )
@@ -427,6 +473,18 @@ def shifts_page():
 @admin_required
 def departments_page():
     return render_template("admin/departments.html")
+
+
+@admin_bp.route("/manager-overtime")
+@admin_required
+def manager_overtime_page():
+    return render_template("admin/manager_overtime.html")
+
+
+@admin_bp.route("/manager-annual-leave")
+@admin_required
+def manager_annual_leave_page():
+    return render_template("admin/manager_annual_leave.html")
 
 
 @admin_bp.route("/upload", methods=["POST"])
@@ -481,6 +539,10 @@ def import_raw_files():
             file_type = "overtime"
         elif "请假" in filename:
             file_type = "leave"
+        elif "管理人员" in filename and "月报" in filename:
+            file_type = "manager_monthly"
+        elif "管理人员" in filename:
+            file_type = "manager_daily"
         elif "月报" in filename:
             file_type = "monthly"
 
@@ -625,6 +687,500 @@ def departments_list():
             }
             for d in rows
         ]
+    )
+
+
+@admin_bp.route("/manager-overtime/records", methods=["GET"])
+@admin_required
+def manager_overtime_records():
+    year = request.args.get("year", type=int) or datetime.now().year
+    return jsonify(_manager_month_rows(_manager_overtime_values(year), "剩余调休天数"))
+
+
+@admin_bp.route("/manager-overtime/records", methods=["PUT"])
+@admin_required
+def update_manager_overtime_summary():
+    payload, status = _save_manager_month_stat("overtime")
+    return jsonify(payload), status
+
+
+@admin_bp.route("/manager-overtime/template", methods=["GET"])
+@admin_required
+def download_manager_overtime_template():
+    return _download_manager_stat_template("overtime")
+
+
+@admin_bp.route("/manager-overtime/import", methods=["POST"])
+@admin_required
+def import_manager_overtime():
+    year = request.form.get("year", type=int) or datetime.now().year
+    return _import_manager_stat_file("overtime", year)
+
+
+@admin_bp.route("/manager-overtime/records/<int:record_id>", methods=["PUT"])
+@admin_required
+def update_manager_overtime_record(record_id: int):
+    row = OvertimeRecord.query.get_or_404(record_id)
+    if not row.employee or not row.employee.is_manager:
+        return jsonify({"error": "record is not a manager overtime record"}), 400
+    data = request.json or {}
+    row.effective_hours = float(data.get("effective_hours") or 0)
+    row.salary_option = (data.get("salary_option") or "").strip()
+    row.is_weekend = bool(data.get("is_weekend"))
+    row.is_holiday = bool(data.get("is_holiday"))
+    row.approval_status = (data.get("approval_status") or "").strip()
+    row.reason = (data.get("reason") or "").strip()
+    db.session.commit()
+    return jsonify({"status": "ok"})
+
+
+def _manager_export_months(year: int) -> list[tuple[str, str]]:
+    months = [(f"{year - 1}-12", "12月")]
+    months.extend((f"{year}-{month:02d}", f"{month}月") for month in range(1, 13))
+    return months
+
+
+def _account_set_options(month: str) -> ManagerAttendanceOptions:
+    account_set = AccountSet.query.filter_by(month=month).first()
+    return ManagerAttendanceOptions(
+        month=month,
+        factory_rest_days=(account_set.factory_rest_days if account_set else 0) or 0,
+        monthly_benefit_days=(account_set.monthly_benefit_days if account_set else 0) or 0,
+    )
+
+
+def _manager_base_month_values() -> dict[str, dict[str, object]]:
+    employees = Employee.query.filter_by(is_manager=True).order_by(Employee.dept_id.asc(), Employee.emp_no.asc()).all()
+    return {
+        employee.name: {
+            "emp_id": employee.id,
+            "dept_name": employee.department.dept_name if employee.department else "",
+            "remark": "",
+        }
+        for employee in employees
+    }
+
+
+def _month_value_keys() -> list[str]:
+    return ["prev_dec", *[f"m{month}" for month in range(1, 13)]]
+
+
+def _annual_leave_value_keys() -> list[str]:
+    return [f"m{month}" for month in range(1, 13)]
+
+
+def _number_or_blank(value: object) -> float | str:
+    if value in (None, ""):
+        return ""
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return ""
+
+
+def _month_for_stat_key(year: int, key: str) -> str:
+    if key == "prev_dec":
+        return f"{year - 1}-12"
+    return f"{year}-{int(key[1:]):02d}"
+
+
+def _validate_manager_month_stat(stat_type: str, year: int, values: dict[str, float]) -> str | None:
+    if stat_type == "annual_leave":
+        total = sum(values.values())
+        if any(value < 0 for value in values.values()):
+            return "年休使用天数不能为负数"
+        if total > 12:
+            return "年休一年最多 12 天"
+        for key, value in values.items():
+            if value > 3:
+                return "年休每月使用不能超过 3 天"
+            month = _month_for_stat_key(year, key)
+            account_set = AccountSet.query.filter_by(month=month).first()
+            factory_rest_days = (account_set.factory_rest_days if account_set else 0) or 0
+            if factory_rest_days + value > 7:
+                return f"{month} 厂休+年休不能超过 7 天"
+
+    if stat_type == "overtime":
+        balance = 0.0
+        for key in _month_value_keys():
+            value = values.get(key, 0.0)
+            if value < 0 and balance <= 0:
+                return "剩余加班天数为 0 时不能使用调休"
+            if balance + value < 0:
+                return "使用调休天数不能超过当前剩余加班天数"
+            balance += value
+    return None
+
+
+def _stat_value_keys(stat_type: str) -> list[str]:
+    return _annual_leave_value_keys() if stat_type == "annual_leave" else _month_value_keys()
+
+
+def _stat_headers(stat_type: str) -> list[str]:
+    if stat_type == "annual_leave":
+        return ["部门", "姓名", "1月", "2月", "3月", "4月", "5月", "6月", "7月", "8月", "9月", "10月", "11月", "12月", "剩余年休天数", "备注"]
+    return ["部门", "姓名", "前年累积天数", "1月", "2月", "3月", "4月", "5月", "6月", "7月", "8月", "9月", "10月", "11月", "12月", "剩余调休天数", "备注"]
+
+
+def _stat_col_keys(stat_type: str) -> list[tuple[str, str]]:
+    if stat_type == "annual_leave":
+        return [(f"m{month}", f"{month}月") for month in range(1, 13)]
+    return [("prev_dec", "前年累积天数"), *[(f"m{month}", f"{month}月") for month in range(1, 13)]]
+
+
+def _apply_saved_manager_stats(values_by_name: dict[str, dict[str, object]], year: int, stat_type: str) -> None:
+    rows = (
+        ManagerMonthStat.query.join(Employee, ManagerMonthStat.emp_id == Employee.id)
+        .filter(ManagerMonthStat.year == year, ManagerMonthStat.stat_type == stat_type, Employee.is_manager.is_(True))
+        .all()
+    )
+    for row in rows:
+        if not row.employee or row.employee.name not in values_by_name:
+            continue
+        values = values_by_name[row.employee.name]
+        for key in _stat_value_keys(stat_type):
+            values[key] = getattr(row, key)
+        if stat_type == "annual_leave":
+            values["prev_dec"] = ""
+        values["remaining"] = row.remaining
+        values["remark"] = row.remark or ""
+
+
+def _upsert_manager_month_stat(stat_type: str, emp_id: int, year: int, values: dict[str, float], remark: str) -> tuple[dict[str, str], int]:
+    employee = Employee.query.get_or_404(emp_id)
+    if not employee.is_manager:
+        return {"error": "employee is not manager"}, 400
+    row = ManagerMonthStat.query.filter_by(emp_id=employee.id, year=year, stat_type=stat_type).first()
+    error = _validate_manager_month_stat(stat_type, year, values)
+    if error:
+        return {"error": error}, 400
+    if not row:
+        row = ManagerMonthStat(emp_id=employee.id, year=year, stat_type=stat_type)
+        db.session.add(row)
+    if stat_type == "annual_leave":
+        row.prev_dec = 0
+    for key, value in values.items():
+        setattr(row, key, value)
+    row.remaining = round(12 - sum(values.values()), 2) if stat_type == "annual_leave" else round(sum(values.values()), 2)
+    row.remark = (remark or "").strip()
+    db.session.commit()
+    return {"status": "ok"}, 200
+
+
+def _save_manager_month_stat(stat_type: str) -> tuple[dict[str, str], int]:
+    data = request.json or {}
+    emp_id = int(data.get("emp_id") or 0)
+    year = int(data.get("year") or datetime.now().year)
+    values = {key: float(_number_or_blank(data.get(key)) or 0) for key in _stat_value_keys(stat_type)}
+    return _upsert_manager_month_stat(stat_type, emp_id, year, values, data.get("remark") or "")
+
+
+def _stat_key_for_month(month: str) -> tuple[int, str]:
+    year, month_no = [int(part) for part in month.split("-", 1)]
+    return year, f"m{month_no}"
+
+
+def _sync_manager_stats_from_manager_rows(month: str, manager_rows: list[dict[str, object]]) -> dict[str, object]:
+    """Stats are now written directly inside build_manager_rows.
+    This function provides a compatibility layer — it validates the results
+    but no longer writes to the stat tables to avoid double-writing.
+    """
+    year, key = _stat_key_for_month(month)
+    employees_by_name = {employee.name: employee for employee in Employee.query.filter_by(is_manager=True).all()}
+    errors: list[str] = []
+
+    for item in manager_rows:
+        name = str(item.get("name") or "").strip()
+        employee = employees_by_name.get(name)
+        if not employee:
+            errors.append(f"{name or '空姓名'}：未找到管理人员")
+            continue
+
+        for stat_type, source_key, label in (
+            ("overtime", "overtime_change", "加班变化"),
+            ("annual_leave", "benefit_days", "福利天数"),
+        ):
+            stat_row = ManagerMonthStat.query.filter_by(emp_id=employee.id, year=year, stat_type=stat_type).first()
+            values = {
+                stat_key: float(getattr(stat_row, stat_key) or 0) if stat_row else 0.0
+                for stat_key in _stat_value_keys(stat_type)
+            }
+            # Values already written by build_manager_rows; validate only
+            error = _validate_manager_month_stat(stat_type, year, values)
+            if error:
+                errors.append(f"{employee.name} {label}：{error}")
+
+    return {
+        "month": month,
+        "overtime_synced": 0,
+        "annual_leave_synced": 0,
+        "error_count": len(errors),
+        "errors": errors,
+    }
+
+
+def _download_manager_stat_template(stat_type: str):
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "年休统计表" if stat_type == "annual_leave" else "加班统计表"
+    ws.append(_stat_headers(stat_type))
+    employees = Employee.query.filter_by(is_manager=True).order_by(Employee.dept_id.asc(), Employee.emp_no.asc()).all()
+    for employee in employees:
+        values = [employee.department.dept_name if employee.department else "", employee.name]
+        values.extend("" for _key, _label in _stat_col_keys(stat_type))
+        values.extend([12 if stat_type == "annual_leave" else 0, ""])
+        ws.append(values)
+
+    output = BytesIO()
+    wb.save(output)
+    output.seek(0)
+    filename = "管理人员年休导入示例.xlsx" if stat_type == "annual_leave" else "管理人员加班导入示例.xlsx"
+    return send_file(
+        output,
+        as_attachment=True,
+        download_name=filename,
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+
+
+def _header_map(ws) -> dict[str, int]:
+    headers = {}
+    for cell in ws[1]:
+        text = str(cell.value or "").strip()
+        if text:
+            headers[text] = cell.column
+    return headers
+
+
+def _import_manager_stat_file(stat_type: str, year: int):
+    file = request.files.get("file")
+    if not file or not file.filename:
+        return jsonify({"error": "请选择要导入的Excel文件"}), 400
+
+    wb = openpyxl.load_workbook(file, data_only=True)
+    ws = wb.active
+    headers = _header_map(ws)
+    if "姓名" not in headers:
+        return jsonify({"error": "导入文件缺少姓名列"}), 400
+
+    imported = 0
+    errors: list[str] = []
+    employees_by_name = {employee.name: employee for employee in Employee.query.filter_by(is_manager=True).all()}
+    for row_idx in range(2, ws.max_row + 1):
+        name = str(ws.cell(row_idx, headers["姓名"]).value or "").strip()
+        if not name:
+            continue
+        employee = employees_by_name.get(name)
+        if not employee:
+            errors.append(f"第{row_idx}行：未找到管理人员 {name}")
+            continue
+
+        values: dict[str, float] = {}
+        for key, label in _stat_col_keys(stat_type):
+            col_idx = headers.get(label)
+            values[key] = float(_number_or_blank(ws.cell(row_idx, col_idx).value if col_idx else None) or 0)
+        remark_col = headers.get("备注")
+        remark = str(ws.cell(row_idx, remark_col).value or "").strip() if remark_col else ""
+        payload, status = _upsert_manager_month_stat(stat_type, employee.id, year, values, remark)
+        if status != 200:
+            errors.append(f"第{row_idx}行：{payload.get('error', '保存失败')}")
+            continue
+        imported += 1
+
+    return jsonify({"status": "ok", "imported": imported, "errors": errors, "error_count": len(errors)})
+
+
+def _manager_overtime_values(year: int) -> dict[str, dict[str, object]]:
+    employees = Employee.query.filter_by(is_manager=True).order_by(Employee.dept_id.asc(), Employee.emp_no.asc()).all()
+    values_by_name = {
+        employee.name: {
+            "emp_id": employee.id,
+            "dept_name": employee.department.dept_name if employee.department else "",
+            "remark": "",
+        }
+        for employee in employees
+    }
+
+    month_keys = _manager_export_months(year)
+    for idx, (month, _label) in enumerate(month_keys):
+        key = "prev_dec" if idx == 0 else f"m{idx}"
+        rows = build_manager_rows(_account_set_options(month), [employee.id for employee in employees])
+        for row in rows:
+            name = str(row.get("name", "")).strip()
+            if name not in values_by_name:
+                continue
+            values_by_name[name][key] = row.get("overtime_change", 0)
+
+    for values in values_by_name.values():
+        total = 0.0
+        for key in _month_value_keys():
+            try:
+                total += float(values.get(key) or 0)
+            except (TypeError, ValueError):
+                pass
+        values["remaining"] = round(total, 2)
+    _apply_saved_manager_stats(values_by_name, year, "overtime")
+    return values_by_name
+
+
+def _manager_annual_leave_values(year: int) -> dict[str, dict[str, object]]:
+    values_by_name = _manager_base_month_values()
+    for values in values_by_name.values():
+        values["remaining"] = 12
+    _apply_saved_manager_stats(values_by_name, year, "annual_leave")
+    return values_by_name
+
+
+def _manager_month_rows(values_by_name: dict[str, dict[str, object]], remaining_label: str, keys: list[str] | None = None) -> list[dict[str, object]]:
+    keys = keys or _month_value_keys()
+    rows = []
+    for name, values in values_by_name.items():
+        row = {
+            "emp_id": values.get("emp_id"),
+            "dept_name": values.get("dept_name", ""),
+            "name": name,
+            "remaining_label": remaining_label,
+            "remaining": values.get("remaining", ""),
+            "remark": values.get("remark", ""),
+        }
+        for key in keys:
+            row[key] = values.get(key, "")
+        rows.append(row)
+    return rows
+
+
+def _fill_named_month_template(ws, values_by_name: dict[str, dict[str, object]], total_key: str, keys: list[str] | None = None) -> None:
+    keys = keys or _month_value_keys()
+    total_col = 3 + len(keys)
+    remark_col = total_col + 1
+    filled: set[str] = set()
+    for row_idx in range(2, ws.max_row + 1):
+        name = str(ws.cell(row_idx, 2).value or "").strip()
+        for col_idx in range(3, remark_col + 1):
+            ws.cell(row_idx, col_idx).value = ""
+        if not name or name not in values_by_name:
+            continue
+        values = values_by_name[name]
+        for col_idx, key in enumerate(keys, start=3):
+            ws.cell(row_idx, col_idx).value = values.get(key, "")
+        ws.cell(row_idx, total_col).value = values.get(total_key, "")
+        ws.cell(row_idx, remark_col).value = values.get("remark", "")
+        filled.add(name)
+
+    for name, values in values_by_name.items():
+        if name in filled:
+            continue
+        ws.append(
+            [
+                values.get("dept_name", ""),
+                name,
+                *[values.get(key, "") for key in keys],
+                values.get(total_key, ""),
+                values.get("remark", ""),
+            ]
+        )
+
+
+@admin_bp.route("/manager-overtime/export", methods=["GET"])
+@admin_required
+def export_manager_overtime():
+    year = request.args.get("year", type=int) or datetime.now().year
+    values_by_name = _manager_overtime_values(year)
+    month_keys = _manager_export_months(year)
+    template_path = "/home/lewis/文档/考勤/加班单查询表.xlsx"
+    if os.path.exists(template_path):
+        wb = openpyxl.load_workbook(template_path)
+        ws = wb.active
+    else:
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.append(["部门", "姓名", *[label for _month, label in month_keys], "剩余调休天数", "备注"])
+    ws.cell(1, 3).value = "前年累积天数"
+    _fill_named_month_template(ws, values_by_name, "remaining")
+
+    output = BytesIO()
+    wb.save(output)
+    output.seek(0)
+    return send_file(
+        output,
+        as_attachment=True,
+        download_name=f"管理人员加班信息_{year}.xlsx",
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+
+
+@admin_bp.route("/manager-annual-leave/records", methods=["GET"])
+@admin_required
+def manager_annual_leave_records():
+    year = request.args.get("year", type=int) or datetime.now().year
+    return jsonify(_manager_month_rows(_manager_annual_leave_values(year), "剩余年休天数", _annual_leave_value_keys()))
+
+
+@admin_bp.route("/manager-annual-leave/records", methods=["PUT"])
+@admin_required
+def update_manager_annual_leave_record():
+    data = request.json or {}
+    if any(key in data for key in _annual_leave_value_keys()) or "remaining" in data:
+        payload, status = _save_manager_month_stat("annual_leave")
+        return jsonify(payload), status
+
+    emp_id = int(data.get("emp_id") or 0)
+    year = int(data.get("year") or datetime.now().year)
+    employee = Employee.query.get_or_404(emp_id)
+    if not employee.is_manager:
+        return jsonify({"error": "employee is not manager"}), 400
+    row = AnnualLeave.query.filter_by(emp_id=employee.id, year=year).first()
+    if not row:
+        row = AnnualLeave(emp_id=employee.id, year=year)
+        db.session.add(row)
+    row.total_days = float(data.get("total_days") or 0)
+    row.used_days = float(data.get("used_days") or 0)
+    row.remaining_days = float(data.get("remaining_days") or 0)
+    db.session.commit()
+    return jsonify({"status": "ok", "id": row.id})
+
+
+@admin_bp.route("/manager-annual-leave/template", methods=["GET"])
+@admin_required
+def download_manager_annual_leave_template():
+    return _download_manager_stat_template("annual_leave")
+
+
+@admin_bp.route("/manager-annual-leave/import", methods=["POST"])
+@admin_required
+def import_manager_annual_leave():
+    year = request.form.get("year", type=int) or datetime.now().year
+    return _import_manager_stat_file("annual_leave", year)
+
+
+@admin_bp.route("/manager-annual-leave/export", methods=["GET"])
+@admin_required
+def export_manager_annual_leave():
+    year = request.args.get("year", type=int) or datetime.now().year
+    values_by_name = _manager_annual_leave_values(year)
+
+    template_path = "/home/lewis/文档/考勤/加班单查询表.xlsx"
+    if os.path.exists(template_path):
+        wb = openpyxl.load_workbook(template_path)
+        ws = wb.active
+        ws.delete_cols(3)
+    else:
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.append(["部门", "姓名", "1月", "2月", "3月", "4月", "5月", "6月", "7月", "8月", "9月", "10月", "11月", "12月", "剩余年休天数", "备注"])
+    ws.title = "年休统计表"
+    ws.cell(1, 15).value = "剩余年休天数"
+    ws.cell(1, 16).value = "备注"
+    _fill_named_month_template(ws, values_by_name, "remaining", _annual_leave_value_keys())
+
+    output = BytesIO()
+    wb.save(output)
+    output.seek(0)
+    return send_file(
+        output,
+        as_attachment=True,
+        download_name=f"管理人员年休信息_{year}.xlsx",
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     )
 
 
@@ -893,6 +1449,8 @@ def create_employee():
     name = (data.get("name") or "").strip()
     dept_name = (data.get("dept_name") or "").strip()
     shift_no = (data.get("shift_no") or "").strip()
+    is_manager = bool(data.get("is_manager"))
+    is_nursing = bool(data.get("is_nursing"))
 
     if not emp_no or not name:
         return jsonify({"error": "emp_no and name are required"}), 400
@@ -900,7 +1458,7 @@ def create_employee():
         return jsonify({"error": "emp_no already exists"}), 400
 
     department = _resolve_department(dept_name) if dept_name else None
-    employee = Employee(emp_no=emp_no, name=name, dept_id=department.id if department else None)
+    employee = Employee(emp_no=emp_no, name=name, dept_id=department.id if department else None, is_manager=is_manager, is_nursing=is_nursing)
     db.session.add(employee)
     db.session.flush()
     _assign_employee_shift(employee, _resolve_shift(shift_no))
@@ -916,6 +1474,10 @@ def update_employee(employee_id: int):
     name = (data.get("name") or "").strip()
     dept_name = (data.get("dept_name") or "").strip()
     shift_no = (data.get("shift_no") or "").strip()
+    is_manager = bool(data.get("is_manager"))
+    is_nursing = data.get("is_nursing")
+    if is_nursing is not None:
+        is_nursing = bool(is_nursing)
 
     employee = Employee.query.get_or_404(employee_id)
 
@@ -928,6 +1490,9 @@ def update_employee(employee_id: int):
 
     employee.emp_no = emp_no
     employee.name = name
+    employee.is_manager = is_manager
+    if is_nursing is not None:
+        employee.is_nursing = is_nursing
     if dept_name:
         department = _resolve_department(dept_name)
         employee.dept_id = department.id if department else None
@@ -984,6 +1549,20 @@ def batch_operate_employees():
         db.session.commit()
         return jsonify({"status": "ok", "action": action, "affected": len(employees)})
 
+    if action == "set_manager":
+        is_manager = bool(data.get("is_manager"))
+        for employee in employees:
+            employee.is_manager = is_manager
+        db.session.commit()
+        return jsonify({"status": "ok", "action": action, "affected": len(employees)})
+
+    if action == "set_nursing":
+        is_nursing = bool(data.get("is_nursing"))
+        for employee in employees:
+            employee.is_nursing = is_nursing
+        db.session.commit()
+        return jsonify({"status": "ok", "action": action, "affected": len(employees)})
+
     if action == "set_name":
         name = (data.get("name") or "").strip()
         if not name:
@@ -1035,6 +1614,8 @@ def import_employees_xlsx():
     name_idx = header_map.get("人员姓名", -1)
     dept_idx = header_map.get("部门名称", -1)
     shift_idx = header_map.get("班次编号", -1)
+    manager_idx = header_map.get("是否管理人员", -1)
+    nursing_idx = header_map.get("是否哺乳假", -1)
     if emp_no_idx < 0 or name_idx < 0:
         return jsonify({"error": "missing required headers: 人员编号, 人员姓名"}), 400
 
@@ -1044,18 +1625,22 @@ def import_employees_xlsx():
         name = (str(row[name_idx]).strip() if name_idx < len(row) and row[name_idx] is not None else "")
         dept_name = (str(row[dept_idx]).strip() if dept_idx >= 0 and dept_idx < len(row) and row[dept_idx] is not None else "")
         shift_no = (str(row[shift_idx]).strip() if shift_idx >= 0 and shift_idx < len(row) and row[shift_idx] is not None else "")
+        is_manager = parse_bool_zh(row[manager_idx]) if manager_idx >= 0 and manager_idx < len(row) else False
+        is_nursing = parse_bool_zh(row[nursing_idx]) if nursing_idx >= 0 and nursing_idx < len(row) else False
         if not emp_no or not name:
             continue
         department = _resolve_department(dept_name) if dept_name else None
         shift = _resolve_shift(shift_no) if shift_no else None
         employee = Employee.query.filter_by(emp_no=emp_no).first()
         if not employee:
-            employee = Employee(emp_no=emp_no, name=name, dept_id=department.id if department else None)
+            employee = Employee(emp_no=emp_no, name=name, dept_id=department.id if department else None, is_manager=is_manager, is_nursing=is_nursing)
             db.session.add(employee)
             db.session.flush()
         else:
             employee.name = name
             employee.dept_id = department.id if department else None
+            employee.is_manager = is_manager
+            employee.is_nursing = is_nursing
         _assign_employee_shift(employee, shift)
         imported += 1
 
@@ -1069,9 +1654,9 @@ def download_employees_template():
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.title = "员工导入模板"
-    ws.append(["人员编号", "人员姓名", "部门名称", "班次编号"])
-    ws.append(["1001001", "张三", "生产中心", "A00001"])
-    ws.append(["1001002", "李四", "行政部", "A00002"])
+    ws.append(["人员编号", "人员姓名", "部门名称", "班次编号", "是否管理人员", "是否哺乳假"])
+    ws.append(["1001001", "张三", "生产中心", "A00001", "否", "否"])
+    ws.append(["1001002", "李四", "行政部", "A00002", "是", "是"])
 
     output = BytesIO()
     wb.save(output)

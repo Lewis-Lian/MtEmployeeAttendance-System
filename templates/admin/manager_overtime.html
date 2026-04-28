@@ -1,0 +1,69 @@
+{% extends 'base.html' %}
+{% block title %}加班信息{% endblock %}
+{% block page_intro %}按年度查询管理人员加班调休统计。{% endblock %}
+{% block content %}
+<div class="card mb-3">
+  <div class="card-header">查询条件</div>
+  <div class="card-body">
+    <div class="row g-3 align-items-end">
+      <div class="col-md-2">
+        <label class="form-label">年份</label>
+        <input class="form-control" type="number" id="managerOvertimeYear" min="2000" max="2100">
+      </div>
+      <div class="col-md-2">
+        <button class="btn btn-primary w-100" id="managerOvertimeQueryBtn">查询</button>
+      </div>
+      <div class="col-md-2">
+        <button class="btn btn-outline-primary w-100" id="managerOvertimeSaveBtn">保存修改</button>
+      </div>
+      <div class="col-md-2">
+        <button class="btn btn-outline-success w-100" id="managerOvertimeExportBtn">导出XLSX</button>
+      </div>
+      <div class="col-md-2">
+        <a class="btn btn-outline-secondary w-100" href="/admin/manager-overtime/template">下载示例</a>
+      </div>
+      <div class="col-md-2">
+        <input class="form-control" type="file" id="managerOvertimeImportFile" accept=".xlsx">
+      </div>
+      <div class="col-md-1">
+        <button class="btn btn-outline-warning w-100" id="managerOvertimeImportBtn">导入</button>
+      </div>
+      <div class="col-md-1 small text-muted" id="managerOvertimeMeta">等待查询</div>
+    </div>
+  </div>
+</div>
+
+<div class="card table-wrap-tight">
+  <div class="table-responsive">
+    <table class="table table-sm table-striped mb-0 align-middle">
+      <thead>
+        <tr>
+          <th>部门</th>
+          <th>姓名</th>
+          <th>前年累积天数</th>
+          <th>1月</th>
+          <th>2月</th>
+          <th>3月</th>
+          <th>4月</th>
+          <th>5月</th>
+          <th>6月</th>
+          <th>7月</th>
+          <th>8月</th>
+          <th>9月</th>
+          <th>10月</th>
+          <th>11月</th>
+          <th>12月</th>
+          <th>剩余调休天数</th>
+          <th>备注</th>
+        </tr>
+      </thead>
+      <tbody id="managerOvertimeBody">
+        <tr><td class="text-muted" colspan="17">请点击查询</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/manager_overtime.js') }}"></script>
+{% endblock %}

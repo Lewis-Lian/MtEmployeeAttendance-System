@@ -8,9 +8,13 @@ document.addEventListener("DOMContentLoaded", () => {
   const selectedCount = document.getElementById("selectedCount");
   const selectAll = document.getElementById("selectAllEmployees");
   const clearSelectionBtn = document.getElementById("clearSelectionBtn");
+  const clearEmployeeFilterBtn = document.getElementById("clearEmployeeFilterBtn");
+  const employeeFilterMeta = document.getElementById("employeeFilterMeta");
   const batchAction = document.getElementById("batchAction");
   const batchValue = document.getElementById("batchValue");
   const batchShiftValue = document.getElementById("batchShiftValue");
+  const batchManagerValue = document.getElementById("batchManagerValue");
+  const batchNursingValue = document.getElementById("batchNursingValue");
   const batchDeptInlineLookup = document.getElementById("batchDeptInlineLookup");
   const applyBatchBtn = document.getElementById("applyBatchBtn");
   const createShiftSelect = createForm.querySelector('[name="shift_no"]');
@@ -18,6 +22,15 @@ document.addEventListener("DOMContentLoaded", () => {
   let employees = [];
   let shifts = [];
   let departments = [];
+  let selectedEmployeeIds = new Set();
+
+  const employeeFilterContext = {
+    lookupEl: document.getElementById("employeeManageFilterLookup"),
+    inputEl: document.getElementById("employeeManageFilterInput"),
+    quickEl: document.getElementById("employeeManageFilterQuickList"),
+    hiddenEl: document.getElementById("employeeManageFilterIds"),
+    triggerEl: document.getElementById("openEmployeeManageFilterBtn"),
+  };
 
   const deptLookupContexts = {
     create: {
@@ -41,24 +54,77 @@ document.addEventListener("DOMContentLoaded", () => {
     return dept ? dept.dept_name || "" : "";
   }
 
+  function idsFromHidden(hiddenEl) {
+    return (hiddenEl.value || "")
+      .split(",")
+      .map((id) => Number(id.trim()))
+      .filter(Boolean);
+  }
+
+  function normalizeText(value) {
+    return String(value || "").toLowerCase().replace(/\s+/g, "");
+  }
+
   function getSelectedIds() {
-    return Array.from(tableBody.querySelectorAll(".employee-check:checked")).map((x) => Number(x.value));
+    return Array.from(selectedEmployeeIds);
+  }
+
+  function getFilteredEmployees() {
+    const filterIds = idsFromHidden(employeeFilterContext.hiddenEl);
+    if (filterIds.length) {
+      const filterSet = new Set(filterIds);
+      return employees.filter((employee) => filterSet.has(Number(employee.id)));
+    }
+    const keyword = normalizeText(employeeFilterContext.inputEl.value);
+    if (!keyword) return employees;
+    return employees.filter((employee) => {
+      const haystack = normalizeText(`${employee.emp_no || ""} ${employee.name || ""} ${employee.dept_name || ""}`);
+      return haystack.includes(keyword);
+    });
+  }
+
+  function syncEmployeeFilterMeta(visibleCount) {
+    const filterCount = idsFromHidden(employeeFilterContext.hiddenEl).length;
+    const keyword = normalizeText(employeeFilterContext.inputEl.value);
+    if (filterCount) {
+      employeeFilterMeta.textContent = `筛选 ${filterCount} 人，显示 ${visibleCount} / 共 ${employees.length} 人`;
+    } else if (keyword) {
+      employeeFilterMeta.textContent = `关键词筛选，显示 ${visibleCount} / 共 ${employees.length} 人`;
+    } else {
+      employeeFilterMeta.textContent = `显示全部员工，共 ${employees.length} 人`;
+    }
   }
 
   function syncSelectedCount() {
-    selectedCount.textContent = `已选 ${getSelectedIds().length} 人`;
+    const visibleChecks = Array.from(tableBody.querySelectorAll(".employee-check"));
+    const checkedVisible = visibleChecks.filter((checkbox) => checkbox.checked);
+    selectedCount.textContent = `已选 ${selectedEmployeeIds.size} 人`;
+    selectAll.checked = visibleChecks.length > 0 && checkedVisible.length === visibleChecks.length;
+    selectAll.indeterminate = checkedVisible.length > 0 && checkedVisible.length < visibleChecks.length;
   }
 
   function renderRows() {
     tableBody.innerHTML = "";
-    for (const employee of employees) {
+    const rows = getFilteredEmployees();
+    syncEmployeeFilterMeta(rows.length);
+    if (!rows.length) {
+      tableBody.innerHTML = `<tr><td class="text-muted" colspan="9">暂无匹配员工</td></tr>`;
+      syncSelectedCount();
+      return;
+    }
+    for (const employee of rows) {
       const shiftText = employee.shift_no ? `${employee.shift_no} - ${employee.shift_name || ""}` : "-";
+      const employeeType = employee.is_manager ? "管理人员" : "普通员工";
+      const nursingText = employee.is_nursing ? "是" : "否";
+      const checked = selectedEmployeeIds.has(Number(employee.id)) ? "checked" : "";
       const tr = document.createElement("tr");
       tr.innerHTML = `
-        <td><input type="checkbox" class="employee-check" value="${employee.id}"></td>
+        <td><input type="checkbox" class="employee-check" value="${employee.id}" ${checked}></td>
         <td>${employee.id}</td>
         <td>${employee.emp_no}</td>
         <td>${employee.name}</td>
+        <td>${employeeType}</td>
+        <td>${nursingText}</td>
         <td>${employee.dept_name || "-"}</td>
         <td>${shiftText}</td>
         <td><button class="btn btn-sm btn-outline-danger delete-single-btn" data-id="${employee.id}">删除</button></td>
@@ -72,6 +138,9 @@ document.addEventListener("DOMContentLoaded", () => {
     const res = await fetch("/admin/employees");
     const data = await res.json();
     employees = Array.isArray(data) ? data : [];
+    const employeeIds = new Set(employees.map((employee) => Number(employee.id)));
+    selectedEmployeeIds = new Set(Array.from(selectedEmployeeIds).filter((id) => employeeIds.has(id)));
+    employeeFilter.refresh();
     renderRows();
   }
 
@@ -102,6 +171,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const data = await res.json();
     departments = Array.isArray(data) ? data : [];
     deptPicker.refresh();
+    employeeFilter.refresh();
   }
 
   async function applyBatch(action, value, ids) {
@@ -110,6 +180,8 @@ document.addEventListener("DOMContentLoaded", () => {
     if (action === "set_emp_no") payload.emp_no = value;
     if (action === "set_department") payload.dept_name = value;
     if (action === "set_shift") payload.shift_no = value;
+    if (action === "set_manager") payload.is_manager = value === "1";
+    if (action === "set_nursing") payload.is_nursing = value === "1";
 
     const res = await fetch("/admin/employees/batch", {
       method: "POST",
@@ -127,13 +199,17 @@ document.addEventListener("DOMContentLoaded", () => {
   function resetBatchInputs() {
     batchValue.value = "";
     batchShiftValue.value = "";
+    batchManagerValue.value = "";
+    batchNursingValue.value = "";
     deptPicker.setValue(deptLookupContexts.batch, "");
   }
 
   function syncBatchInputMode() {
     const action = batchAction.value;
-    batchValue.classList.toggle("d-none", action === "set_department" || action === "set_shift");
+    batchValue.classList.toggle("d-none", action === "set_department" || action === "set_shift" || action === "set_manager" || action === "set_nursing");
     batchShiftValue.classList.toggle("d-none", action !== "set_shift");
+    batchManagerValue.classList.toggle("d-none", action !== "set_manager");
+    batchNursingValue.classList.toggle("d-none", action !== "set_nursing");
     batchDeptInlineLookup.classList.toggle("d-none", action !== "set_department");
 
     if (action === "set_name") {
@@ -162,6 +238,29 @@ document.addEventListener("DOMContentLoaded", () => {
     clearBtn: document.getElementById("employeeDeptPickerClearBtn"),
   });
 
+  const employeeFilter = window.SelectorComponent.createMultiContextEmployeeSelector({
+    contexts: [employeeFilterContext],
+    modalEl: document.getElementById("employeeManagePickerModal"),
+    deptTreeEl: document.getElementById("employeeManagePickerDeptList"),
+    searchEl: document.getElementById("employeeManagePickerSearchInput"),
+    listEl: document.getElementById("employeeManagePickerList"),
+    selectedEl: document.getElementById("employeeManagePickerSelectedList"),
+    selectedCountEl: document.getElementById("employeeManagePickerSelectedCount"),
+    selectVisibleEl: document.getElementById("employeeManagePickerSelectVisible"),
+    clearBtn: document.getElementById("employeeManagePickerClearBtn"),
+    confirmBtn: document.getElementById("employeeManagePickerConfirmBtn"),
+    getEmployees: () => employees,
+    getDepartments: () => departments,
+    getEmpId: (row) => row.id,
+    getEmpName: (row) => row.name || "",
+    getEmpCode: (row) => row.emp_no || "",
+    getEmpDeptId: (row) => row.dept_id,
+    getEmpDeptName: (row) => row.dept_name || "",
+    getDeptId: (row) => row.id,
+    getDeptParentId: (row) => row.parent_id,
+    getDeptName: (row) => row.dept_name || "",
+  });
+
   createForm.addEventListener("submit", async (e) => {
     e.preventDefault();
     const fd = new FormData(createForm);
@@ -170,6 +269,8 @@ document.addEventListener("DOMContentLoaded", () => {
       name: fd.get("name"),
       dept_name: deptNameById(deptLookupContexts.create.hiddenEl.value),
       shift_no: fd.get("shift_no"),
+      is_manager: fd.get("is_manager") === "on",
+      is_nursing: fd.get("is_nursing") === "on",
     };
     const res = await fetch("/admin/employees", {
       method: "POST",
@@ -207,20 +308,23 @@ document.addEventListener("DOMContentLoaded", () => {
     const checked = selectAll.checked;
     tableBody.querySelectorAll(".employee-check").forEach((checkbox) => {
       checkbox.checked = checked;
+      const id = Number(checkbox.value);
+      if (checked) selectedEmployeeIds.add(id);
+      else selectedEmployeeIds.delete(id);
     });
     syncSelectedCount();
   });
 
   clearSelectionBtn.addEventListener("click", () => {
-    tableBody.querySelectorAll(".employee-check").forEach((checkbox) => {
-      checkbox.checked = false;
-    });
-    selectAll.checked = false;
-    syncSelectedCount();
+    selectedEmployeeIds.clear();
+    renderRows();
   });
 
   tableBody.addEventListener("change", (e) => {
     if (e.target.classList.contains("employee-check")) {
+      const id = Number(e.target.value);
+      if (e.target.checked) selectedEmployeeIds.add(id);
+      else selectedEmployeeIds.delete(id);
       syncSelectedCount();
     }
   });
@@ -232,7 +336,25 @@ document.addEventListener("DOMContentLoaded", () => {
     const id = Number(target.dataset.id);
     if (!window.confirm("确认删除该员工吗？")) return;
     const ok = await applyBatch("delete", "", [id]);
-    if (ok) await loadEmployees();
+    if (ok) {
+      selectedEmployeeIds.delete(id);
+      await loadEmployees();
+    }
+  });
+
+  clearEmployeeFilterBtn.addEventListener("click", () => {
+    employeeFilter.setValue(employeeFilterContext, []);
+    renderRows();
+  });
+
+  employeeFilterContext.inputEl.addEventListener("input", renderRows);
+
+  employeeFilterContext.quickEl.addEventListener("click", () => {
+    window.setTimeout(renderRows, 0);
+  });
+
+  document.getElementById("employeeManagePickerConfirmBtn").addEventListener("click", () => {
+    window.setTimeout(renderRows, 0);
   });
 
   applyBatchBtn.addEventListener("click", async () => {
@@ -266,6 +388,30 @@ document.addEventListener("DOMContentLoaded", () => {
         return;
       }
       const ok = await applyBatch("set_shift", shiftNo, ids);
+      if (!ok) return;
+      resetBatchInputs();
+      await loadEmployees();
+      return;
+    }
+    if (action === "set_manager") {
+      const managerValue = batchManagerValue.value;
+      if (managerValue === "") {
+        window.alert("请选择人员类型");
+        return;
+      }
+      const ok = await applyBatch("set_manager", managerValue, ids);
+      if (!ok) return;
+      resetBatchInputs();
+      await loadEmployees();
+      return;
+    }
+    if (action === "set_nursing") {
+      const nursingValue = batchNursingValue.value;
+      if (nursingValue === "") {
+        window.alert("请选择哺乳假");
+        return;
+      }
+      const ok = await applyBatch("set_nursing", nursingValue, ids);
       if (!ok) return;
       resetBatchInputs();
       await loadEmployees();

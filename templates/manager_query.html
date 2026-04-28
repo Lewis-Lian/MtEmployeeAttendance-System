@@ -1,14 +1,39 @@
 {% extends 'base.html' %}
 {% block title %}管理人员查询{% endblock %}
-{% block page_intro %}查询管理人员信息与管理范围。{% endblock %}
+{% block page_intro %}按账套查询管理人员考勤汇总，并按管理人员模板导出。{% endblock %}
 {% block content %}
-<div class="card">
-  <div class="card-header d-flex justify-content-between align-items-center">
-    <span>管理人员查询</span>
-    <span class="small text-muted">功能入口已创建</span>
-  </div>
+<div class="card mb-4">
+  <div class="card-header">查询条件</div>
   <div class="card-body">
-    <div class="text-muted">后续将在这里添加管理人员查询条件和结果列表。</div>
+    <div class="row g-3 align-items-end">
+      <div class="col-md-6">
+        <label class="form-label">账套</label>
+        <select class="form-select" id="managerAccountSetSelect"></select>
+      </div>
+      <div class="col-md-6 d-flex gap-2">
+        <button class="btn btn-primary w-100" id="managerQueryBtn">查询</button>
+        <button class="btn btn-outline-success w-100" id="managerDownloadBtn">下载XLSX</button>
+      </div>
+    </div>
+    <div class="small text-muted mt-2" id="managerAccountSetParams">厂休天数和福利天数来自账套管理页面。</div>
   </div>
 </div>
+
+<div class="card">
+  <div class="card-header d-flex justify-content-between align-items-center">
+    <span>管理人员考勤汇总</span>
+    <span class="small text-muted" id="managerQueryMeta">等待查询</span>
+  </div>
+  <div class="table-responsive">
+    <table class="table table-sm table-striped mb-0">
+      <thead id="managerQueryHead"></thead>
+      <tbody id="managerQueryBody">
+        <tr><td class="text-muted">请点击查询</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/manager_query.js') }}"></script>
 {% endblock %}

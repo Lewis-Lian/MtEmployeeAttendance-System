@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import os
+import csv
+import glob
 import re
 import shutil
 import subprocess
@@ -57,6 +59,14 @@ class ImportService:
             if "请假" in filename:
                 stats = ImportService._import_leave(rows)
                 return {"status": "ok", "file_type": "leave", **stats}
+            if "管理人员" in filename and "月报" in filename:
+                rows = ImportService._ensure_manager_rows(file_path, rows)
+                stats = ImportService._import_manager_monthly_report(rows, filename)
+                return {"status": "ok", "file_type": "manager_monthly", **stats}
+            if "管理人员" in filename:
+                rows = ImportService._ensure_manager_rows(file_path, rows)
+                stats = ImportService._import_manager_daily_records(rows)
+                return {"status": "ok", "file_type": "manager_daily", **stats}
             if "月报" in filename:
                 stats = ImportService._import_monthly_report(rows, filename)
                 return {"status": "ok", "file_type": "monthly", **stats}
@@ -103,6 +113,60 @@ class ImportService:
             return None, None
 
     @staticmethod
+    def _read_csv_rows(file_path: str) -> list[list[Any]]:
+        with open(file_path, newline="", encoding="utf-8-sig") as f:
+            return [list(row) for row in csv.reader(f)]
+
+    @staticmethod
+    def _convert_to_csv_rows(file_path: str) -> list[list[Any]]:
+        tmpdir = tempfile.mkdtemp(prefix="attendance_csv_")
+        try:
+            profile_dir = os.path.join(tmpdir, "lo-profile")
+            os.makedirs(profile_dir, exist_ok=True)
+            env = os.environ.copy()
+            env["HOME"] = tmpdir
+            env["XDG_CONFIG_HOME"] = tmpdir
+            subprocess.run(
+                [
+                    "libreoffice",
+                    f"-env:UserInstallation=file://{profile_dir}",
+                    "--headless",
+                    "--convert-to",
+                    "csv",
+                    "--outdir",
+                    tmpdir,
+                    file_path,
+                ],
+                check=False,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                env=env,
+            )
+            basename = os.path.splitext(os.path.basename(file_path))[0]
+            converted_path = os.path.join(tmpdir, f"{basename}.csv")
+            if os.path.exists(converted_path):
+                return ImportService._read_csv_rows(converted_path)
+            candidates = glob.glob(os.path.join(tmpdir, "*.csv"))
+            if candidates:
+                return ImportService._read_csv_rows(candidates[0])
+            return []
+        finally:
+            shutil.rmtree(tmpdir, ignore_errors=True)
+
+    @staticmethod
+    def _ensure_manager_rows(file_path: str, rows: list[list[Any]]) -> list[list[Any]]:
+        has_manager_header = any(
+            "姓名" in {clean_text(value) for value in row if clean_text(value)}
+            and "部门" in {clean_text(value) for value in row if clean_text(value)}
+            for row in rows[:8]
+        )
+        if has_manager_header:
+            return rows
+        converted = ImportService._convert_to_csv_rows(file_path)
+        return converted or rows
+
+    @staticmethod
     def _build_header_map(header: list[Any]) -> dict[str, int]:
         result: dict[str, int] = {}
         for i, h in enumerate(header):
@@ -130,6 +194,68 @@ class ImportService:
                 best_idx = idx
                 best_score = score
         return best_idx
+
+    @staticmethod
+    def _build_manager_header_map(rows: list[list[Any]]) -> tuple[int, dict[str, int]]:
+        header_idx = ImportService._find_header_row(rows, ["姓名", "部门"])
+        first = rows[header_idx] if header_idx < len(rows) else []
+        second = rows[header_idx + 1] if header_idx + 1 < len(rows) else []
+        result: dict[str, int] = {}
+        current = ""
+        width = max(len(first), len(second))
+        for idx in range(width):
+            top = clean_text(first[idx] if idx < len(first) else "")
+            bottom = clean_text(second[idx] if idx < len(second) else "")
+            if top:
+                current = top
+                result.setdefault(top, idx)
+            if bottom:
+                result.setdefault(bottom, idx)
+                if current and current != bottom:
+                    result.setdefault(f"{current}/{bottom}", idx)
+        return header_idx, result
+
+    @staticmethod
+    def _find_manager_by_name(name: str) -> Employee | None:
+        clean_name = clean_text(name)
+        if not clean_name:
+            return None
+        return Employee.query.filter_by(name=clean_name, is_manager=True).first()
+
+    @staticmethod
+    def _raw_dict_from_header_map(row: list[Any], header_map: dict[str, int]) -> dict[str, Any]:
+        raw: dict[str, Any] = {}
+        for header, idx in header_map.items():
+            if header in raw:
+                continue
+            raw[header] = row[idx] if idx < len(row) else None
+        return raw
+
+    @staticmethod
+    def _manager_raw_score(raw: dict[str, Any]) -> int:
+        score = 0
+        for key in ("出勤天数", "工作时长", "迟到时长", "早退时长"):
+            value = raw.get(key)
+            if value not in (None, ""):
+                score += 10
+        score += sum(1 for value in raw.values() if value not in (None, ""))
+        return score
+
+    @staticmethod
+    def _parse_manager_record_date(value: Any):
+        text = clean_text(value)
+        m = re.search(r"(\d{2,4})[-/](\d{1,2})[-/](\d{1,2})", text)
+        if not m:
+            return parse_date(value)
+        year = int(m.group(1))
+        if year < 100:
+            year += 2000
+        month = int(m.group(2))
+        day = int(m.group(3))
+        try:
+            return parse_date(f"{year:04d}-{month:02d}-{day:02d}")
+        except Exception:
+            return None
 
     @staticmethod
     def _get_row_value(row: list[Any], idx: int) -> Any:
@@ -240,16 +366,16 @@ class ImportService:
             scanned += 1
             emp_name = clean_text(ImportService._get_row_value(row, ImportService._find_col(header_map, "姓名")))
             emp_no = clean_text(ImportService._get_row_value(row, ImportService._find_col(header_map, "工号")))
-            if not emp_no:
+            if not emp_no and not emp_name:
                 skipped_no_key += 1
                 continue
 
-            emp = ImportService._find_existing_employee(emp_no)
+            emp = ImportService._find_existing_employee(emp_no) if emp_no else None
+            if not emp and emp_name:
+                emp = ImportService._find_manager_by_name(emp_name)
             if not emp:
                 skipped_unknown_employee += 1
                 continue
-            if emp_name:
-                emp.name = emp_name
 
             record = OvertimeRecord.query.filter_by(overtime_no=overtime_no).first()
             if not record:
@@ -295,16 +421,16 @@ class ImportService:
 
             emp_no = clean_text(ImportService._get_row_value(row, ImportService._find_col(header_map, "工号")))
             emp_name = clean_text(ImportService._get_row_value(row, ImportService._find_col(header_map, "请假人")))
-            if not emp_no:
+            if not emp_no and not emp_name:
                 skipped_no_key += 1
                 continue
 
-            emp = ImportService._find_existing_employee(emp_no)
+            emp = ImportService._find_existing_employee(emp_no) if emp_no else None
+            if not emp and emp_name:
+                emp = ImportService._find_manager_by_name(emp_name)
             if not emp:
                 skipped_unknown_employee += 1
                 continue
-            if emp_name:
-                emp.name = emp_name
 
             record = LeaveRecord.query.filter_by(leave_no=leave_no).first()
             if not record:
@@ -356,13 +482,10 @@ class ImportService:
                 skipped_no_key += 1
                 continue
             scanned += 1
-            emp_name = clean_text(ImportService._get_row_value(row, ImportService._find_col(header_map, "人员名称", "姓名")))
             emp = ImportService._find_existing_employee(emp_no)
             if not emp:
                 skipped_unknown_employee += 1
                 continue
-            if emp_name:
-                emp.name = emp_name
 
             shift_no = clean_text(ImportService._get_row_value(row, ImportService._find_col(header_map, "班次编号")))
             shift_name = clean_text(ImportService._get_row_value(row, ImportService._find_col(header_map, "班次名称")))
@@ -419,9 +542,121 @@ class ImportService:
         }
 
     @staticmethod
+    def _import_manager_monthly_report(rows: list[list[Any]], filename: str) -> dict[str, int]:
+        header_idx, header_map = ImportService._build_manager_header_map(rows)
+        report_month = ImportService._extract_report_month(filename)
+        imported = 0
+        scanned = 0
+        skipped_no_key = 0
+        skipped_unknown_employee = 0
+
+        name_idx = ImportService._find_col(header_map, "姓名")
+        if name_idx < 0:
+            return {
+                "total_rows": 0,
+                "scanned": 0,
+                "imported": 0,
+                "skipped": 0,
+                "skipped_no_key": 0,
+                "skipped_unknown_employee": 0,
+            }
+
+        for row in rows[header_idx + 2 :]:
+            name = clean_text(ImportService._get_row_value(row, name_idx))
+            if not name:
+                skipped_no_key += 1
+                continue
+            scanned += 1
+
+            emp = ImportService._find_manager_by_name(name)
+            if not emp:
+                skipped_unknown_employee += 1
+                continue
+
+            report = MonthlyReport.query.filter_by(emp_id=emp.id, report_month=report_month).first()
+            if not report:
+                report = MonthlyReport(emp_id=emp.id, report_month=report_month)
+                db.session.add(report)
+
+            raw_data = ImportService._raw_dict_from_header_map(row, header_map)
+            existing_raw = report.raw_data if isinstance(report.raw_data, dict) else {}
+            if ImportService._manager_raw_score(existing_raw) > ImportService._manager_raw_score(raw_data):
+                continue
+            report.raw_data = raw_data
+            imported += 1
+
+        db.session.commit()
+        return {
+            "total_rows": max(len(rows) - header_idx - 2, 0),
+            "scanned": scanned,
+            "imported": imported,
+            "skipped": scanned - imported,
+            "skipped_no_key": skipped_no_key,
+            "skipped_unknown_employee": skipped_unknown_employee,
+        }
+
+    @staticmethod
+    def _import_manager_daily_records(rows: list[list[Any]]) -> dict[str, int]:
+        header_idx, header_map = ImportService._build_manager_header_map(rows)
+        imported = 0
+        scanned = 0
+        skipped_no_key = 0
+        skipped_unknown_employee = 0
+
+        name_idx = ImportService._find_col(header_map, "姓名")
+        date_idx = ImportService._find_col(header_map, "日期")
+        if name_idx < 0 or date_idx < 0:
+            return {
+                "total_rows": 0,
+                "scanned": 0,
+                "imported": 0,
+                "skipped": 0,
+                "skipped_no_key": 0,
+                "skipped_unknown_employee": 0,
+            }
+
+        for row in rows[header_idx + 2 :]:
+            name = clean_text(ImportService._get_row_value(row, name_idx))
+            record_date = ImportService._parse_manager_record_date(ImportService._get_row_value(row, date_idx))
+            if not name or not record_date:
+                skipped_no_key += 1
+                continue
+            scanned += 1
+
+            emp = ImportService._find_manager_by_name(name)
+            if not emp:
+                skipped_unknown_employee += 1
+                continue
+
+            record = DailyRecord.query.filter_by(emp_id=emp.id, record_date=record_date).first()
+            if not record:
+                record = DailyRecord(emp_id=emp.id, record_date=record_date)
+                db.session.add(record)
+
+            raw_data = ImportService._raw_dict_from_header_map(row, header_map)
+            existing_raw = record.raw_data if isinstance(record.raw_data, dict) else {}
+            if ImportService._manager_raw_score(existing_raw) > ImportService._manager_raw_score(raw_data):
+                continue
+            record.actual_hours = parse_float(ImportService._get_row_value(row, ImportService._find_col(header_map, "工作时长")))
+            record.late_minutes = parse_int(ImportService._get_row_value(row, ImportService._find_col(header_map, "迟到时长")))
+            record.early_leave_minutes = parse_int(ImportService._get_row_value(row, ImportService._find_col(header_map, "早退时长")))
+            record.raw_data = raw_data
+            imported += 1
+
+        db.session.commit()
+        return {
+            "total_rows": max(len(rows) - header_idx - 2, 0),
+            "scanned": scanned,
+            "imported": imported,
+            "skipped": scanned - imported,
+            "skipped_no_key": skipped_no_key,
+            "skipped_unknown_employee": skipped_unknown_employee,
+        }
+
+    @staticmethod
     def _extract_report_month(filename: str) -> str:
         # e.g. 2026_3月员工基础数据(月报).xls -> 2026-03
-        m = re.search(r"(\d{4})[_-]?(\d{1,2})月", filename)
+        m = re.search(r"(\d{4})年?[_-]?(\d{1,2})月", filename)
         if m:
             y = m.group(1)
             mm = int(m.group(2))
@@ -453,13 +688,10 @@ class ImportService:
                 continue
             scanned += 1
 
-            emp_name = clean_text(ImportService._get_row_value(row, emp_name_idx))
             emp = ImportService._find_existing_employee(emp_no)
             if not emp:
                 skipped_unknown_employee += 1
                 continue
-            if emp_name:
-                emp.name = emp_name
 
             metric_values: list[float | None] = []
             for i in range(len(header)):

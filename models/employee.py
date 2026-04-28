@@ -9,6 +9,8 @@ class Employee(db.Model):
     emp_no = db.Column(db.String(50), unique=True, nullable=False, index=True)
     name = db.Column(db.String(100), nullable=False)
     dept_id = db.Column(db.Integer, db.ForeignKey("departments.id"), nullable=True, index=True)
+    is_manager = db.Column(db.Boolean, default=False, nullable=False)
+    is_nursing = db.Column(db.Boolean, default=False, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
 
     department = db.relationship("Department", back_populates="employees")
@@ -17,6 +19,7 @@ class Employee(db.Model):
     overtime_records = db.relationship("OvertimeRecord", back_populates="employee", cascade="all, delete-orphan")
     leave_records = db.relationship("LeaveRecord", back_populates="employee", cascade="all, delete-orphan")
     annual_leave = db.relationship("AnnualLeave", back_populates="employee", cascade="all, delete-orphan")
+    manager_month_stats = db.relationship("ManagerMonthStat", back_populates="employee", cascade="all, delete-orphan")
     user_assignments = db.relationship(
         "UserEmployeeAssignment", back_populates="employee", cascade="all, delete-orphan"
     )
