@@ -3,8 +3,7 @@ from __future__ import annotations
 import calendar
 import math
 from dataclasses import dataclass
-
-from sqlalchemy import func
+from datetime import date, datetime, time
 
 from models import db
 from models.employee import Employee
@@ -29,6 +28,24 @@ MANAGER_HEADERS = [
     "加班变化",
     "备注",
 ]
+
+
+def _month_date_range(month: str) -> tuple[date, date] | None:
+    try:
+        start = datetime.strptime(month, "%Y-%m").date().replace(day=1)
+    except ValueError:
+        return None
+    if start.month == 12:
+        return start, date(start.year + 1, 1, 1)
+    return start, date(start.year, start.month + 1, 1)
+
+
+def _month_datetime_range(month: str) -> tuple[datetime, datetime] | None:
+    bounds = _month_date_range(month)
+    if not bounds:
+        return None
+    start, end = bounds
+    return datetime.combine(start, time.min), datetime.combine(end, time.min)
 
 
 @dataclass
@@ -165,9 +182,13 @@ def _monthly_report_raw(employee_id: int, month: str) -> dict:
 
 
 def _leave_rows(employee_id: int, month: str) -> list[LeaveRecord]:
+    datetime_range = _month_datetime_range(month)
+    if not datetime_range:
+        return []
+    start_dt, end_dt = datetime_range
     return (
         LeaveRecord.query.filter_by(emp_id=employee_id)
-        .filter(func.strftime("%Y-%m", LeaveRecord.start_time) == month)
+        .filter(LeaveRecord.start_time >= start_dt, LeaveRecord.start_time < end_dt)
         .all()
     )
 
@@ -308,9 +329,13 @@ def _manager_schedule_late_minutes(employee_id: int, month: str) -> int:
     employee = Employee.query.get(employee_id)
     if employee and employee.is_nursing:
         return 0
+    date_range = _month_date_range(month)
+    if not date_range:
+        return 0
+    start_date, end_date = date_range
     rows = (
         DailyRecord.query.filter_by(emp_id=employee_id)
-        .filter(func.strftime("%Y-%m", DailyRecord.record_date) == month)
+        .filter(DailyRecord.record_date >= start_date, DailyRecord.record_date < end_date)
         .all()
     )
     total = 0

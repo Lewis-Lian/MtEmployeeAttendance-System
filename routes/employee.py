@@ -1,13 +1,14 @@
 from __future__ import annotations
 
 import os
-from datetime import datetime, timedelta
+from collections import defaultdict
+from datetime import date, datetime, time, timedelta
 import math
 import re
 from io import BytesIO
 
 from flask import Blueprint, jsonify, render_template, request, g, send_file
-from sqlalchemy import func
+from sqlalchemy.orm import joinedload
 import openpyxl
 
 from models.employee import Employee
@@ -131,6 +132,26 @@ def _normalized_leave_days(duration: float | int | None) -> float:
     if frac > 0.08:
         return float(int_days) + 0.5
     return float(int_days)
+
+
+def _month_date_range(month: str) -> tuple[date, date] | None:
+    try:
+        start = datetime.strptime(month, "%Y-%m").date().replace(day=1)
+    except ValueError:
+        return None
+    if start.month == 12:
+        end = date(start.year + 1, 1, 1)
+    else:
+        end = date(start.year, start.month + 1, 1)
+    return start, end
+
+
+def _month_datetime_range(month: str) -> tuple[datetime, datetime] | None:
+    bounds = _month_date_range(month)
+    if not bounds:
+        return None
+    start, end = bounds
+    return datetime.combine(start, time.min), datetime.combine(end, time.min)
 
 
 def _has_punch_record(record: DailyRecord) -> bool:
@@ -384,14 +405,14 @@ def _calc_record_work_hours(record: DailyRecord) -> tuple[float, int]:
 
     in_times: list[datetime] = []
     out_times: list[datetime] = []
-    in_seen: set[str] = set()
-    out_seen: set[str] = set()
+    in_seen: set[tuple[int, int, int, int, int]] = set()
+    out_seen: set[tuple[int, int, int, int, int]] = set()
 
     for raw in (record.check_in_times or []):
         dt = _parse_punch_dt(raw, record.record_date)
         if not dt:
             continue
-        key = dt.strftime("%Y-%m-%d %H:%M")
+        key = (dt.year, dt.month, dt.day, dt.hour, dt.minute)
         if key in in_seen:
             continue
         in_seen.add(key)
@@ -401,7 +422,7 @@ def _calc_record_work_hours(record: DailyRecord) -> tuple[float, int]:
         dt = _parse_punch_dt(raw, record.record_date)
         if not dt:
             continue
-        key = dt.strftime("%Y-%m-%d %H:%M")
+        key = (dt.year, dt.month, dt.day, dt.hour, dt.minute)
         if key in out_seen:
             continue
         out_seen.add(key)
@@ -549,26 +570,41 @@ def _resolve_query_month() -> str:
 
 
 def _build_final_rows(month: str, emp_ids: list[int]) -> list[list[object]]:
-    employees = Employee.query.filter(Employee.id.in_(emp_ids)).order_by(Employee.emp_no.asc()).all()
+    employees = (
+        Employee.query.options(joinedload(Employee.department))
+        .filter(Employee.id.in_(emp_ids))
+        .order_by(Employee.emp_no.asc())
+        .all()
+    )
     rows: list[list[object]] = []
+    date_range = _month_date_range(month)
+    datetime_range = _month_datetime_range(month)
+
+    daily_by_emp: dict[int, list[DailyRecord]] = defaultdict(list)
+    if date_range:
+        start_date, end_date = date_range
+        daily_records = (
+            DailyRecord.query.filter(DailyRecord.emp_id.in_(emp_ids))
+            .filter(DailyRecord.record_date >= start_date, DailyRecord.record_date < end_date)
+            .all()
+        )
+        for record in daily_records:
+            daily_by_emp[record.emp_id].append(record)
+
+    leave_by_emp: dict[int, list[LeaveRecord]] = defaultdict(list)
+    if datetime_range:
+        start_dt, end_dt = datetime_range
+        leave_records = (
+            LeaveRecord.query.filter(LeaveRecord.emp_id.in_(emp_ids))
+            .filter(LeaveRecord.start_time >= start_dt, LeaveRecord.start_time < end_dt)
+            .all()
+        )
+        for record in leave_records:
+            leave_by_emp[record.emp_id].append(record)
 
     for employee in employees:
-        daily_rows = (
-            DailyRecord.query.filter_by(emp_id=employee.id)
-            .filter(func.strftime("%Y-%m", DailyRecord.record_date) == month)
-            .all()
-        )
-        leave_rows = (
-            LeaveRecord.query.filter_by(emp_id=employee.id)
-            .filter(func.strftime("%Y-%m", LeaveRecord.start_time) == month)
-            .all()
-        )
-        overtime_rows = (
-            OvertimeRecord.query.filter_by(emp_id=employee.id)
-            .filter(func.strftime("%Y-%m", OvertimeRecord.start_time) == month)
-            .all()
-        )
-        monthly_report = MonthlyReport.query.filter_by(emp_id=employee.id, report_month=month).first()
+        daily_rows = daily_by_emp.get(employee.id, [])
+        leave_rows = leave_by_emp.get(employee.id, [])
 
         leave_count = {"病假": 0, "工伤": 0, "丧假": 0, "事假": 0, "补休（调休）": 0, "婚假": 0}
         leave_days = {"病假": 0.0, "工伤": 0.0, "丧假": 0.0, "事假": 0.0, "补休（调休）": 0.0, "婚假": 0.0}
@@ -615,15 +651,27 @@ def _build_final_rows(month: str, emp_ids: list[int]) -> list[list[object]]:
 
 
 def _build_abnormal_rows(month: str, emp_ids: list[int]) -> list[dict[str, object]]:
-    employees = Employee.query.filter(Employee.id.in_(emp_ids)).order_by(Employee.emp_no.asc()).all()
+    employees = (
+        Employee.query.options(joinedload(Employee.department))
+        .filter(Employee.id.in_(emp_ids))
+        .order_by(Employee.emp_no.asc())
+        .all()
+    )
     data: list[dict[str, object]] = []
-
-    for employee in employees:
-        daily_rows = (
-            DailyRecord.query.filter_by(emp_id=employee.id)
-            .filter(func.strftime("%Y-%m", DailyRecord.record_date) == month)
+    daily_by_emp: dict[int, list[DailyRecord]] = defaultdict(list)
+    date_range = _month_date_range(month)
+    if date_range:
+        start_date, end_date = date_range
+        daily_records = (
+            DailyRecord.query.filter(DailyRecord.emp_id.in_(emp_ids))
+            .filter(DailyRecord.record_date >= start_date, DailyRecord.record_date < end_date)
             .all()
         )
+        for record in daily_records:
+            daily_by_emp[record.emp_id].append(record)
+
+    for employee in employees:
+        daily_rows = daily_by_emp.get(employee.id, [])
         abnormal_dates = {
             r.record_date.isoformat()
             for r in daily_rows
@@ -641,7 +689,12 @@ def _build_abnormal_rows(month: str, emp_ids: list[int]) -> list[dict[str, objec
 
 
 def _build_department_hours_rows(month: str, emp_ids: list[int]) -> list[dict[str, object]]:
-    employees = Employee.query.filter(Employee.id.in_(emp_ids)).order_by(Employee.emp_no.asc()).all()
+    employees = (
+        Employee.query.options(joinedload(Employee.department))
+        .filter(Employee.id.in_(emp_ids))
+        .order_by(Employee.emp_no.asc())
+        .all()
+    )
     totals: dict[str, float] = {}
 
     for employee in employees:
@@ -651,12 +704,17 @@ def _build_department_hours_rows(month: str, emp_ids: list[int]) -> list[dict[st
     if not employees:
         return []
 
-    rows = (
-        DailyRecord.query.join(Employee, DailyRecord.emp_id == Employee.id)
-        .filter(DailyRecord.emp_id.in_(emp_ids))
-        .filter(func.strftime("%Y-%m", DailyRecord.record_date) == month)
-        .all()
-    )
+    date_range = _month_date_range(month)
+    rows = []
+    if date_range:
+        start_date, end_date = date_range
+        rows = (
+            DailyRecord.query.options(joinedload(DailyRecord.employee).joinedload(Employee.department))
+            .join(Employee, DailyRecord.emp_id == Employee.id)
+            .filter(DailyRecord.emp_id.in_(emp_ids))
+            .filter(DailyRecord.record_date >= start_date, DailyRecord.record_date < end_date)
+            .all()
+        )
     for row in rows:
         dept_name = row.employee.department.dept_name if row.employee and row.employee.department else "未分配部门"
         totals.setdefault(dept_name, 0.0)
@@ -768,13 +826,18 @@ def punch_records_api():
         return jsonify([])
 
     month = _resolve_query_month()
-    rows = (
-        DailyRecord.query.join(Employee, DailyRecord.emp_id == Employee.id)
-        .filter(DailyRecord.emp_id.in_(emp_ids))
-        .filter(func.strftime("%Y-%m", DailyRecord.record_date) == month)
-        .order_by(Employee.emp_no.asc(), DailyRecord.record_date.desc())
-        .all()
-    )
+    date_range = _month_date_range(month)
+    rows = []
+    if date_range:
+        start_date, end_date = date_range
+        rows = (
+            DailyRecord.query.options(joinedload(DailyRecord.employee).joinedload(Employee.department))
+            .join(Employee, DailyRecord.emp_id == Employee.id)
+            .filter(DailyRecord.emp_id.in_(emp_ids))
+            .filter(DailyRecord.record_date >= start_date, DailyRecord.record_date < end_date)
+            .order_by(Employee.emp_no.asc(), DailyRecord.record_date.desc())
+            .all()
+        )
 
     return jsonify(
         [
@@ -811,13 +874,18 @@ def punch_records_export_api():
         return jsonify({"error": "No employee assigned"}), 400
 
     month = _resolve_query_month()
-    rows = (
-        DailyRecord.query.join(Employee, DailyRecord.emp_id == Employee.id)
-        .filter(DailyRecord.emp_id.in_(emp_ids))
-        .filter(func.strftime("%Y-%m", DailyRecord.record_date) == month)
-        .order_by(Employee.emp_no.asc(), DailyRecord.record_date.desc())
-        .all()
-    )
+    date_range = _month_date_range(month)
+    rows = []
+    if date_range:
+        start_date, end_date = date_range
+        rows = (
+            DailyRecord.query.options(joinedload(DailyRecord.employee).joinedload(Employee.department))
+            .join(Employee, DailyRecord.emp_id == Employee.id)
+            .filter(DailyRecord.emp_id.in_(emp_ids))
+            .filter(DailyRecord.record_date >= start_date, DailyRecord.record_date < end_date)
+            .order_by(Employee.emp_no.asc(), DailyRecord.record_date.desc())
+            .all()
+        )
 
     headers = [
         "日期",
@@ -903,12 +971,16 @@ def daily_records_api():
         return jsonify([])
 
     month = request.args.get("month") or datetime.now().strftime("%Y-%m")
-    q = (
-        DailyRecord.query.filter_by(emp_id=emp_id)
-        .filter(func.strftime("%Y-%m", DailyRecord.record_date) == month)
-        .order_by(DailyRecord.record_date.desc())
-    )
-    rows = q.all()
+    date_range = _month_date_range(month)
+    rows = []
+    if date_range:
+        start_date, end_date = date_range
+        rows = (
+            DailyRecord.query.filter_by(emp_id=emp_id)
+            .filter(DailyRecord.record_date >= start_date, DailyRecord.record_date < end_date)
+            .order_by(DailyRecord.record_date.desc())
+            .all()
+        )
     return jsonify(
         [
             {
