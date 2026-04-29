@@ -19,6 +19,7 @@ from models.account_set import AccountSet, AccountSetImport
 from models.overtime import OvertimeRecord
 from models.annual_leave import AnnualLeave
 from models.manager_month_stat import ManagerMonthStat
+from models.manager_attendance_override import ManagerAttendanceOverride
 from models.user import User, UserEmployeeAssignment, UserDepartmentAssignment
 from services.import_service import ImportService
 from services.manager_attendance_service import ManagerAttendanceOptions, build_manager_rows
@@ -499,6 +500,17 @@ def manager_annual_leave_page():
     return render_template("admin/manager_annual_leave.html")
 
 
+@admin_bp.route("/manager-attendance-overrides")
+@admin_required
+def manager_attendance_overrides_page():
+    employees = (
+        Employee.query.filter_by(is_manager=True)
+        .order_by(Employee.dept_id.asc(), Employee.emp_no.asc(), Employee.name.asc())
+        .all()
+    )
+    return render_template("admin/manager_attendance_overrides.html", employees=employees)
+
+
 @admin_bp.route("/upload", methods=["POST"])
 @admin_required
 def upload_excel():
@@ -876,6 +888,152 @@ def _save_manager_month_stat(stat_type: str) -> tuple[dict[str, str], int]:
     year = int(data.get("year") or datetime.now().year)
     values = {key: float(_number_or_blank(data.get(key)) or 0) for key in _stat_value_keys(stat_type)}
     return _upsert_manager_month_stat(stat_type, emp_id, year, values, data.get("remark") or "")
+
+
+_MANAGER_ATTENDANCE_OVERRIDE_FIELDS = (
+    "attendance_days",
+    "injury_days",
+    "business_trip_days",
+    "marriage_days",
+    "funeral_days",
+    "late_early_minutes",
+)
+
+
+def _validate_month(value: str | None) -> str | None:
+    text = (value or "").strip()
+    try:
+        datetime.strptime(text, "%Y-%m")
+    except ValueError:
+        return None
+    return text
+
+
+def _manager_attendance_options(month: str) -> ManagerAttendanceOptions:
+    account = AccountSet.query.filter_by(month=month).first()
+    return ManagerAttendanceOptions(
+        month=month,
+        factory_rest_days=(account.factory_rest_days if account else 0) or 0,
+        monthly_benefit_days=(account.monthly_benefit_days if account else 0) or 0,
+    )
+
+
+def _manager_attendance_override_payload(row: ManagerAttendanceOverride | None) -> dict[str, object]:
+    payload = {field: getattr(row, field) if row else None for field in _MANAGER_ATTENDANCE_OVERRIDE_FIELDS}
+    payload["remark"] = row.remark if row else ""
+    payload["updated_at"] = row.updated_at.isoformat() if row and row.updated_at else None
+    return payload
+
+
+def _manager_attendance_row(emp_id: int, month: str, include_overrides: bool) -> dict[str, object] | None:
+    options = _manager_attendance_options(month)
+    rows = build_manager_rows(options, [emp_id], include_overrides=include_overrides)
+    return rows[0] if rows else None
+
+
+def _manager_attendance_response(emp_id: int, month: str) -> tuple[dict[str, object], int]:
+    employee = Employee.query.get(emp_id)
+    if not employee or not employee.is_manager:
+        return {"error": "employee is not manager"}, 400
+    automatic = _manager_attendance_row(emp_id, month, include_overrides=False)
+    applied = _manager_attendance_row(emp_id, month, include_overrides=True)
+    override = ManagerAttendanceOverride.query.filter_by(emp_id=emp_id, month=month).first()
+    return {
+        "employee": _serialize_employee(employee),
+        "month": month,
+        "automatic": automatic,
+        "override": _manager_attendance_override_payload(override),
+        "applied": applied,
+    }, 200
+
+
+def _nullable_float(data: dict[str, object], key: str) -> tuple[float | None, str | None]:
+    value = data.get(key)
+    if value in (None, ""):
+        return None, None
+    try:
+        parsed = round(float(value), 2)
+    except (TypeError, ValueError):
+        return None, f"{key} 必须是数字"
+    if parsed < 0:
+        return None, f"{key} 不能为负数"
+    return parsed, None
+
+
+def _nullable_int(data: dict[str, object], key: str) -> tuple[int | None, str | None]:
+    value = data.get(key)
+    if value in (None, ""):
+        return None, None
+    try:
+        parsed = int(round(float(value)))
+    except (TypeError, ValueError):
+        return None, f"{key} 必须是整数"
+    if parsed < 0:
+        return None, f"{key} 不能为负数"
+    return parsed, None
+
+
+@admin_bp.route("/manager-attendance-overrides/record", methods=["GET"])
+@admin_required
+def manager_attendance_override_record():
+    emp_id = request.args.get("emp_id", type=int) or 0
+    month = _validate_month(request.args.get("month"))
+    if not emp_id or not month:
+        return jsonify({"error": "请选择管理人员和有效月份"}), 400
+    payload, status = _manager_attendance_response(emp_id, month)
+    return jsonify(payload), status
+
+
+@admin_bp.route("/manager-attendance-overrides/record", methods=["PUT"])
+@admin_required
+def save_manager_attendance_override_record():
+    data = request.json or {}
+    emp_id = int(data.get("emp_id") or 0)
+    month = _validate_month(data.get("month"))
+    if not emp_id or not month:
+        return jsonify({"error": "请选择管理人员和有效月份"}), 400
+    employee = Employee.query.get(emp_id)
+    if not employee or not employee.is_manager:
+        return jsonify({"error": "employee is not manager"}), 400
+
+    values: dict[str, float | int | None] = {}
+    for key in ("attendance_days", "injury_days", "business_trip_days", "marriage_days", "funeral_days"):
+        value, error = _nullable_float(data, key)
+        if error:
+            return jsonify({"error": error}), 400
+        values[key] = value
+    late_value, error = _nullable_int(data, "late_early_minutes")
+    if error:
+        return jsonify({"error": error}), 400
+    values["late_early_minutes"] = late_value
+
+    row = ManagerAttendanceOverride.query.filter_by(emp_id=emp_id, month=month).first()
+    if not row:
+        row = ManagerAttendanceOverride(emp_id=emp_id, month=month)
+        db.session.add(row)
+    for key, value in values.items():
+        setattr(row, key, value)
+    row.remark = (data.get("remark") or "").strip()
+    row.updated_by = g.current_user.id
+    db.session.commit()
+
+    payload, status = _manager_attendance_response(emp_id, month)
+    return jsonify(payload), status
+
+
+@admin_bp.route("/manager-attendance-overrides/record", methods=["DELETE"])
+@admin_required
+def delete_manager_attendance_override_record():
+    emp_id = request.args.get("emp_id", type=int) or 0
+    month = _validate_month(request.args.get("month"))
+    if not emp_id or not month:
+        return jsonify({"error": "请选择管理人员和有效月份"}), 400
+    row = ManagerAttendanceOverride.query.filter_by(emp_id=emp_id, month=month).first()
+    if row:
+        db.session.delete(row)
+        db.session.commit()
+    payload, status = _manager_attendance_response(emp_id, month)
+    return jsonify(payload), status
 
 
 def _stat_key_for_month(month: str) -> tuple[int, str]:

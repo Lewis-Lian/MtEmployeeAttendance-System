@@ -1,3 +1,5 @@
+let lastManagerResult = { headers: [], rows: [] };
+
 async function loadManagerAccountSets() {
   const select = document.getElementById("managerAccountSetSelect");
   const res = await fetch("/employee/api/account-sets");
@@ -63,23 +65,38 @@ function buildManagerQuery(employeeSelector = null) {
   return query;
 }
 
+function shouldShowActualAttendanceDays() {
+  return document.getElementById("showActualAttendanceDaysToggle")?.checked ?? false;
+}
+
+function displayedManagerResult(headers, rows) {
+  if (shouldShowActualAttendanceDays()) return { headers, rows };
+  const actualIdx = headers.indexOf("实际出勤天数");
+  if (actualIdx < 0) return { headers, rows };
+  return {
+    headers: headers.filter((_, index) => index !== actualIdx),
+    rows: rows.map((row) => row.filter((_, index) => index !== actualIdx)),
+  };
+}
+
 function renderManagerRows(headers, rows) {
   const head = document.getElementById("managerQueryHead");
   const body = document.getElementById("managerQueryBody");
-  head.innerHTML = headers.length
-    ? `<tr>${headers.map((header) => `<th>${header || "-"}</th>`).join("")}</tr>`
+  const displayed = displayedManagerResult(headers, rows);
+  head.innerHTML = displayed.headers.length
+    ? `<tr>${displayed.headers.map((header) => `<th>${header || "-"}</th>`).join("")}</tr>`
     : "<tr><th>暂无字段</th></tr>";
 
-  if (!rows.length) {
-    body.innerHTML = `<tr><td class="text-muted" colspan="${Math.max(headers.length, 1)}">暂无数据</td></tr>`;
+  if (!displayed.rows.length) {
+    body.innerHTML = `<tr><td class="text-muted" colspan="${Math.max(displayed.headers.length, 1)}">暂无数据</td></tr>`;
     updateManagerMetrics(currentAccountSetRow(), 0);
     return;
   }
 
-  body.innerHTML = rows
-    .map((row) => `<tr>${headers.map((_, index) => `<td>${row[index] ?? ""}</td>`).join("")}</tr>`)
+  body.innerHTML = displayed.rows
+    .map((row) => `<tr>${displayed.headers.map((_, index) => `<td>${row[index] ?? ""}</td>`).join("")}</tr>`)
     .join("");
-  updateManagerMetrics(currentAccountSetRow(), rows.length);
+  updateManagerMetrics(currentAccountSetRow(), displayed.rows.length);
 }
 
 function currentAccountSetRow() {
@@ -94,7 +111,11 @@ async function queryManagerAttendance(employeeSelector) {
   const query = buildManagerQuery(employeeSelector);
   const res = await fetch(`/employee/api/manager-attendance?${query.toString()}`);
   const data = await res.json();
-  renderManagerRows(Array.isArray(data.headers) ? data.headers : [], Array.isArray(data.rows) ? data.rows : []);
+  lastManagerResult = {
+    headers: Array.isArray(data.headers) ? data.headers : [],
+    rows: Array.isArray(data.rows) ? data.rows : [],
+  };
+  renderManagerRows(lastManagerResult.headers, lastManagerResult.rows);
 }
 
 document.addEventListener("DOMContentLoaded", async () => {
@@ -104,7 +125,11 @@ document.addEventListener("DOMContentLoaded", async () => {
   document.getElementById("managerQueryBtn").addEventListener("click", () => queryManagerAttendance(employeeSelector));
   document.getElementById("managerDownloadBtn").addEventListener("click", () => {
     const query = buildManagerQuery(employeeSelector);
+    query.set("show_actual_attendance_days", shouldShowActualAttendanceDays() ? "1" : "0");
     window.location.href = `/employee/api/manager-attendance/export?${query.toString()}`;
+  });
+  document.getElementById("showActualAttendanceDaysToggle").addEventListener("change", () => {
+    renderManagerRows(lastManagerResult.headers, lastManagerResult.rows);
   });
   document.getElementById("selectedEmpIds").addEventListener("change", () => updateManagerMetrics(currentAccountSetRow(), null));
 });

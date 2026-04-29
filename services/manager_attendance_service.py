@@ -9,18 +9,21 @@ from models import db
 from models.employee import Employee
 from models.daily_record import DailyRecord
 from models.leave import LeaveRecord
+from models.manager_attendance_override import ManagerAttendanceOverride
 from models.monthly_report import MonthlyReport
 from models.manager_month_stat import ManagerMonthStat
+from models.overtime import OvertimeRecord
 
 
 MANAGER_HEADERS = [
     "部   门",
     "姓名",
     "出勤天数",
+    "实际出勤天数",
     "事/病假",
     "工伤",
     "出差",
-    "婚假",
+    "婚/丧假",
     "丧假",
     "迟到\\早退",
     "汇总",
@@ -28,6 +31,12 @@ MANAGER_HEADERS = [
     "加班变化",
     "备注",
 ]
+
+
+def manager_headers(include_actual_attendance_days: bool = True) -> list[str]:
+    if include_actual_attendance_days:
+        return list(MANAGER_HEADERS)
+    return [header for header in MANAGER_HEADERS if header != "实际出勤天数"]
 
 
 def _month_date_range(month: str) -> tuple[date, date] | None:
@@ -119,7 +128,7 @@ def _stat_year_key(month: str) -> tuple[int, str]:
 
 def normalize_days(value: float | int | None) -> float:
     """Convert decimal hours to days using the rule:
-    <0.084 -> 0 days, >=0.084 and <0.17 -> 0.5 days, >=0.17 -> 1 day.
+    <0.084 -> 0 days, >=0.084 and <0.209 -> 0.5 days, >=0.209 -> 1 day.
     Values > 3 are treated as hours and divided by 8.
     """
     raw = float(value or 0)
@@ -131,14 +140,18 @@ def normalize_days(value: float | int | None) -> float:
     integer = math.floor(raw)
     fraction = round(raw - integer, 5)
 
-    # >= 0.17 means 1 day for this fraction
-    if fraction >= 0.17:
+    # >= 0.209 means 1 day for this fraction
+    if fraction >= 0.209:
         return float(integer + 1)
-    # >= 0.084 and < 0.17 means 0.5 day
+    # >= 0.084 and < 0.209 means 0.5 day
     if fraction >= 0.084:
         return float(integer) + 0.5
     # < 0.084 means 0 day
     return float(integer)
+
+
+def _has_half_day_component(days: float) -> bool:
+    return days > 0 and abs(days % 1 - 0.5) < 1e-9
 
 
 def _leave_bucket(value: str | None) -> str:
@@ -189,6 +202,18 @@ def _leave_rows(employee_id: int, month: str) -> list[LeaveRecord]:
     return (
         LeaveRecord.query.filter_by(emp_id=employee_id)
         .filter(LeaveRecord.start_time >= start_dt, LeaveRecord.start_time < end_dt)
+        .all()
+    )
+
+
+def _overtime_rows(employee_id: int, month: str) -> list[OvertimeRecord]:
+    datetime_range = _month_datetime_range(month)
+    if not datetime_range:
+        return []
+    start_dt, end_dt = datetime_range
+    return (
+        OvertimeRecord.query.filter_by(emp_id=employee_id)
+        .filter(OvertimeRecord.start_time >= start_dt, OvertimeRecord.start_time < end_dt)
         .all()
     )
 
@@ -262,7 +287,7 @@ def _month_value_keys() -> list[str]:
 
 def _compute_overtime_used(emp_id: int, month: str) -> float:
     """Compute how many overtime days can be used for deduction this month.
-    - If the month's stat value is non-zero, reset it to 0 first.
+    - Ignore the current month's saved value so ordinary queries do not overwrite manual stats.
     - Then use from remaining balance, max 5 days, cannot go negative.
     Returns: the number of overtime days used (as a negative number to indicate consumption).
     """
@@ -271,13 +296,8 @@ def _compute_overtime_used(emp_id: int, month: str) -> float:
     if not row:
         return 0.0
 
-    # Check if current month already has a value (non-zero), reset to 0
     current = _float_value(getattr(row, key))
-    if current != 0:
-        setattr(row, key, 0.0)
-        _recalc_remaining(row, "overtime")
-
-    remaining = _round2(row.remaining or 0)
+    remaining = _round2((row.remaining or 0) - current)
     if remaining <= 0:
         return 0.0
 
@@ -287,7 +307,7 @@ def _compute_overtime_used(emp_id: int, month: str) -> float:
 
 def _compute_benefit_used(emp_id: int, month: str, factory_rest_days: float) -> float:
     """Compute how many annual leave (年休/福利) days can be used this month.
-    - If the month's stat value is non-zero, reset it to 0 first.
+    - Ignore the current month's saved value so ordinary queries do not overwrite manual stats.
     - Then use from remaining balance.
     Constraints:
       - Max 3 days per month
@@ -300,13 +320,8 @@ def _compute_benefit_used(emp_id: int, month: str, factory_rest_days: float) -> 
     if not row:
         return 0.0
 
-    # Check if current month already has a value (non-zero), reset to 0
     current = _float_value(getattr(row, key))
-    if current != 0:
-        setattr(row, key, 0.0)
-        _recalc_remaining(row, "annual_leave")
-
-    remaining = _round2(row.remaining or 0)
+    remaining = _round2((row.remaining or 0) + current)
     if remaining <= 0:
         return 0.0
 
@@ -320,6 +335,32 @@ def _compute_benefit_used(emp_id: int, month: str, factory_rest_days: float) -> 
     available = min(available, max_benefit_for_rest)
 
     return available
+
+
+OVERRIDE_FIELDS = (
+    "attendance_days",
+    "injury_days",
+    "business_trip_days",
+    "marriage_days",
+    "funeral_days",
+    "late_early_minutes",
+)
+
+
+def _override_values(override: ManagerAttendanceOverride | None) -> dict[str, float | int | None]:
+    return {field: getattr(override, field) if override else None for field in OVERRIDE_FIELDS}
+
+
+def _override_row(employee_id: int, month: str) -> ManagerAttendanceOverride | None:
+    return ManagerAttendanceOverride.query.filter_by(emp_id=employee_id, month=month).first()
+
+
+def _apply_override_value(value: float | int, override_value: float | int | None, as_int: bool = False) -> float | int:
+    if override_value is None:
+        return value
+    if as_int:
+        return int(round(float(override_value or 0)))
+    return _round2(float(override_value or 0))
 
 
 _MANAGER_PUNCH_TIME_KEYS = (
@@ -382,7 +423,11 @@ def _manager_schedule_late_minutes(employee_id: int, month: str) -> int:
     return total
 
 
-def build_manager_rows(options: ManagerAttendanceOptions, emp_ids: list[int] | None = None) -> list[dict[str, object]]:
+def build_manager_rows(
+    options: ManagerAttendanceOptions,
+    emp_ids: list[int] | None = None,
+    include_overrides: bool = True,
+) -> list[dict[str, object]]:
     query = Employee.query.filter_by(is_manager=True)
     if emp_ids is not None:
         if not emp_ids:
@@ -405,6 +450,7 @@ def build_manager_rows(options: ManagerAttendanceOptions, emp_ids: list[int] | N
         # Accumulate leave record days by category
         half_leave_days = 0.0
         half_time_off_days = 0.0
+        half_overtime_days = 0.0
         injury_days = 0.0
         business_trip_days = 0.0
         marriage_days = 0.0
@@ -421,10 +467,14 @@ def build_manager_rows(options: ManagerAttendanceOptions, emp_ids: list[int] | N
                 marriage_days += days
             elif bucket == "funeral":
                 funeral_days += days
-            elif bucket == "personal_sick" and days == 0.5:
-                half_leave_days += days
-            elif bucket == "time_off" and days == 0.5:
-                half_time_off_days += days
+            elif bucket == "personal_sick" and _has_half_day_component(days):
+                half_leave_days += 0.5
+            elif bucket == "time_off" and _has_half_day_component(days):
+                half_time_off_days += 0.5
+        for overtime in _overtime_rows(employee.id, options.month):
+            days = normalize_days(overtime.effective_hours)
+            if _has_half_day_component(days):
+                half_overtime_days += 0.5
 
         base_attendance_days = (
             raw_attendance_days
@@ -432,10 +482,35 @@ def build_manager_rows(options: ManagerAttendanceOptions, emp_ids: list[int] | N
             else _manager_attendance_days(employee.id, options.month)
         )
 
-        # 出勤天数 = 月报出勤天数(失败时按刷卡天数兜底) - 请假半天的天数 - 调休半天的天数
-        attendance_days = _round2(
-            base_attendance_days - half_leave_days - half_time_off_days
+        # 实际出勤天数 = 月报出勤天数(失败时按刷卡天数兜底) - 请假半天的天数 - 调休半天的天数 - 加班半天的天数
+        actual_attendance_days = _round2(
+            base_attendance_days - half_leave_days - half_time_off_days - half_overtime_days
         )
+        # 出勤天数 = 实际出勤天数 + 出差 + 婚假 + 丧假
+        attendance_days = _round2(
+            actual_attendance_days + business_trip_days + marriage_days + funeral_days
+        )
+
+        override = _override_row(employee.id, options.month) if include_overrides else None
+        override_data = _override_values(override)
+        injury_days = _apply_override_value(injury_days, override_data["injury_days"])
+        business_trip_days = _apply_override_value(business_trip_days, override_data["business_trip_days"])
+        marriage_days = _apply_override_value(marriage_days, override_data["marriage_days"])
+        funeral_days = _apply_override_value(funeral_days, override_data["funeral_days"])
+        late_early_minutes = _apply_override_value(
+            late_early_minutes,
+            override_data["late_early_minutes"],
+            as_int=True,
+        )
+        if override_data["attendance_days"] is not None:
+            attendance_days = _round2(float(override_data["attendance_days"] or 0))
+            actual_attendance_days = _round2(
+                attendance_days - business_trip_days - marriage_days - funeral_days
+            )
+        else:
+            attendance_days = _round2(
+                actual_attendance_days + business_trip_days + marriage_days + funeral_days
+            )
 
         # 事/病假 = 需要扣除工资的天数
         # 按 本月天数 - 出勤天数 - 厂休天数 - 婚假天数 - 丧假天数 - 加班天数 - 福利天数 的顺序减免
@@ -454,8 +529,6 @@ def build_manager_rows(options: ManagerAttendanceOptions, emp_ids: list[int] | N
             used_benefit = 0.0
             personal_sick_days = 0.0
             overtime_change = overtime_earned
-            # 写回加班表（正数 = 加班）
-            _write_manager_month_stat("overtime", employee.id, options.month, overtime_earned)
         else:
             overtime_earned = 0.0
 
@@ -472,12 +545,6 @@ def build_manager_rows(options: ManagerAttendanceOptions, emp_ids: list[int] | N
 
             # Step 3: anything left is 事/病假 (deductible)
             personal_sick_days = _round2(max(remaining_after_overtime - used_benefit, 0.0))
-
-            # Write back to stats tables
-            if used_overtime > 0:
-                _write_manager_month_stat("overtime", employee.id, options.month, -used_overtime)
-            if used_benefit > 0:
-                _write_manager_month_stat("annual_leave", employee.id, options.month, used_benefit)
 
             # 加班变化 = 使用了剩余加班天数用负数表示
             overtime_change = -used_overtime if used_overtime > 0 else 0.0
@@ -501,6 +568,7 @@ def build_manager_rows(options: ManagerAttendanceOptions, emp_ids: list[int] | N
                 "dept_name": employee.department.dept_name if employee.department else "",
                 "name": employee.name,
                 "attendance_days": attendance_days,
+                "actual_attendance_days": actual_attendance_days,
                 "personal_sick_days": personal_sick_days,
                 "injury_days": _round2(injury_days),
                 "business_trip_days": _round2(business_trip_days),
@@ -517,22 +585,41 @@ def build_manager_rows(options: ManagerAttendanceOptions, emp_ids: list[int] | N
     return rows
 
 
-def rows_as_table(rows: list[dict[str, object]]) -> list[list[object]]:
+def rows_as_table(rows: list[dict[str, object]], include_actual_attendance_days: bool = True) -> list[list[object]]:
     return [
-        [
-            row.get("dept_name", ""),
-            row.get("name", ""),
-            row.get("attendance_days", 0),
-            row.get("personal_sick_days", 0),
-            row.get("injury_days", 0),
-            row.get("business_trip_days", 0),
-            row.get("marriage_days", 0),
-            row.get("funeral_days", 0),
-            row.get("late_early_minutes", 0),
-            row.get("summary", ""),
-            row.get("benefit_days", 0),
-            row.get("overtime_change", 0),
-            row.get("remark", ""),
-        ]
+        (
+            [
+                row.get("dept_name", ""),
+                row.get("name", ""),
+                row.get("attendance_days", 0),
+                row.get("actual_attendance_days", 0),
+                row.get("personal_sick_days", 0),
+                row.get("injury_days", 0),
+                row.get("business_trip_days", 0),
+                row.get("marriage_days", 0),
+                row.get("funeral_days", 0),
+                row.get("late_early_minutes", 0),
+                row.get("summary", ""),
+                row.get("benefit_days", 0),
+                row.get("overtime_change", 0),
+                row.get("remark", ""),
+            ]
+            if include_actual_attendance_days
+            else [
+                row.get("dept_name", ""),
+                row.get("name", ""),
+                row.get("attendance_days", 0),
+                row.get("personal_sick_days", 0),
+                row.get("injury_days", 0),
+                row.get("business_trip_days", 0),
+                row.get("marriage_days", 0),
+                row.get("funeral_days", 0),
+                row.get("late_early_minutes", 0),
+                row.get("summary", ""),
+                row.get("benefit_days", 0),
+                row.get("overtime_change", 0),
+                row.get("remark", ""),
+            ]
+        )
         for row in rows
     ]

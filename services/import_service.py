@@ -242,6 +242,16 @@ class ImportService:
         return score
 
     @staticmethod
+    def _is_manager_daily_raw(raw: dict[str, Any]) -> bool:
+        return "日期" in raw and (
+            "考勤组" in raw
+            or "上班1打卡时间" in raw
+            or "下班1打卡时间" in raw
+            or "上班2打卡时间" in raw
+            or "下班2打卡时间" in raw
+        )
+
+    @staticmethod
     def _parse_manager_record_date(value: Any):
         text = clean_text(value)
         m = re.search(r"(\d{2,4})[-/](\d{1,2})[-/](\d{1,2})", text)
@@ -515,6 +525,10 @@ class ImportService:
                 if out_val:
                     check_out_times.append(out_val)
 
+            existing_raw = record.raw_data if isinstance(record.raw_data, dict) else {}
+            if emp.is_manager and ImportService._is_manager_daily_raw(existing_raw):
+                continue
+
             record.shift_id = shift.id if shift else None
             record.expected_hours = parse_float(ImportService._get_row_value(row, ImportService._find_col(header_map, "应出勤小时")))
             record.actual_hours = parse_float(ImportService._get_row_value(row, ImportService._find_col(header_map, "实出勤小时")))
@@ -635,7 +649,14 @@ class ImportService:
 
             raw_data = ImportService._raw_dict_from_header_map(row, header_map)
             existing_raw = record.raw_data if isinstance(record.raw_data, dict) else {}
-            if ImportService._manager_raw_score(existing_raw) > ImportService._manager_raw_score(raw_data):
+            is_manager_raw = ImportService._is_manager_daily_raw(raw_data)
+            existing_is_manager_raw = ImportService._is_manager_daily_raw(existing_raw)
+            if existing_is_manager_raw and not is_manager_raw:
+                continue
+            if (
+                not (is_manager_raw and not existing_is_manager_raw)
+                and ImportService._manager_raw_score(existing_raw) > ImportService._manager_raw_score(raw_data)
+            ):
                 continue
             record.actual_hours = parse_float(ImportService._get_row_value(row, ImportService._find_col(header_map, "工作时长")))
             record.late_minutes = parse_int(ImportService._get_row_value(row, ImportService._find_col(header_map, "迟到时长")))

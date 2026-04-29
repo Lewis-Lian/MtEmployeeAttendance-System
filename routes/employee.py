@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 from collections import defaultdict
+from copy import copy
 from datetime import date, datetime, time, timedelta
 import math
 import re
@@ -25,6 +26,7 @@ from services.manager_attendance_service import (
     MANAGER_HEADERS,
     ManagerAttendanceOptions,
     build_manager_rows,
+    manager_headers,
     rows_as_table,
 )
 from routes.auth import login_required
@@ -1200,7 +1202,31 @@ def manager_annual_leave_query_api():
     )
 
 
-def _fill_manager_template(ws, rows: list[dict[str, object]]) -> None:
+def _fill_manager_template(ws, rows: list[dict[str, object]], include_actual_attendance_days: bool = True) -> None:
+    headers = manager_headers(include_actual_attendance_days)
+
+    if include_actual_attendance_days and ws.max_column == len(MANAGER_HEADERS) - 2 and ws.cell(1, 4).value == "事/病假":
+        ws.insert_cols(4)
+        for row_idx in range(1, ws.max_row + 1):
+            source = ws.cell(row_idx, 3)
+            target = ws.cell(row_idx, 4)
+            target._style = copy(source._style)
+            if source.number_format:
+                target.number_format = source.number_format
+    funeral_col_idx = 9 if include_actual_attendance_days else 8
+    late_col_idx = funeral_col_idx + 1
+    if ws.max_column == len(headers) - 1 and ws.cell(1, funeral_col_idx).value == "迟到\\早退":
+        ws.insert_cols(funeral_col_idx)
+        for row_idx in range(1, ws.max_row + 1):
+            source = ws.cell(row_idx, late_col_idx)
+            target = ws.cell(row_idx, funeral_col_idx)
+            target._style = copy(source._style)
+            if source.number_format:
+                target.number_format = source.number_format
+    ws.column_dimensions["K" if include_actual_attendance_days else "J"].width = 12.6666666666667
+    for col_idx, header in enumerate(headers, start=1):
+        ws.cell(1, col_idx).value = header
+
     by_name = {str(row.get("name", "")).strip(): row for row in rows}
     filled_names: set[str] = set()
 
@@ -1211,6 +1237,7 @@ def _fill_manager_template(ws, rows: list[dict[str, object]]) -> None:
         item = by_name[name]
         values = [
             item.get("attendance_days", 0),
+            *([item.get("actual_attendance_days", 0)] if include_actual_attendance_days else []),
             item.get("personal_sick_days", 0),
             item.get("injury_days", 0),
             item.get("business_trip_days", 0),
@@ -1235,6 +1262,7 @@ def _fill_manager_template(ws, rows: list[dict[str, object]]) -> None:
                 item.get("dept_name", ""),
                 name,
                 item.get("attendance_days", 0),
+                *([item.get("actual_attendance_days", 0)] if include_actual_attendance_days else []),
                 item.get("personal_sick_days", 0),
                 item.get("injury_days", 0),
                 item.get("business_trip_days", 0),
@@ -1259,18 +1287,19 @@ def manager_attendance_export_api():
         emp_ids = [emp_id for emp_id in requested_ids if emp_id in allowed]
     options = _manager_options()
     rows = build_manager_rows(options, emp_ids)
+    include_actual_attendance_days = request.args.get("show_actual_attendance_days") == "1"
 
     template_path = "/home/lewis/文档/考勤/管理人员最终输出输出模板.xlsx"
     if os.path.exists(template_path):
         wb = openpyxl.load_workbook(template_path)
         ws = wb.active
-        _fill_manager_template(ws, rows)
+        _fill_manager_template(ws, rows, include_actual_attendance_days)
     else:
         wb = openpyxl.Workbook()
         ws = wb.active
         ws.title = "管理人员查询"
-        ws.append(MANAGER_HEADERS)
-        for row in rows_as_table(rows):
+        ws.append(manager_headers(include_actual_attendance_days))
+        for row in rows_as_table(rows, include_actual_attendance_days):
             ws.append(row)
 
     output = BytesIO()

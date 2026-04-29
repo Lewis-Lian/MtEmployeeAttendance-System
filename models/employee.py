@@ -20,6 +20,9 @@ class Employee(db.Model):
     leave_records = db.relationship("LeaveRecord", back_populates="employee", cascade="all, delete-orphan")
     annual_leave = db.relationship("AnnualLeave", back_populates="employee", cascade="all, delete-orphan")
     manager_month_stats = db.relationship("ManagerMonthStat", back_populates="employee", cascade="all, delete-orphan")
+    manager_attendance_overrides = db.relationship(
+        "ManagerAttendanceOverride", back_populates="employee", cascade="all, delete-orphan"
+    )
     user_assignments = db.relationship(
         "UserEmployeeAssignment", back_populates="employee", cascade="all, delete-orphan"
     )

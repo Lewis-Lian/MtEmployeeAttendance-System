@@ -1,46 +1,50 @@
 {% extends 'base.html' %}
-{% block title %}管理人员查询{% endblock %}
-{% block page_intro %}按账套查询管理人员考勤汇总，并按管理人员模板导出。{% endblock %}
+{% block title %}考勤修正{% endblock %}
+{% block page_intro %}按人员和月份维护管理人员考勤字段的手工修正。{% endblock %}
 {% block content %}
 <div class="row g-3 mb-3">
   <div class="col-md-6 col-xl-3">
     <div class="summary-card dashboard-metric-card">
-      <div class="dashboard-metric-label">当前账套</div>
-      <div class="dashboard-metric-value dashboard-metric-text" id="managerMetricAccountSet">未选择</div>
-      <div class="dashboard-metric-sub">查询时按所选月度账套取数</div>
+      <div class="dashboard-metric-label">修正月份</div>
+      <div class="dashboard-metric-value dashboard-metric-text" id="managerAttendanceOverrideMetricMonth">-</div>
+      <div class="dashboard-metric-sub">按月份维护管理人员考勤</div>
     </div>
   </div>
   <div class="col-md-6 col-xl-3">
     <div class="summary-card dashboard-metric-card">
-      <div class="dashboard-metric-label">厂休天数</div>
-      <div class="dashboard-metric-value" id="managerMetricFactoryRest">0</div>
-      <div class="dashboard-metric-sub">本月厂休天数</div>
+      <div class="dashboard-metric-label">当前人员</div>
+      <div class="dashboard-metric-value dashboard-metric-text" id="managerAttendanceOverrideMetricEmployee">未选择</div>
+      <div class="dashboard-metric-sub">只支持管理人员</div>
     </div>
   </div>
   <div class="col-md-6 col-xl-3">
     <div class="summary-card dashboard-metric-card">
-      <div class="dashboard-metric-label">福利天数</div>
-      <div class="dashboard-metric-value" id="managerMetricBenefitDays">0</div>
-      <div class="dashboard-metric-sub">用于管理人员汇总计算</div>
+      <div class="dashboard-metric-label">修正字段</div>
+      <div class="dashboard-metric-value">6</div>
+      <div class="dashboard-metric-sub">出勤、工伤、出差、婚丧假、迟到早退</div>
     </div>
   </div>
   <div class="col-md-6 col-xl-3">
     <div class="summary-card dashboard-metric-card">
-      <div class="dashboard-metric-label">结果记录</div>
-      <div class="dashboard-metric-value" id="managerMetricResultRows">0</div>
-      <div class="dashboard-metric-sub" id="managerMetricResultRowsSub">点击查询后更新</div>
+      <div class="dashboard-metric-label">当前状态</div>
+      <div class="dashboard-metric-value dashboard-metric-text" id="managerAttendanceOverrideMetricStatus">等待查询</div>
+      <div class="dashboard-metric-sub">空值表示使用系统自动值</div>
     </div>
   </div>
 </div>
 
-<div class="card mb-4">
+<div class="card mb-4 manager-info-panel">
   <div class="card-header d-flex justify-content-between align-items-center">
     <span>查询条件</span>
-    <span class="small text-muted">按账套生成管理人员考勤汇总</span>
+    <span class="small text-muted">选择人员和月份后维护手工修正值</span>
   </div>
   <div class="card-body">
     <div class="row g-3 align-items-end">
-      <div class="col-lg-5">
+      <div class="col-lg-3 col-md-4">
+        <label class="form-label">月份</label>
+        <input class="form-control" type="month" id="managerAttendanceOverrideMonth">
+      </div>
+      <div class="col-lg-5 col-md-8">
         <label class="form-label">管理人员</label>
         <div class="employee-lookup" id="employeeLookup">
           <div class="input-group input-group-sm">
@@ -53,23 +57,12 @@
           <div class="employee-float-list" id="employeeQuickList"></div>
         </div>
       </div>
-      <div class="col-lg-3">
-        <label class="form-label">账套</label>
-        <select class="form-select" id="managerAccountSetSelect"></select>
-      </div>
-      <div class="col-lg-2">
-        <label class="form-label">显示选项</label>
-        <div class="dashboard-check-stack">
-          <label class="dashboard-check-option" for="showActualAttendanceDaysToggle">
-            <input class="form-check-input m-0" type="checkbox" id="showActualAttendanceDaysToggle">
-            <span>实际出勤天数</span>
-          </label>
-        </div>
-      </div>
-      <div class="col-lg-2">
-        <div class="dashboard-action-group">
-          <button class="btn btn-primary" id="managerQueryBtn">查询</button>
-          <button class="btn btn-outline-success" id="managerDownloadBtn">下载XLSX</button>
+      <div class="col-lg-4">
+        <label class="form-label">主要操作</label>
+        <div class="manager-info-actions">
+          <button class="btn btn-primary" id="managerAttendanceOverrideQueryBtn">查询</button>
+          <button class="btn btn-outline-primary" id="managerAttendanceOverrideSaveBtn">保存修改</button>
+          <button class="btn btn-outline-danger" id="managerAttendanceOverrideClearBtn">清空修正</button>
         </div>
       </div>
     </div>
@@ -140,21 +133,38 @@
   </div>
 </div>
 
-<div class="card">
+<div class="card table-wrap-tight">
   <div class="card-header d-flex justify-content-between align-items-center">
-    <span>管理人员考勤汇总</span>
-    <span class="small text-muted" id="managerQueryMeta">等待查询</span>
+    <span>管理人员考勤修正</span>
+    <span class="small text-muted">系统值只读，手工值留空则不覆盖</span>
   </div>
-  <div class="table-responsive">
-    <table class="table table-sm table-striped mb-0" id="managerQueryTable">
-      <thead id="managerQueryHead"></thead>
-      <tbody id="managerQueryBody">
-        <tr><td class="text-muted">请点击查询</td></tr>
+  <div class="table-responsive manager-info-table">
+    <table class="table table-sm table-striped mb-0 align-middle">
+      <thead>
+        <tr>
+          <th>字段</th>
+          <th>系统自动值</th>
+          <th>手工修正值</th>
+          <th>最终应用值</th>
+        </tr>
+      </thead>
+      <tbody id="managerAttendanceOverrideBody">
+        <tr><td class="text-muted" colspan="4">请点击查询</td></tr>
       </tbody>
     </table>
   </div>
 </div>
+
+<div class="card mt-4">
+  <div class="card-header d-flex justify-content-between align-items-center">
+    <span>修正备注</span>
+    <span class="small text-muted" id="managerAttendanceOverrideUpdatedAt">未保存</span>
+  </div>
+  <div class="card-body">
+    <textarea class="form-control" id="managerAttendanceOverrideRemark" rows="3" placeholder="可填写修正原因"></textarea>
+  </div>
+</div>
 {% endblock %}
 {% block scripts %}
-<script src="{{ url_for('static', filename='js/manager_query.js') }}"></script>
+<script src="{{ url_for('static', filename='js/manager_attendance_overrides.js') }}"></script>
 {% endblock %}

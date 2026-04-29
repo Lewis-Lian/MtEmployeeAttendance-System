@@ -20,6 +20,7 @@ from models.overtime import OvertimeRecord
 from models.leave import LeaveRecord
 from models.annual_leave import AnnualLeave
 from models.manager_month_stat import ManagerMonthStat
+from models.manager_attendance_override import ManagerAttendanceOverride
 from models.employee_shift import EmployeeShiftAssignment
 from models.account_set import AccountSet, AccountSetImport
 from routes import register_routes
