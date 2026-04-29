@@ -7,9 +7,9 @@ from datetime import date, datetime, time
 
 from models import db
 from models.employee import Employee
-from models.monthly_report import MonthlyReport
 from models.daily_record import DailyRecord
 from models.leave import LeaveRecord
+from models.monthly_report import MonthlyReport
 from models.manager_month_stat import ManagerMonthStat
 
 
@@ -72,12 +72,12 @@ def _int_value(value: object) -> int:
     return int(round(_float_value(value)))
 
 
-def _raw_float(raw: dict, *keys: str) -> float:
+def _raw_float(raw: dict, *keys: str) -> float | None:
     for key in keys:
         value = raw.get(key)
         if value not in (None, ""):
             return _float_value(value)
-    return 0.0
+    return None
 
 
 def _raw_minutes(raw: dict, *keys: str) -> int:
@@ -322,6 +322,39 @@ def _compute_benefit_used(emp_id: int, month: str, factory_rest_days: float) -> 
     return available
 
 
+_MANAGER_PUNCH_TIME_KEYS = (
+    "上班1打卡时间",
+    "下班1打卡时间",
+    "上班2打卡时间",
+    "下班2打卡时间",
+    "上班3打卡时间",
+    "下班3打卡时间",
+    "上班4打卡时间",
+    "下班4打卡时间",
+)
+
+
+def _has_manager_punch_record(record: DailyRecord) -> bool:
+    raw = record.raw_data if isinstance(record.raw_data, dict) else {}
+    punch_data = str(raw.get("刷卡时间数据") or "").strip()
+    if punch_data:
+        return True
+    return any(str(raw.get(key) or "").strip() for key in _MANAGER_PUNCH_TIME_KEYS)
+
+
+def _manager_attendance_days(employee_id: int, month: str) -> float:
+    date_range = _month_date_range(month)
+    if not date_range:
+        return 0.0
+    start_date, end_date = date_range
+    rows = (
+        DailyRecord.query.filter_by(emp_id=employee_id)
+        .filter(DailyRecord.record_date >= start_date, DailyRecord.record_date < end_date)
+        .all()
+    )
+    return _round2(sum(1 for row in rows if _has_manager_punch_record(row)))
+
+
 def _manager_schedule_late_minutes(employee_id: int, month: str) -> int:
     """Only count 上午 (上班1) late minutes from the daily record raw data.
     哺乳假人员迟到计为0。
@@ -393,8 +426,16 @@ def build_manager_rows(options: ManagerAttendanceOptions, emp_ids: list[int] | N
             elif bucket == "time_off" and days == 0.5:
                 half_time_off_days += days
 
-        # 出勤天数 = 管理人员月报里面的天数 - 请假半天的天数 - 加班半天的天数
-        attendance_days = _round2(raw_attendance_days - half_leave_days - half_time_off_days)
+        base_attendance_days = (
+            raw_attendance_days
+            if raw_attendance_days is not None
+            else _manager_attendance_days(employee.id, options.month)
+        )
+
+        # 出勤天数 = 月报出勤天数(失败时按刷卡天数兜底) - 请假半天的天数 - 调休半天的天数
+        attendance_days = _round2(
+            base_attendance_days - half_leave_days - half_time_off_days
+        )
 
         # 事/病假 = 需要扣除工资的天数
         # 按 本月天数 - 出勤天数 - 厂休天数 - 婚假天数 - 丧假天数 - 加班天数 - 福利天数 的顺序减免

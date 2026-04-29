@@ -426,15 +426,27 @@ def calculate_account_set(account_set_id: int):
 
     manager_stats_sync = None
     if mode == "manager" and failed == 0:
-        manager_options = ManagerAttendanceOptions(
-            month=row.month,
-            factory_rest_days=row.factory_rest_days or 0,
-            monthly_benefit_days=row.monthly_benefit_days or 0,
-        )
-        manager_rows = build_manager_rows(manager_options)
-        manager_stats_sync = _sync_manager_stats_from_manager_rows(row.month, manager_rows)
-        if manager_stats_sync["error_count"]:
-            failed += manager_stats_sync["error_count"]
+        try:
+            manager_options = ManagerAttendanceOptions(
+                month=row.month,
+                factory_rest_days=row.factory_rest_days or 0,
+                monthly_benefit_days=row.monthly_benefit_days or 0,
+            )
+            manager_rows = build_manager_rows(manager_options)
+            manager_stats_sync = _sync_manager_stats_from_manager_rows(row.month, manager_rows)
+            if manager_stats_sync["error_count"]:
+                failed += manager_stats_sync["error_count"]
+            db.session.commit()
+        except Exception as exc:
+            db.session.rollback()
+            failed += 1
+            manager_stats_sync = {
+                "month": row.month,
+                "overtime_synced": 0,
+                "annual_leave_synced": 0,
+                "error_count": 1,
+                "errors": [str(exc)],
+            }
 
     return jsonify(
         {
@@ -740,15 +752,6 @@ def _manager_export_months(year: int) -> list[tuple[str, str]]:
     return months
 
 
-def _account_set_options(month: str) -> ManagerAttendanceOptions:
-    account_set = AccountSet.query.filter_by(month=month).first()
-    return ManagerAttendanceOptions(
-        month=month,
-        factory_rest_days=(account_set.factory_rest_days if account_set else 0) or 0,
-        monthly_benefit_days=(account_set.monthly_benefit_days if account_set else 0) or 0,
-    )
-
-
 def _manager_base_month_values() -> dict[str, dict[str, object]]:
     employees = Employee.query.filter_by(is_manager=True).order_by(Employee.dept_id.asc(), Employee.emp_no.asc()).all()
     return {
@@ -991,34 +994,9 @@ def _import_manager_stat_file(stat_type: str, year: int):
 
 
 def _manager_overtime_values(year: int) -> dict[str, dict[str, object]]:
-    employees = Employee.query.filter_by(is_manager=True).order_by(Employee.dept_id.asc(), Employee.emp_no.asc()).all()
-    values_by_name = {
-        employee.name: {
-            "emp_id": employee.id,
-            "dept_name": employee.department.dept_name if employee.department else "",
-            "remark": "",
-        }
-        for employee in employees
-    }
-
-    month_keys = _manager_export_months(year)
-    for idx, (month, _label) in enumerate(month_keys):
-        key = "prev_dec" if idx == 0 else f"m{idx}"
-        rows = build_manager_rows(_account_set_options(month), [employee.id for employee in employees])
-        for row in rows:
-            name = str(row.get("name", "")).strip()
-            if name not in values_by_name:
-                continue
-            values_by_name[name][key] = row.get("overtime_change", 0)
-
+    values_by_name = _manager_base_month_values()
     for values in values_by_name.values():
-        total = 0.0
-        for key in _month_value_keys():
-            try:
-                total += float(values.get(key) or 0)
-            except (TypeError, ValueError):
-                pass
-        values["remaining"] = round(total, 2)
+        values["remaining"] = 0
     _apply_saved_manager_stats(values_by_name, year, "overtime")
     return values_by_name
 
