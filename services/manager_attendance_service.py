@@ -427,6 +427,7 @@ def build_manager_rows(
     options: ManagerAttendanceOptions,
     emp_ids: list[int] | None = None,
     include_overrides: bool = True,
+    sync_month_stats: bool = False,
 ) -> list[dict[str, object]]:
     query = Employee.query.filter_by(is_manager=True)
     if emp_ids is not None:
@@ -513,13 +514,11 @@ def build_manager_rows(
             )
 
         # 事/病假 = 需要扣除工资的天数
-        # 按 本月天数 - 出勤天数 - 厂休天数 - 婚假天数 - 丧假天数 - 加班天数 - 福利天数 的顺序减免
+        # 出勤天数已包含出差、婚假、丧假；缺口不再重复扣婚丧假。
         absence_gap = _round2(
             month_days
             - attendance_days
             - options.factory_rest_days
-            - marriage_days
-            - funeral_days
         )
 
         if absence_gap < 0:
@@ -529,6 +528,9 @@ def build_manager_rows(
             used_benefit = 0.0
             personal_sick_days = 0.0
             overtime_change = overtime_earned
+            if sync_month_stats:
+                _write_manager_month_stat("overtime", employee.id, options.month, overtime_earned)
+                _write_manager_month_stat("annual_leave", employee.id, options.month, used_benefit)
         else:
             overtime_earned = 0.0
 
@@ -545,6 +547,10 @@ def build_manager_rows(
 
             # Step 3: anything left is 事/病假 (deductible)
             personal_sick_days = _round2(max(remaining_after_overtime - used_benefit, 0.0))
+
+            if sync_month_stats:
+                _write_manager_month_stat("overtime", employee.id, options.month, -used_overtime)
+                _write_manager_month_stat("annual_leave", employee.id, options.month, used_benefit)
 
             # 加班变化 = 使用了剩余加班天数用负数表示
             overtime_change = -used_overtime if used_overtime > 0 else 0.0

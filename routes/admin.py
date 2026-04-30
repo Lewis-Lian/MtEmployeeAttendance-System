@@ -433,7 +433,7 @@ def calculate_account_set(account_set_id: int):
                 factory_rest_days=row.factory_rest_days or 0,
                 monthly_benefit_days=row.monthly_benefit_days or 0,
             )
-            manager_rows = build_manager_rows(manager_options)
+            manager_rows = build_manager_rows(manager_options, sync_month_stats=True)
             manager_stats_sync = _sync_manager_stats_from_manager_rows(row.month, manager_rows)
             if manager_stats_sync["error_count"]:
                 failed += manager_stats_sync["error_count"]
