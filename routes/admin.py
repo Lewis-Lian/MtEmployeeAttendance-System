@@ -20,6 +20,7 @@ from models.overtime import OvertimeRecord
 from models.annual_leave import AnnualLeave
 from models.manager_month_stat import ManagerMonthStat
 from models.manager_attendance_override import ManagerAttendanceOverride
+from models.employee_attendance_override import EmployeeAttendanceOverride
 from models.user import User, UserEmployeeAssignment, UserDepartmentAssignment
 from services.import_service import ImportService
 from services.manager_attendance_service import ManagerAttendanceOptions, build_manager_rows
@@ -1936,6 +1937,150 @@ def annotate_record(record_id: int):
     record.exception_reason = reason
     db.session.commit()
     return jsonify({"status": "ok"})
+
+
+@admin_bp.route("/employee-attendance-overrides")
+@admin_required
+def employee_attendance_overrides_page():
+    employees = (
+        Employee.query.filter_by(is_manager=False)
+        .order_by(Employee.dept_id.asc(), Employee.emp_no.asc(), Employee.name.asc())
+        .all()
+    )
+    return render_template("admin/employee_attendance_overrides.html", employees=employees)
+
+
+_EMPLOYEE_OVERRIDE_FIELDS = (
+    "attendance_days",
+    "work_hours",
+    "half_days",
+    "late_early_minutes",
+)
+
+
+def _employee_override_values(override: EmployeeAttendanceOverride | None) -> dict[str, float | int | None]:
+    return {field: getattr(override, field) if override else None for field in _EMPLOYEE_OVERRIDE_FIELDS}
+
+
+def _employee_automatic_row(emp_id: int, month: str) -> dict[str, object] | None:
+    from routes.employee import _build_final_rows
+
+    rows = _build_final_rows(month, [emp_id])
+    if not rows:
+        return None
+    row = rows[0]
+    return {
+        "attendance_days": row[3],
+        "work_hours": row[16],
+        "half_days": row[17],
+        "late_early_minutes": _employee_late_early_minutes(emp_id, month),
+    }
+
+
+def _employee_late_early_minutes(emp_id: int, month: str) -> int:
+    from routes.employee import _month_date_range
+
+    date_range = _month_date_range(month)
+    if not date_range:
+        return 0
+    start_date, end_date = date_range
+    records = (
+        DailyRecord.query.filter_by(emp_id=emp_id)
+        .filter(DailyRecord.record_date >= start_date, DailyRecord.record_date < end_date)
+        .all()
+    )
+    return sum((r.late_minutes or 0) + (r.early_leave_minutes or 0) for r in records)
+
+
+def _employee_override_payload(row: EmployeeAttendanceOverride | None) -> dict[str, object]:
+    payload = {field: getattr(row, field) if row else None for field in _EMPLOYEE_OVERRIDE_FIELDS}
+    payload["remark"] = row.remark if row else ""
+    payload["updated_at"] = row.updated_at.isoformat() if row and row.updated_at else None
+    return payload
+
+
+def _employee_override_response(emp_id: int, month: str) -> tuple[dict[str, object], int]:
+    employee = Employee.query.get(emp_id)
+    if not employee or employee.is_manager:
+        return {"error": "employee is a manager, not a regular employee"}, 400
+    automatic = _employee_automatic_row(emp_id, month)
+    override = EmployeeAttendanceOverride.query.filter_by(emp_id=emp_id, month=month).first()
+    override_data = _employee_override_values(override)
+    applied: dict[str, object] = {}
+    if automatic:
+        for field in _EMPLOYEE_OVERRIDE_FIELDS:
+            applied[field] = override_data[field] if override_data[field] is not None else automatic.get(field)
+    return {
+        "employee": _serialize_employee(employee),
+        "month": month,
+        "automatic": automatic,
+        "override": _employee_override_payload(override),
+        "applied": applied,
+    }, 200
+
+
+@admin_bp.route("/employee-attendance-overrides/record", methods=["GET"])
+@admin_required
+def employee_attendance_override_record():
+    emp_id = request.args.get("emp_id", type=int) or 0
+    month = _validate_month(request.args.get("month"))
+    if not emp_id or not month:
+        return jsonify({"error": "请选择员工和有效月份"}), 400
+    payload, status = _employee_override_response(emp_id, month)
+    return jsonify(payload), status
+
+
+@admin_bp.route("/employee-attendance-overrides/record", methods=["PUT"])
+@admin_required
+def save_employee_attendance_override_record():
+    data = request.json or {}
+    emp_id = int(data.get("emp_id") or 0)
+    month = _validate_month(data.get("month"))
+    if not emp_id or not month:
+        return jsonify({"error": "请选择员工和有效月份"}), 400
+    employee = Employee.query.get(emp_id)
+    if not employee or employee.is_manager:
+        return jsonify({"error": "员工不存在或是管理人员"}), 400
+
+    values: dict[str, float | int | None] = {}
+    for key in ("attendance_days", "work_hours"):
+        value, error = _nullable_float(data, key)
+        if error:
+            return jsonify({"error": error}), 400
+        values[key] = value
+    for key in ("half_days", "late_early_minutes"):
+        value, error = _nullable_int(data, key)
+        if error:
+            return jsonify({"error": error}), 400
+        values[key] = value
+
+    row = EmployeeAttendanceOverride.query.filter_by(emp_id=emp_id, month=month).first()
+    if not row:
+        row = EmployeeAttendanceOverride(emp_id=emp_id, month=month)
+        db.session.add(row)
+    for key, value in values.items():
+        setattr(row, key, value)
+    row.remark = (data.get("remark") or "").strip()
+    row.updated_by = g.current_user.id
+    db.session.commit()
+
+    payload, status = _employee_override_response(emp_id, month)
+    return jsonify(payload), status
+
+
+@admin_bp.route("/employee-attendance-overrides/record", methods=["DELETE"])
+@admin_required
+def delete_employee_attendance_override_record():
+    emp_id = request.args.get("emp_id", type=int) or 0
+    month = _validate_month(request.args.get("month"))
+    if not emp_id or not month:
+        return jsonify({"error": "请选择员工和有效月份"}), 400
+    row = EmployeeAttendanceOverride.query.filter_by(emp_id=emp_id, month=month).first()
+    if row:
+        db.session.delete(row)
+        db.session.commit()
+    payload, status = _employee_override_response(emp_id, month)
+    return jsonify(payload), status
 
 
 @admin_bp.route("/")

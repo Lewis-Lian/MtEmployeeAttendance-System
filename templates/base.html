@@ -79,8 +79,11 @@
         <a class="app-side-link {% if request.path.startswith('/admin/manager-annual-leave') %}is-active{% endif %}" href="/admin/manager-annual-leave" title="年休信息">
           <span class="app-side-icon icon-attendance" aria-hidden="true"></span><span class="app-side-label">年休信息</span>
         </a>
-        <a class="app-side-link {% if request.path.startswith('/admin/manager-attendance-overrides') %}is-active{% endif %}" href="/admin/manager-attendance-overrides" title="考勤修正">
-          <span class="app-side-icon icon-attendance" aria-hidden="true"></span><span class="app-side-label">考勤修正</span>
+        <a class="app-side-link {% if request.path.startswith('/admin/employee-attendance-overrides') %}is-active{% endif %}" href="/admin/employee-attendance-overrides" title="员工考勤修正">
+          <span class="app-side-icon icon-attendance" aria-hidden="true"></span><span class="app-side-label">员工考勤修正</span>
+        </a>
+        <a class="app-side-link {% if request.path.startswith('/admin/manager-attendance-overrides') %}is-active{% endif %}" href="/admin/manager-attendance-overrides" title="管理人员考勤修正">
+          <span class="app-side-icon icon-attendance" aria-hidden="true"></span><span class="app-side-label">管理人员考勤修正</span>
         </a>
         <a class="app-side-link {% if request.path.startswith('/admin/accounts') %}is-active{% endif %}" href="/admin/accounts" title="账号管理">
           <span class="app-side-icon icon-account" aria-hidden="true"></span><span class="app-side-label">账号管理</span>
