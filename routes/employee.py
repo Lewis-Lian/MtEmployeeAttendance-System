@@ -622,7 +622,7 @@ def _build_final_rows(month: str, emp_ids: list[int]) -> list[list[object]]:
         half_days = sum(
             1
             for idx, r in enumerate(daily_rows)
-            if _punch_count(r) == 2 and (day_work_stats[idx][0]) < 5.1 and day_work_stats[idx][0] > 0
+            if _punch_count(r) == 2 and 2 <= (day_work_stats[idx][0]) < 5.1
         )
         work_hours = round(sum(x[0] for x in day_work_stats), 2)
 
