@@ -52,6 +52,9 @@
         <a class="app-side-link {% if request.path.startswith('/employee/department-hours-query') %}is-active{% endif %}" href="/employee/department-hours-query" title="员工部门工时查询">
           <span class="app-side-icon icon-hours" aria-hidden="true"></span><span class="app-side-label">员工部门工时查询</span>
         </a>
+        <a class="app-side-link {% if request.path.startswith('/employee/summary-download') %}is-active{% endif %}" href="/employee/summary-download" title="汇总下载">
+          <span class="app-side-icon icon-attendance" aria-hidden="true"></span><span class="app-side-label">汇总下载</span>
+        </a>
       </nav>
     </div>
     {% if g.current_user and g.current_user.role == "admin" %}

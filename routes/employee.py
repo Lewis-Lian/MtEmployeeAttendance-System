@@ -77,6 +77,19 @@ LEAVE_DURATION_HEADERS = {
 
 
 def _filter_final_columns(headers: list[str], rows: list[list[object]]) -> tuple[list[str], list[list[object]]]:
+    requested = (request.args.get("final_headers") or "").strip()
+    if requested:
+        wanted = [h.strip() for h in requested.split(",") if h.strip()]
+        wanted_set = set(wanted)
+        keep_indexes: list[int] = []
+        filtered_headers: list[str] = []
+        for idx, header in enumerate(headers):
+            if header in wanted_set:
+                keep_indexes.append(idx)
+                filtered_headers.append(header)
+        filtered_rows = [[row[idx] if idx < len(row) else "" for idx in keep_indexes] for row in rows]
+        return filtered_headers, filtered_rows
+
     show_leave_counts = request.args.get("show_leave_counts", "").strip() in {"1", "true", "True"}
     show_leave_durations = request.args.get("show_leave_durations", "").strip() in {"1", "true", "True"}
 
@@ -90,6 +103,22 @@ def _filter_final_columns(headers: list[str], rows: list[list[object]]) -> tuple
         keep_indexes.append(idx)
         filtered_headers.append(header)
 
+    filtered_rows = [[row[idx] if idx < len(row) else "" for idx in keep_indexes] for row in rows]
+    return filtered_headers, filtered_rows
+
+
+def _filter_punch_columns(headers: list[str], rows: list[list[object]]) -> tuple[list[str], list[list[object]]]:
+    requested = (request.args.get("punch_headers") or "").strip()
+    if not requested:
+        return headers, rows
+    wanted = [h.strip() for h in requested.split(",") if h.strip()]
+    wanted_set = set(wanted)
+    keep_indexes: list[int] = []
+    filtered_headers: list[str] = []
+    for idx, header in enumerate(headers):
+        if header in wanted_set:
+            keep_indexes.append(idx)
+            filtered_headers.append(header)
     filtered_rows = [[row[idx] if idx < len(row) else "" for idx in keep_indexes] for row in rows]
     return filtered_headers, filtered_rows
 
@@ -777,6 +806,14 @@ def punch_records_page():
     return render_template("punch_records.html", employees=employees)
 
 
+@employee_bp.route("/summary-download")
+@login_required
+def summary_download_page():
+    emp_ids = _non_manager_emp_ids(_accessible_emp_ids())
+    employees = Employee.query.filter(Employee.id.in_(emp_ids)).order_by(Employee.emp_no).all() if emp_ids else []
+    return render_template("summary_download.html", employees=employees)
+
+
 @employee_bp.route("/api/account-sets", methods=["GET"])
 @login_required
 def account_sets_api():
@@ -905,7 +942,7 @@ def punch_records_export_api():
             .all()
         )
 
-    headers = [
+    punch_headers = [
         "日期",
         "员工编号",
         "员工姓名",
@@ -920,12 +957,9 @@ def punch_records_export_api():
         "异常原因",
     ]
 
-    wb = openpyxl.Workbook()
-    ws = wb.active
-    ws.title = "打卡数据查询"
-    ws.append(headers)
+    row_data = []
     for r in rows:
-        ws.append(
+        row_data.append(
             [
                 r.record_date.isoformat() if r.record_date else "",
                 r.employee.emp_no if r.employee else "",
@@ -941,6 +975,15 @@ def punch_records_export_api():
                 r.exception_reason or "",
             ]
         )
+
+    headers, row_data = _filter_punch_columns(punch_headers, row_data)
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "打卡数据查询"
+    ws.append(headers)
+    for row in row_data:
+        ws.append(row)
 
     output = BytesIO()
     wb.save(output)
@@ -1139,6 +1182,87 @@ def final_data_export_api():
         output,
         as_attachment=True,
         download_name=f"考勤数据查询_{month}.xlsx",
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+
+
+@employee_bp.route("/api/summary-download/export", methods=["GET"])
+@login_required
+def summary_download_export_api():
+    emp_ids = _pick_emp_ids()
+    if not emp_ids:
+        return jsonify({"error": "No employee selected"}), 400
+
+    month = _resolve_query_month()
+    sheets_raw = (request.args.get("sheets") or "final,punch").strip()
+    include_final = "final" in sheets_raw
+    include_punch = "punch" in sheets_raw
+
+    wb = openpyxl.Workbook()
+
+    if include_final:
+        final_rows = _build_final_rows(month, emp_ids)
+        headers, rows = _filter_final_columns(FINAL_HEADERS, final_rows)
+        ws = wb.active
+        ws.title = "考勤数据查询"
+        ws.append(headers)
+        for row in rows:
+            ws.append(row)
+    else:
+        wb.remove(wb.active)
+
+    if include_punch:
+        date_range = _month_date_range(month)
+        punch_rows = []
+        if date_range:
+            start_date, end_date = date_range
+            punch_rows = (
+                DailyRecord.query.options(joinedload(DailyRecord.employee).joinedload(Employee.department))
+                .join(Employee, DailyRecord.emp_id == Employee.id)
+                .filter(DailyRecord.emp_id.in_(emp_ids))
+                .filter(DailyRecord.record_date >= start_date, DailyRecord.record_date < end_date)
+                .order_by(Employee.emp_no.asc(), DailyRecord.record_date.desc())
+                .all()
+            )
+
+        punch_headers = [
+            "日期", "员工编号", "员工姓名", "部门", "原始打卡数据",
+            "上班打卡", "下班打卡", "打卡次数", "实出勤小时",
+            "迟到分钟", "早退分钟", "异常原因",
+        ]
+
+        punch_row_data = []
+        for r in punch_rows:
+            punch_row_data.append([
+                r.record_date.isoformat() if r.record_date else "",
+                r.employee.emp_no if r.employee else "",
+                r.employee.name if r.employee else "",
+                r.employee.department.dept_name if r.employee and r.employee.department else "",
+                _extract_raw_punch_data(r),
+                _format_punch_times(r.check_in_times),
+                _format_punch_times(r.check_out_times),
+                _raw_punch_count(r),
+                _calc_record_work_hours(r)[0],
+                r.late_minutes or 0,
+                r.early_leave_minutes or 0,
+                r.exception_reason or "",
+            ])
+
+        punch_headers, punch_row_data = _filter_punch_columns(punch_headers, punch_row_data)
+
+        ws2 = wb.create_sheet("打卡数据查询")
+        ws2.append(punch_headers)
+        for row in punch_row_data:
+            ws2.append(row)
+
+    output = BytesIO()
+    wb.save(output)
+    output.seek(0)
+
+    return send_file(
+        output,
+        as_attachment=True,
+        download_name=f"汇总下载_{month}.xlsx",
         mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     )
 
