@@ -68,6 +68,8 @@ body {
   display: flex;
   flex-direction: column;
   gap: 18px;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
 .app-sidebar-brand {

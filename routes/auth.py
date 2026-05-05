@@ -77,6 +77,22 @@ def admin_required(fn):
     return wrapper
 
 
+def page_permission_required(page_key: str):
+    def decorator(fn):
+        @wraps(fn)
+        @login_required
+        def wrapper(*args, **kwargs):
+            if g.current_user.role == "admin" or g.current_user.can_access_page(page_key):
+                return fn(*args, **kwargs)
+            if request.path.startswith("/api/"):
+                return jsonify({"error": "Forbidden"}), 403
+            return redirect(url_for("auth.root"))
+
+        return wrapper
+
+    return decorator
+
+
 @auth_bp.route("/")
 def root():
     token = _extract_token()

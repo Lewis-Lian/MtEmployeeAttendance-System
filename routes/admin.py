@@ -21,7 +21,15 @@ from models.annual_leave import AnnualLeave
 from models.manager_month_stat import ManagerMonthStat
 from models.manager_attendance_override import ManagerAttendanceOverride
 from models.employee_attendance_override import EmployeeAttendanceOverride
-from models.user import User, UserEmployeeAssignment, UserDepartmentAssignment
+from models.user import (
+    ALL_PAGE_PERMISSION_KEYS,
+    EMPLOYEE_PAGE_PERMISSION_KEYS,
+    MANAGER_PAGE_PERMISSION_KEYS,
+    PAGE_PERMISSION_LABELS,
+    User,
+    UserEmployeeAssignment,
+    UserDepartmentAssignment,
+)
 from services.import_service import ImportService
 from services.manager_attendance_service import ManagerAttendanceOptions, build_manager_rows
 from routes.auth import admin_required
@@ -60,6 +68,7 @@ def _serialize_user(user: User) -> dict:
         "username": user.username,
         "role": user.role,
         "created_at": user.created_at.isoformat() if user.created_at else None,
+        "page_permissions": user.effective_page_permissions(),
         "emp_ids": [a.emp_id for a in user.employee_assignments],
         "dept_ids": [a.dept_id for a in user.department_assignments],
         "employees": [
@@ -82,6 +91,27 @@ def _serialize_user(user: User) -> dict:
             if a.department
         ],
     }
+
+
+def _default_page_permissions_for_role(role: str) -> dict[str, bool]:
+    if role == "admin":
+        return {key: True for key in ALL_PAGE_PERMISSION_KEYS}
+    return {key: True for key in ALL_PAGE_PERMISSION_KEYS}
+
+
+def _parse_page_permissions(data: dict | None, role: str, existing_user: User | None = None) -> dict[str, bool]:
+    if role == "admin":
+        return {key: True for key in ALL_PAGE_PERMISSION_KEYS}
+
+    if not data or "page_permissions" not in data:
+        if existing_user and isinstance(existing_user.page_permissions, dict):
+            return existing_user.effective_page_permissions()
+        return _default_page_permissions_for_role(role)
+
+    raw = data.get("page_permissions") or {}
+    if not isinstance(raw, dict):
+        return _default_page_permissions_for_role(role)
+    return {key: bool(raw.get(key, False)) for key in ALL_PAGE_PERMISSION_KEYS}
 
 
 def _sync_user_assignments(user: User, emp_ids: list[int]) -> None:
@@ -467,7 +497,12 @@ def calculate_account_set(account_set_id: int):
 @admin_bp.route("/accounts")
 @admin_required
 def accounts_page():
-    return render_template("admin/accounts.html", current_user_id=g.current_user.id)
+    return render_template(
+        "admin/accounts.html",
+        current_user_id=g.current_user.id,
+        manager_page_permissions=[{"key": key, "label": PAGE_PERMISSION_LABELS[key]} for key in MANAGER_PAGE_PERMISSION_KEYS],
+        employee_page_permissions=[{"key": key, "label": PAGE_PERMISSION_LABELS[key]} for key in EMPLOYEE_PAGE_PERMISSION_KEYS],
+    )
 
 
 @admin_bp.route("/employees/manage")
@@ -1822,6 +1857,7 @@ def create_readonly_user():
 
     user = User(username=username, role="readonly")
     user.set_password(password)
+    user.page_permissions = _parse_page_permissions(data, "readonly")
     db.session.add(user)
     db.session.flush()
 
@@ -1862,6 +1898,7 @@ def create_user():
 
     user = User(username=username, role=role)
     user.set_password(password)
+    user.page_permissions = _parse_page_permissions(data, role)
     db.session.add(user)
     db.session.flush()
     _sync_user_assignments(user, [int(x) for x in emp_ids if str(x).isdigit()])
@@ -1878,6 +1915,7 @@ def update_user(user_id: int):
     emp_ids = data.get("emp_ids")
     dept_ids = data.get("dept_ids")
     user = User.query.get_or_404(user_id)
+    next_role = role or user.role
 
     if user.id == g.current_user.id and role and role != "admin":
         return jsonify({"error": "cannot downgrade current admin"}), 400
@@ -1886,6 +1924,8 @@ def update_user(user_id: int):
         if role not in {"admin", "readonly"}:
             return jsonify({"error": "invalid role"}), 400
         user.role = role
+
+    user.page_permissions = _parse_page_permissions(data, next_role, existing_user=user)
 
     if emp_ids is not None:
         parsed_ids = [int(x) for x in emp_ids if str(x).isdigit()]

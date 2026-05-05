@@ -90,6 +90,11 @@ def _ensure_schema_compatibility() -> None:
         db.session.execute(text("ALTER TABLE account_sets ADD COLUMN monthly_benefit_days FLOAT NOT NULL DEFAULT 0"))
         db.session.commit()
 
+    user_columns = {c["name"] for c in inspector.get_columns("users")}
+    if "page_permissions" not in user_columns:
+        db.session.execute(text("ALTER TABLE users ADD COLUMN page_permissions JSON"))
+        db.session.commit()
+
 
 app = create_app()
 

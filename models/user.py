@@ -1,6 +1,38 @@
 from datetime import datetime
+from typing import Optional, Sequence
 from werkzeug.security import generate_password_hash, check_password_hash
 from . import db
+
+
+PAGE_PERMISSION_LABELS = {
+    "manager_query": "管理人员查询",
+    "manager_overtime_query": "查询加班",
+    "manager_annual_leave_query": "查询年休",
+    "employee_dashboard": "考勤数据查询",
+    "abnormal_query": "员工异常查询",
+    "punch_records": "打卡数据查询",
+    "department_hours_query": "员工部门工时查询",
+    "summary_download": "汇总下载",
+}
+
+MANAGER_PAGE_PERMISSION_KEYS = (
+    "manager_query",
+    "manager_overtime_query",
+    "manager_annual_leave_query",
+)
+
+EMPLOYEE_PAGE_PERMISSION_KEYS = (
+    "employee_dashboard",
+    "abnormal_query",
+    "punch_records",
+    "department_hours_query",
+    "summary_download",
+)
+
+ALL_PAGE_PERMISSION_KEYS = (
+    *MANAGER_PAGE_PERMISSION_KEYS,
+    *EMPLOYEE_PAGE_PERMISSION_KEYS,
+)
 
 
 class User(db.Model):
@@ -10,6 +42,7 @@ class User(db.Model):
     username = db.Column(db.String(80), unique=True, nullable=False, index=True)
     password_hash = db.Column(db.String(255), nullable=False)
     role = db.Column(db.String(20), nullable=False, default="readonly")
+    page_permissions = db.Column(db.JSON, nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
 
     employee_assignments = db.relationship(
@@ -27,6 +60,28 @@ class User(db.Model):
             return check_password_hash(self.password_hash, password)
         except AttributeError:
             return False
+
+    def effective_page_permissions(self) -> dict[str, bool]:
+        if self.role == "admin":
+            return {key: True for key in ALL_PAGE_PERMISSION_KEYS}
+
+        raw = self.page_permissions if isinstance(self.page_permissions, dict) else None
+        if raw is None:
+            return {key: True for key in ALL_PAGE_PERMISSION_KEYS}
+
+        return {key: bool(raw.get(key, False)) for key in ALL_PAGE_PERMISSION_KEYS}
+
+    def can_access_page(self, page_key: str) -> bool:
+        if self.role == "admin":
+            return True
+        return bool(self.effective_page_permissions().get(page_key, False))
+
+    def has_any_page_access(self, page_keys: Optional[Sequence[str]] = None) -> bool:
+        keys = tuple(page_keys or ALL_PAGE_PERMISSION_KEYS)
+        if self.role == "admin":
+            return True
+        permissions = self.effective_page_permissions()
+        return any(permissions.get(key, False) for key in keys)
 
 
 class UserEmployeeAssignment(db.Model):

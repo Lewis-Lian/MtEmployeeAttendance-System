@@ -54,6 +54,32 @@
               </div>
             </div>
 
+            <div class="section-divider"></div>
+
+            <div class="mb-3">
+              <label class="form-label">查询管理人员菜单权限</label>
+              <div class="d-grid gap-2">
+                {% for item in manager_page_permissions %}
+                <label class="badge text-bg-light border p-2 d-flex align-items-center gap-2 justify-content-start">
+                  <input class="form-check-input m-0 create-page-permission" type="checkbox" value="{{ item.key }}" checked>
+                  <span>{{ item.label }}</span>
+                </label>
+                {% endfor %}
+              </div>
+            </div>
+
+            <div class="mb-3">
+              <label class="form-label">查询员工菜单权限</label>
+              <div class="d-grid gap-2">
+                {% for item in employee_page_permissions %}
+                <label class="badge text-bg-light border p-2 d-flex align-items-center gap-2 justify-content-start">
+                  <input class="form-check-input m-0 create-page-permission" type="checkbox" value="{{ item.key }}" checked>
+                  <span>{{ item.label }}</span>
+                </label>
+                {% endfor %}
+              </div>
+            </div>
+
             <button class="btn btn-primary w-100" type="submit">创建账号</button>
           </form>
           <div id="createResult" class="small text-muted mt-2"></div>
@@ -77,6 +103,7 @@
               <th>角色</th>
               <th>关联员工</th>
               <th>关联部门</th>
+              <th>可访问页面</th>
               <th>创建时间</th>
               <th>操作</th>
             </tr>
@@ -137,6 +164,32 @@
                 </button>
               </div>
               <div class="employee-float-list" id="editDeptQuickList"></div>
+            </div>
+          </div>
+
+          <div class="section-divider"></div>
+
+          <div class="mb-3">
+            <label class="form-label">查询管理人员菜单权限</label>
+            <div class="d-grid gap-2">
+              {% for item in manager_page_permissions %}
+              <label class="badge text-bg-light border p-2 d-flex align-items-center gap-2 justify-content-start">
+                <input class="form-check-input m-0 edit-page-permission" type="checkbox" value="{{ item.key }}">
+                <span>{{ item.label }}</span>
+              </label>
+              {% endfor %}
+            </div>
+          </div>
+
+          <div class="mb-0">
+            <label class="form-label">查询员工菜单权限</label>
+            <div class="d-grid gap-2">
+              {% for item in employee_page_permissions %}
+              <label class="badge text-bg-light border p-2 d-flex align-items-center gap-2 justify-content-start">
+                <input class="form-check-input m-0 edit-page-permission" type="checkbox" value="{{ item.key }}">
+                <span>{{ item.label }}</span>
+              </label>
+              {% endfor %}
             </div>
           </div>
         </form>

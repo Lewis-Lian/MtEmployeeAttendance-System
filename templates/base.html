@@ -17,46 +17,68 @@
       </a>
       <div class="app-brand-subtitle">Attendance Admin</div>
     </div>
+    {% set can_view_manager_group = g.current_user and (g.current_user.role == "admin" or g.current_user.has_any_page_access(['manager_query', 'manager_overtime_query', 'manager_annual_leave_query'])) %}
+    {% set can_view_employee_group = g.current_user and (g.current_user.role == "admin" or g.current_user.has_any_page_access(['employee_dashboard', 'abnormal_query', 'punch_records', 'department_hours_query', 'summary_download'])) %}
+    {% if can_view_manager_group %}
     <div class="app-sidebar-group" data-sidebar-group="manager-query">
       <button class="app-sidebar-group-toggle" type="button" data-sidebar-toggle="manager-query" aria-expanded="true">
         <span class="app-sidebar-title">查询管理人员</span>
         <span class="app-sidebar-group-arrow" aria-hidden="true">▾</span>
       </button>
       <nav class="app-sidebar-nav" data-sidebar-panel="manager-query">
+        {% if g.current_user.role == "admin" or g.current_user.can_access_page("manager_query") %}
         <a class="app-side-link {% if request.path.startswith('/employee/manager-query') %}is-active{% endif %}" href="/employee/manager-query" title="管理人员查询">
           <span class="app-side-icon icon-manager" aria-hidden="true"></span><span class="app-side-label">管理人员查询</span>
         </a>
+        {% endif %}
+        {% if g.current_user.role == "admin" or g.current_user.can_access_page("manager_overtime_query") %}
         <a class="app-side-link {% if request.path.startswith('/employee/manager-overtime-query') %}is-active{% endif %}" href="/employee/manager-overtime-query" title="查询加班">
           <span class="app-side-icon icon-hours" aria-hidden="true"></span><span class="app-side-label">查询加班</span>
         </a>
+        {% endif %}
+        {% if g.current_user.role == "admin" or g.current_user.can_access_page("manager_annual_leave_query") %}
         <a class="app-side-link {% if request.path.startswith('/employee/manager-annual-leave-query') %}is-active{% endif %}" href="/employee/manager-annual-leave-query" title="查询年休">
           <span class="app-side-icon icon-attendance" aria-hidden="true"></span><span class="app-side-label">查询年休</span>
         </a>
+        {% endif %}
       </nav>
     </div>
+    {% endif %}
+    {% if can_view_employee_group %}
     <div class="app-sidebar-group" data-sidebar-group="query">
       <button class="app-sidebar-group-toggle" type="button" data-sidebar-toggle="query" aria-expanded="true">
         <span class="app-sidebar-title">查询员工</span>
         <span class="app-sidebar-group-arrow" aria-hidden="true">▾</span>
       </button>
       <nav class="app-sidebar-nav" data-sidebar-panel="query">
+        {% if g.current_user.role == "admin" or g.current_user.can_access_page("employee_dashboard") %}
         <a class="app-side-link {% if request.path.startswith('/employee/dashboard') %}is-active{% endif %}" href="/employee/dashboard" title="考勤数据查询">
           <span class="app-side-icon icon-attendance" aria-hidden="true"></span><span class="app-side-label">考勤数据查询</span>
         </a>
+        {% endif %}
+        {% if g.current_user.role == "admin" or g.current_user.can_access_page("abnormal_query") %}
         <a class="app-side-link {% if request.path.startswith('/employee/abnormal-query') %}is-active{% endif %}" href="/employee/abnormal-query" title="员工异常查询">
           <span class="app-side-icon icon-abnormal" aria-hidden="true"></span><span class="app-side-label">员工异常查询</span>
         </a>
+        {% endif %}
+        {% if g.current_user.role == "admin" or g.current_user.can_access_page("punch_records") %}
         <a class="app-side-link {% if request.path.startswith('/employee/punch-records') %}is-active{% endif %}" href="/employee/punch-records" title="打卡数据查询">
           <span class="app-side-icon icon-punch" aria-hidden="true"></span><span class="app-side-label">打卡数据查询</span>
         </a>
+        {% endif %}
+        {% if g.current_user.role == "admin" or g.current_user.can_access_page("department_hours_query") %}
         <a class="app-side-link {% if request.path.startswith('/employee/department-hours-query') %}is-active{% endif %}" href="/employee/department-hours-query" title="员工部门工时查询">
           <span class="app-side-icon icon-hours" aria-hidden="true"></span><span class="app-side-label">员工部门工时查询</span>
         </a>
+        {% endif %}
+        {% if g.current_user.role == "admin" or g.current_user.can_access_page("summary_download") %}
         <a class="app-side-link {% if request.path.startswith('/employee/summary-download') %}is-active{% endif %}" href="/employee/summary-download" title="汇总下载">
           <span class="app-side-icon icon-attendance" aria-hidden="true"></span><span class="app-side-label">汇总下载</span>
         </a>
+        {% endif %}
       </nav>
     </div>
+    {% endif %}
     {% if g.current_user and g.current_user.role == "admin" %}
     <div class="app-sidebar-group" data-sidebar-group="admin">
       <button class="app-sidebar-group-toggle" type="button" data-sidebar-toggle="admin" aria-expanded="true">

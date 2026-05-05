@@ -1,4 +1,15 @@
 document.addEventListener("DOMContentLoaded", () => {
+  const PAGE_LABELS = {
+    manager_query: "管理人员查询",
+    manager_overtime_query: "查询加班",
+    manager_annual_leave_query: "查询年休",
+    employee_dashboard: "考勤数据查询",
+    abnormal_query: "员工异常查询",
+    punch_records: "打卡数据查询",
+    department_hours_query: "员工部门工时查询",
+    summary_download: "汇总下载",
+  };
+
   const page = document.getElementById("accountsPage");
   const currentUserId = Number(page.dataset.currentUserId);
 
@@ -111,6 +122,13 @@ document.addEventListener("DOMContentLoaded", () => {
     users.forEach((user) => {
       const employeeNames = user.employees.map((row) => `${row.emp_no}-${row.name}`).join("，") || "-";
       const deptNames = user.departments.map((row) => row.dept_name).join("，") || "-";
+      const pagePermissions = user.page_permissions || {};
+      const allowedPages = user.role === "admin"
+        ? "全部页面"
+        : (Object.entries(pagePermissions)
+        .filter(([, allowed]) => !!allowed)
+        .map(([key]) => PAGE_LABELS[key] || key)
+        .join("、") || "-");
       const createdAt = user.created_at ? user.created_at.replace("T", " ").slice(0, 19) : "-";
       const selfTag = user.id === currentUserId ? " <span class='badge text-bg-info'>当前</span>" : "";
       const tr = document.createElement("tr");
@@ -120,6 +138,7 @@ document.addEventListener("DOMContentLoaded", () => {
         <td>${user.role}</td>
         <td>${employeeNames}</td>
         <td>${deptNames}</td>
+        <td>${allowedPages}</td>
         <td>${createdAt}</td>
         <td class="d-flex gap-1">
           <button class="btn btn-sm btn-outline-primary edit-btn" data-id="${user.id}">编辑</button>
@@ -145,6 +164,31 @@ document.addEventListener("DOMContentLoaded", () => {
   function setupEditPanel(user) {
     employeePicker.setValue(empLookup.edit, user.emp_ids || []);
     deptPicker.setValue(deptLookup.edit, user.dept_ids || []);
+    setPermissionCheckboxes(".edit-page-permission", user.page_permissions || {}, user.role === "admin");
+  }
+
+  function collectPagePermissions(selector) {
+    const result = {};
+    document.querySelectorAll(selector).forEach((input) => {
+      result[input.value] = !!input.checked;
+    });
+    return result;
+  }
+
+  function setPermissionCheckboxes(selector, permissions, disabled) {
+    document.querySelectorAll(selector).forEach((input) => {
+      input.checked = !!permissions[input.value];
+      input.disabled = !!disabled;
+    });
+  }
+
+  function syncRolePermissionState(form, selector) {
+    const role = form.querySelector('[name="role"]').value;
+    const isAdmin = role === "admin";
+    document.querySelectorAll(selector).forEach((input) => {
+      if (isAdmin) input.checked = true;
+      input.disabled = isAdmin;
+    });
   }
 
   function collectCreatePayload() {
@@ -154,6 +198,7 @@ document.addEventListener("DOMContentLoaded", () => {
       role: createUserForm.querySelector('[name="role"]').value,
       emp_ids: idsFromHidden(empLookup.create.hiddenEl),
       dept_ids: idsFromHidden(deptLookup.create.hiddenEl),
+      page_permissions: collectPagePermissions(".create-page-permission"),
     };
   }
 
@@ -162,6 +207,7 @@ document.addEventListener("DOMContentLoaded", () => {
       role: editUserForm.querySelector('[name="role"]').value,
       emp_ids: idsFromHidden(empLookup.edit.hiddenEl),
       dept_ids: idsFromHidden(deptLookup.edit.hiddenEl),
+      page_permissions: collectPagePermissions(".edit-page-permission"),
     };
   }
 
@@ -180,6 +226,11 @@ document.addEventListener("DOMContentLoaded", () => {
     createResult.textContent = "创建成功";
     createUserForm.reset();
     resetCreateSelectors();
+    setPermissionCheckboxes(
+      ".create-page-permission",
+      Object.fromEntries(Array.from(document.querySelectorAll(".create-page-permission")).map((input) => [input.value, true])),
+      false
+    );
     await refreshUsers();
   });
 
@@ -197,6 +248,7 @@ document.addEventListener("DOMContentLoaded", () => {
       editUserForm.querySelector('[name="username"]').value = user.username;
       editUserForm.querySelector('[name="role"]').value = user.role;
       setupEditPanel(user);
+      syncRolePermissionState(editUserForm, ".edit-page-permission");
       editUserModal.show();
       return;
     }
@@ -247,6 +299,13 @@ document.addEventListener("DOMContentLoaded", () => {
     await refreshUsers();
   });
 
+  createUserForm.querySelector('[name="role"]').addEventListener("change", () => {
+    syncRolePermissionState(createUserForm, ".create-page-permission");
+  });
+  editUserForm.querySelector('[name="role"]').addEventListener("change", () => {
+    syncRolePermissionState(editUserForm, ".edit-page-permission");
+  });
+
   (async () => {
     const [usersRes, employeesRes, departmentsRes] = await Promise.all([
       fetch("/admin/users"),
@@ -260,6 +319,8 @@ document.addEventListener("DOMContentLoaded", () => {
     deptPicker.refresh();
     renderUsers();
     resetCreateSelectors();
+    syncRolePermissionState(createUserForm, ".create-page-permission");
+    setPermissionCheckboxes(".edit-page-permission", {}, false);
     employeePicker.setValue(empLookup.edit, []);
     deptPicker.setValue(deptLookup.edit, []);
   })();
