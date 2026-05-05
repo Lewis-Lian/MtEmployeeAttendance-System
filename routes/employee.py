@@ -754,6 +754,52 @@ def _build_department_hours_rows(month: str, emp_ids: list[int]) -> list[dict[st
     return [{"dept_name": k, "total_hours": round(v, 2)} for k, v in sorted(totals.items(), key=lambda x: x[0])]
 
 
+def _top_level_department_name(department: Department | None) -> str:
+    if not department:
+        return "未分配部门"
+    cursor = department
+    visited: set[int] = set()
+    while cursor.parent and cursor.id not in visited:
+        visited.add(cursor.id)
+        cursor = cursor.parent
+    return cursor.dept_name or "未分配部门"
+
+
+def _build_manager_department_hours_rows(month: str, emp_ids: list[int]) -> list[dict[str, object]]:
+    employees = (
+        Employee.query.options(joinedload(Employee.department))
+        .filter(Employee.id.in_(emp_ids))
+        .order_by(Employee.emp_no.asc())
+        .all()
+    )
+    totals: dict[str, float] = {}
+
+    for employee in employees:
+        dept_name = _top_level_department_name(employee.department)
+        totals.setdefault(dept_name, 0.0)
+
+    if not employees:
+        return []
+
+    date_range = _month_date_range(month)
+    rows = []
+    if date_range:
+        start_date, end_date = date_range
+        rows = (
+            DailyRecord.query.options(joinedload(DailyRecord.employee).joinedload(Employee.department))
+            .join(Employee, DailyRecord.emp_id == Employee.id)
+            .filter(DailyRecord.emp_id.in_(emp_ids))
+            .filter(DailyRecord.record_date >= start_date, DailyRecord.record_date < end_date)
+            .all()
+        )
+    for row in rows:
+        dept_name = _top_level_department_name(row.employee.department if row.employee else None)
+        totals.setdefault(dept_name, 0.0)
+        totals[dept_name] += float(row.actual_hours or 0) / 60.0
+
+    return [{"dept_name": k, "total_hours": round(v, 2)} for k, v in sorted(totals.items(), key=lambda x: x[0])]
+
+
 @employee_bp.route("/dashboard")
 @page_permission_required("employee_dashboard")
 def dashboard():
@@ -784,6 +830,12 @@ def manager_annual_leave_query_page():
     emp_ids = _manager_emp_ids(_accessible_emp_ids())
     employees = Employee.query.filter(Employee.id.in_(emp_ids)).order_by(Employee.emp_no.asc()).all() if emp_ids else []
     return render_template("manager_annual_leave_query.html", employees=employees)
+
+
+@employee_bp.route("/manager-department-hours-query")
+@page_permission_required("manager_department_hours_query")
+def manager_department_hours_query_page():
+    return render_template("manager_department_hours_query.html")
 
 
 @employee_bp.route("/abnormal-query")
@@ -1338,6 +1390,45 @@ def manager_annual_leave_query_api():
             "headers": ["部门", "姓名", "1月", "2月", "3月", "4月", "5月", "6月", "7月", "8月", "9月", "10月", "11月", "12月", "剩余年休天数", "备注"],
             "rows": _manager_month_rows(values, "剩余年休天数", _annual_leave_value_keys()),
         }
+    )
+
+
+@employee_bp.route("/api/manager-department-hours", methods=["GET"])
+@page_permission_required("manager_department_hours_query")
+def manager_department_hours_api():
+    emp_ids = _manager_emp_ids(_accessible_emp_ids())
+    if not emp_ids:
+        return jsonify([])
+
+    month = _resolve_query_month()
+    return jsonify(_build_manager_department_hours_rows(month, emp_ids))
+
+
+@employee_bp.route("/api/manager-department-hours/export", methods=["GET"])
+@page_permission_required("manager_department_hours_query")
+def manager_department_hours_export_api():
+    emp_ids = _manager_emp_ids(_accessible_emp_ids())
+    if not emp_ids:
+        return jsonify({"error": "No manager assigned"}), 400
+
+    month = _resolve_query_month()
+    rows = _build_manager_department_hours_rows(month, emp_ids)
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "管理人员部门工时查询"
+    ws.append(["部门名称", "总工时（小时）"])
+    for row in rows:
+        ws.append([row.get("dept_name", ""), row.get("total_hours", 0)])
+
+    output = BytesIO()
+    wb.save(output)
+    output.seek(0)
+    return send_file(
+        output,
+        as_attachment=True,
+        download_name=f"管理人员部门工时查询_{month}.xlsx",
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     )
 
 

@@ -19,6 +19,8 @@ ENV/
 !.env.example
 
 # Runtime data
+.codex-pet-runs/
+attendance.db
 instance/*.db
 instance/*.sqlite
 instance/*.sqlite3

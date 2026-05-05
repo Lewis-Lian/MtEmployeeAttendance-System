@@ -1,0 +1,35 @@
+{% extends 'base.html' %}
+{% block title %}管理人员部门工时查询{% endblock %}
+{% block page_intro %}汇总当前账套内各部门管理人员月度总工时，支持按账套导出结果。{% endblock %}
+{% block content %}
+<div class="row g-3">
+  <div class="col-md-4">
+    <label class="form-label">账套</label>
+    <select class="form-select" id="accountSetSelect"></select>
+  </div>
+  <div class="col-md-3 d-flex align-items-end gap-2">
+    <button class="btn btn-primary w-100" id="queryBtn">查询</button>
+    <button class="btn btn-outline-success w-100" id="downloadBtn">下载XLSX</button>
+  </div>
+</div>
+
+<div class="card mt-4">
+  <div class="card-header">管理人员部门月度总工时</div>
+  <div class="table-responsive">
+    <table class="table table-sm table-striped mb-0">
+      <thead>
+        <tr>
+          <th>部门名称</th>
+          <th>总工时（小时）</th>
+        </tr>
+      </thead>
+      <tbody id="managerDepartmentHoursBody">
+        <tr><td class="text-muted" colspan="2">请点击查询</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/manager_department_hours_query.js') }}"></script>
+{% endblock %}

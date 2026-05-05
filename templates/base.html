@@ -17,7 +17,7 @@
       </a>
       <div class="app-brand-subtitle">Attendance Admin</div>
     </div>
-    {% set can_view_manager_group = g.current_user and (g.current_user.role == "admin" or g.current_user.has_any_page_access(['manager_query', 'manager_overtime_query', 'manager_annual_leave_query'])) %}
+    {% set can_view_manager_group = g.current_user and (g.current_user.role == "admin" or g.current_user.has_any_page_access(['manager_query', 'manager_overtime_query', 'manager_annual_leave_query', 'manager_department_hours_query'])) %}
     {% set can_view_employee_group = g.current_user and (g.current_user.role == "admin" or g.current_user.has_any_page_access(['employee_dashboard', 'abnormal_query', 'punch_records', 'department_hours_query', 'summary_download'])) %}
     {% if can_view_manager_group %}
     <div class="app-sidebar-group" data-sidebar-group="manager-query">
@@ -39,6 +39,11 @@
         {% if g.current_user.role == "admin" or g.current_user.can_access_page("manager_annual_leave_query") %}
         <a class="app-side-link {% if request.path.startswith('/employee/manager-annual-leave-query') %}is-active{% endif %}" href="/employee/manager-annual-leave-query" title="查询年休">
           <span class="app-side-icon icon-attendance" aria-hidden="true"></span><span class="app-side-label">查询年休</span>
+        </a>
+        {% endif %}
+        {% if g.current_user.role == "admin" or g.current_user.can_access_page("manager_department_hours_query") %}
+        <a class="app-side-link {% if request.path.startswith('/employee/manager-department-hours-query') %}is-active{% endif %}" href="/employee/manager-department-hours-query" title="管理人员部门工时查询">
+          <span class="app-side-icon icon-hours" aria-hidden="true"></span><span class="app-side-label">管理人员部门工时查询</span>
         </a>
         {% endif %}
       </nav>

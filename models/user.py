@@ -8,6 +8,7 @@ PAGE_PERMISSION_LABELS = {
     "manager_query": "管理人员查询",
     "manager_overtime_query": "查询加班",
     "manager_annual_leave_query": "查询年休",
+    "manager_department_hours_query": "管理人员部门工时查询",
     "employee_dashboard": "考勤数据查询",
     "abnormal_query": "员工异常查询",
     "punch_records": "打卡数据查询",
@@ -19,6 +20,7 @@ MANAGER_PAGE_PERMISSION_KEYS = (
     "manager_query",
     "manager_overtime_query",
     "manager_annual_leave_query",
+    "manager_department_hours_query",
 )
 
 EMPLOYEE_PAGE_PERMISSION_KEYS = (
