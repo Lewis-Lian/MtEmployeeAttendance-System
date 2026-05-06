@@ -82,9 +82,11 @@
             <div class="toolbar">
               <button class="btn btn-outline-primary" type="submit">上传导入</button>
               <a class="btn btn-outline-secondary" href="/admin/employees/template">下载示例模板</a>
+              <a class="btn btn-outline-secondary" href="/admin/employees/export">导出主数据</a>
+              <button class="btn btn-outline-secondary" id="exportFilteredEmployeesBtn" type="button">导出筛选结果</button>
             </div>
           </form>
-          <div class="panel-note mt-2 mb-0">模板列：人员编号、人员姓名、部门名称、班次编号、是否管理人员。统计归属与考勤来源先在后台手工维护。</div>
+          <div class="panel-note mt-2 mb-0">模板列：人员编号、人员姓名、部门名称、班次编号、是否管理人员、是否哺乳假、员工考勤统计来源、管理人员考勤统计来源。</div>
           <div id="employeeImportResult" class="small text-muted mt-2"></div>
         </div>
       </div>
@@ -104,7 +106,7 @@
       </div>
       <div class="card-body border-bottom">
         <div class="row g-2 align-items-end mb-3">
-          <div class="col-lg-7">
+          <div class="col-lg-4">
             <label class="form-label">员工筛选器</label>
             <div class="employee-lookup" id="employeeManageFilterLookup">
               <div class="input-group input-group-sm">
@@ -117,7 +119,43 @@
               <div class="employee-float-list" id="employeeManageFilterQuickList"></div>
             </div>
           </div>
-          <div class="col-lg-3">
+          <div class="col-lg-2">
+            <label class="form-label">人员类型</label>
+            <select class="form-select form-select-sm" id="employeeTypeFilter">
+              <option value="">全部</option>
+              <option value="employee">普通员工</option>
+              <option value="manager">管理人员</option>
+            </select>
+          </div>
+          <div class="col-lg-2">
+            <label class="form-label">哺乳假</label>
+            <select class="form-select form-select-sm" id="employeeNursingFilter">
+              <option value="">全部</option>
+              <option value="1">是</option>
+              <option value="0">否</option>
+            </select>
+          </div>
+          <div class="col-lg-2">
+            <label class="form-label">员工考勤统计来源</label>
+            <select class="form-select form-select-sm" id="employeeAttendanceSourceFilter">
+              <option value="">全部</option>
+              <option value="employee">员工考勤源文件取值</option>
+              <option value="manager">管理人员考勤源文件取值</option>
+              <option value="auto_fallback">自动回退</option>
+            </select>
+          </div>
+          <div class="col-lg-2">
+            <label class="form-label">管理人员考勤统计来源</label>
+            <select class="form-select form-select-sm" id="managerAttendanceSourceFilter">
+              <option value="">全部</option>
+              <option value="manager">管理人员考勤源文件取值</option>
+              <option value="employee">员工考勤源文件取值</option>
+              <option value="auto_fallback">自动回退</option>
+            </select>
+          </div>
+        </div>
+        <div class="row g-2 align-items-end mb-3">
+          <div class="col-lg-10">
             <div class="small text-muted" id="employeeFilterMeta">显示全部员工</div>
           </div>
           <div class="col-lg-2">

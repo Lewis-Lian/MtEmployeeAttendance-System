@@ -1847,6 +1847,8 @@ def import_employees_xlsx():
     shift_idx = header_map.get("班次编号", -1)
     manager_idx = header_map.get("是否管理人员", -1)
     nursing_idx = header_map.get("是否哺乳假", -1)
+    employee_source_idx = header_map.get("员工考勤统计来源", -1)
+    manager_source_idx = header_map.get("管理人员考勤统计来源", -1)
     if emp_no_idx < 0 or name_idx < 0:
         return jsonify({"error": "missing required headers: 人员编号, 人员姓名"}), 400
 
@@ -1858,13 +1860,29 @@ def import_employees_xlsx():
         shift_no = (str(row[shift_idx]).strip() if shift_idx >= 0 and shift_idx < len(row) and row[shift_idx] is not None else "")
         is_manager = parse_bool_zh(row[manager_idx]) if manager_idx >= 0 and manager_idx < len(row) else False
         is_nursing = parse_bool_zh(row[nursing_idx]) if nursing_idx >= 0 and nursing_idx < len(row) else False
+        employee_stats_attendance_source = _parse_attendance_source(
+            row[employee_source_idx] if employee_source_idx >= 0 and employee_source_idx < len(row) else None,
+            ATTENDANCE_SOURCE_EMPLOYEE,
+        )
+        manager_stats_attendance_source = _parse_attendance_source(
+            row[manager_source_idx] if manager_source_idx >= 0 and manager_source_idx < len(row) else None,
+            ATTENDANCE_SOURCE_MANAGER,
+        )
         if not emp_no or not name:
             continue
         department = _resolve_department(dept_name) if dept_name else None
         shift = _resolve_shift(shift_no) if shift_no else None
         employee = Employee.query.filter_by(emp_no=emp_no).first()
         if not employee:
-            employee = Employee(emp_no=emp_no, name=name, dept_id=department.id if department else None, is_manager=is_manager, is_nursing=is_nursing)
+            employee = Employee(
+                emp_no=emp_no,
+                name=name,
+                dept_id=department.id if department else None,
+                is_manager=is_manager,
+                is_nursing=is_nursing,
+                employee_stats_attendance_source=employee_stats_attendance_source,
+                manager_stats_attendance_source=manager_stats_attendance_source,
+            )
             db.session.add(employee)
             db.session.flush()
         else:
@@ -1872,6 +1890,8 @@ def import_employees_xlsx():
             employee.dept_id = department.id if department else None
             employee.is_manager = is_manager
             employee.is_nursing = is_nursing
+            employee.employee_stats_attendance_source = employee_stats_attendance_source
+            employee.manager_stats_attendance_source = manager_stats_attendance_source
         _assign_employee_shift(employee, shift)
         imported += 1
 
@@ -1885,9 +1905,9 @@ def download_employees_template():
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.title = "员工导入模板"
-    ws.append(["人员编号", "人员姓名", "部门名称", "班次编号", "是否管理人员", "是否哺乳假"])
-    ws.append(["1001001", "张三", "生产中心", "A00001", "否", "否"])
-    ws.append(["1001002", "李四", "行政部", "A00002", "是", "是"])
+    ws.append(["人员编号", "人员姓名", "部门名称", "班次编号", "是否管理人员", "是否哺乳假", "员工考勤统计来源", "管理人员考勤统计来源"])
+    ws.append(["1001001", "张三", "生产中心", "A00001", "否", "否", "员工考勤源文件取值", "管理人员考勤源文件取值"])
+    ws.append(["1001002", "李四", "行政部", "A00002", "是", "是", "员工考勤源文件取值", "管理人员考勤源文件取值"])
 
     output = BytesIO()
     wb.save(output)
@@ -1896,6 +1916,50 @@ def download_employees_template():
         output,
         as_attachment=True,
         download_name="员工导入模板.xlsx",
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+
+
+@admin_bp.route("/employees/export", methods=["GET"])
+@admin_required
+def export_employees_xlsx():
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "员工主数据导出"
+    ws.append(["人员编号", "人员姓名", "部门名称", "班次编号", "是否管理人员", "是否哺乳假", "员工考勤统计来源", "管理人员考勤统计来源"])
+
+    requested_ids: list[int] = []
+    for raw in request.args.getlist("ids"):
+        for part in str(raw).split(","):
+            text = part.strip()
+            if text.isdigit():
+                requested_ids.append(int(text))
+
+    query = Employee.query
+    if requested_ids:
+        query = query.filter(Employee.id.in_(requested_ids))
+
+    employees = query.order_by(Employee.emp_no.asc(), Employee.name.asc()).all()
+    for employee in employees:
+        shift = employee.shift_assignment.shift if employee.shift_assignment else None
+        ws.append([
+            employee.emp_no or "",
+            employee.name or "",
+            employee.department.dept_name if employee.department else "",
+            shift.shift_no if shift else "",
+            "是" if employee.is_manager else "否",
+            "是" if employee.is_nursing else "否",
+            "管理人员考勤源文件取值" if employee.employee_stats_attendance_source == ATTENDANCE_SOURCE_MANAGER else ("自动回退" if employee.employee_stats_attendance_source == ATTENDANCE_SOURCE_AUTO_FALLBACK else "员工考勤源文件取值"),
+            "员工考勤源文件取值" if employee.manager_stats_attendance_source == ATTENDANCE_SOURCE_EMPLOYEE else ("自动回退" if employee.manager_stats_attendance_source == ATTENDANCE_SOURCE_AUTO_FALLBACK else "管理人员考勤源文件取值"),
+        ])
+
+    output = BytesIO()
+    wb.save(output)
+    output.seek(0)
+    return send_file(
+        output,
+        as_attachment=True,
+        download_name="员工主数据导出.xlsx",
         mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     )
 

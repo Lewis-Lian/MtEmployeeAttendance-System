@@ -9,7 +9,12 @@ document.addEventListener("DOMContentLoaded", () => {
   const selectAll = document.getElementById("selectAllEmployees");
   const clearSelectionBtn = document.getElementById("clearSelectionBtn");
   const clearEmployeeFilterBtn = document.getElementById("clearEmployeeFilterBtn");
+  const exportFilteredEmployeesBtn = document.getElementById("exportFilteredEmployeesBtn");
   const employeeFilterMeta = document.getElementById("employeeFilterMeta");
+  const employeeTypeFilter = document.getElementById("employeeTypeFilter");
+  const employeeNursingFilter = document.getElementById("employeeNursingFilter");
+  const employeeAttendanceSourceFilter = document.getElementById("employeeAttendanceSourceFilter");
+  const managerAttendanceSourceFilter = document.getElementById("managerAttendanceSourceFilter");
   const batchAction = document.getElementById("batchAction");
   const batchValue = document.getElementById("batchValue");
   const batchShiftValue = document.getElementById("batchShiftValue");
@@ -132,13 +137,32 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function getFilteredEmployees() {
     const filterIds = idsFromHidden(employeeFilterContext.hiddenEl);
+    const typeValue = employeeTypeFilter?.value || "";
+    const nursingValue = employeeNursingFilter?.value || "";
+    const employeeSourceValue = employeeAttendanceSourceFilter?.value || "";
+    const managerSourceValue = managerAttendanceSourceFilter?.value || "";
     if (filterIds.length) {
       const filterSet = new Set(filterIds);
-      return employees.filter((employee) => filterSet.has(Number(employee.id)));
+      return employees.filter((employee) => {
+        if (!filterSet.has(Number(employee.id))) return false;
+        if (typeValue === "manager" && !employee.is_manager) return false;
+        if (typeValue === "employee" && employee.is_manager) return false;
+        if (nursingValue === "1" && !employee.is_nursing) return false;
+        if (nursingValue === "0" && employee.is_nursing) return false;
+        if (employeeSourceValue && employee.employee_stats_attendance_source !== employeeSourceValue) return false;
+        if (managerSourceValue && employee.manager_stats_attendance_source !== managerSourceValue) return false;
+        return true;
+      });
     }
     const keyword = normalizeText(employeeFilterContext.inputEl.value);
-    if (!keyword) return employees;
     return employees.filter((employee) => {
+      if (typeValue === "manager" && !employee.is_manager) return false;
+      if (typeValue === "employee" && employee.is_manager) return false;
+      if (nursingValue === "1" && !employee.is_nursing) return false;
+      if (nursingValue === "0" && employee.is_nursing) return false;
+      if (employeeSourceValue && employee.employee_stats_attendance_source !== employeeSourceValue) return false;
+      if (managerSourceValue && employee.manager_stats_attendance_source !== managerSourceValue) return false;
+      if (!keyword) return true;
       const haystack = normalizeText(`${employee.emp_no || ""} ${employee.name || ""} ${employee.dept_name || ""}`);
       return haystack.includes(keyword);
     });
@@ -147,7 +171,13 @@ document.addEventListener("DOMContentLoaded", () => {
   function syncEmployeeFilterMeta(visibleCount) {
     const filterCount = idsFromHidden(employeeFilterContext.hiddenEl).length;
     const keyword = normalizeText(employeeFilterContext.inputEl.value);
-    if (filterCount) {
+    const hasExtraFilter = Boolean(
+      (employeeTypeFilter?.value || "")
+      || (employeeNursingFilter?.value || "")
+      || (employeeAttendanceSourceFilter?.value || "")
+      || (managerAttendanceSourceFilter?.value || "")
+    );
+    if (filterCount || hasExtraFilter) {
       employeeFilterMeta.textContent = `筛选 ${filterCount} 人，显示 ${visibleCount} / 共 ${employees.length} 人`;
     } else if (keyword) {
       employeeFilterMeta.textContent = `关键词筛选，显示 ${visibleCount} / 共 ${employees.length} 人`;
@@ -435,10 +465,18 @@ document.addEventListener("DOMContentLoaded", () => {
 
   clearEmployeeFilterBtn.addEventListener("click", () => {
     employeeFilter.setValue(employeeFilterContext, []);
+    if (employeeTypeFilter) employeeTypeFilter.value = "";
+    if (employeeNursingFilter) employeeNursingFilter.value = "";
+    if (employeeAttendanceSourceFilter) employeeAttendanceSourceFilter.value = "";
+    if (managerAttendanceSourceFilter) managerAttendanceSourceFilter.value = "";
     renderRows();
   });
 
   employeeFilterContext.inputEl.addEventListener("input", renderRows);
+  if (employeeTypeFilter) employeeTypeFilter.addEventListener("change", renderRows);
+  if (employeeNursingFilter) employeeNursingFilter.addEventListener("change", renderRows);
+  if (employeeAttendanceSourceFilter) employeeAttendanceSourceFilter.addEventListener("change", renderRows);
+  if (managerAttendanceSourceFilter) managerAttendanceSourceFilter.addEventListener("change", renderRows);
 
   employeeFilterContext.quickEl.addEventListener("click", () => {
     window.setTimeout(renderRows, 0);
@@ -447,6 +485,19 @@ document.addEventListener("DOMContentLoaded", () => {
   document.getElementById("employeeManagePickerConfirmBtn").addEventListener("click", () => {
     window.setTimeout(renderRows, 0);
   });
+
+  if (exportFilteredEmployeesBtn) {
+    exportFilteredEmployeesBtn.addEventListener("click", () => {
+      const rows = getFilteredEmployees();
+      if (!rows.length) {
+        window.alert("当前筛选结果为空");
+        return;
+      }
+      const query = new URLSearchParams();
+      rows.forEach((employee) => query.append("ids", String(employee.id)));
+      window.location.href = `/admin/employees/export?${query.toString()}`;
+    });
+  }
 
   applyBatchBtn.addEventListener("click", async () => {
     const ids = getSelectedIds();

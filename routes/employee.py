@@ -191,9 +191,31 @@ def _month_datetime_range(month: str) -> tuple[datetime, datetime] | None:
 
 
 def _has_punch_record(record) -> bool:
+    raw = record.raw_data or {}
+    if not isinstance(raw, dict):
+        raw = {}
+    if isinstance(raw.get("raw_data"), dict):
+        raw = raw.get("raw_data") or {}
+
     in_times = [str(x).strip() for x in (record.check_in_times or []) if x is not None and str(x).strip()]
     out_times = [str(x).strip() for x in (record.check_out_times or []) if x is not None and str(x).strip()]
-    return bool(in_times or out_times)
+    if in_times or out_times:
+        return True
+
+    manager_time_keys = (
+        "上班1打卡时间",
+        "下班1打卡时间",
+        "上班2打卡时间",
+        "下班2打卡时间",
+        "上班3打卡时间",
+        "下班3打卡时间",
+        "上班4打卡时间",
+        "下班4打卡时间",
+    )
+    punch_data = str(raw.get("刷卡时间数据") or "").strip()
+    if punch_data:
+        return True
+    return any(str(raw.get(key) or "").strip() for key in manager_time_keys)
 
 
 def _attendance_day_value(record) -> float:
@@ -229,6 +251,12 @@ def _punch_events(record) -> set[str]:
 
 
 def _punch_count(record) -> int:
+    raw = record.raw_data or {}
+    if not isinstance(raw, dict):
+        raw = {}
+    if isinstance(raw.get("raw_data"), dict):
+        raw = raw.get("raw_data") or {}
+
     in_events = {_normalize_punch_token(x) for x in (record.check_in_times or [])}
     in_events = {x for x in in_events if x}
     out_events = {_normalize_punch_token(x) for x in (record.check_out_times or [])}
@@ -240,10 +268,41 @@ def _punch_count(record) -> int:
         in_events -= overlap
         out_events -= overlap
 
-    return len(in_events) + len(out_events)
+    count = len(in_events) + len(out_events)
+    if count:
+        return count
+
+    manager_time_keys = (
+        "上班1打卡时间",
+        "下班1打卡时间",
+        "上班2打卡时间",
+        "下班2打卡时间",
+        "上班3打卡时间",
+        "下班3打卡时间",
+        "上班4打卡时间",
+        "下班4打卡时间",
+    )
+    manager_events = {
+        _normalize_punch_token(raw.get(key))
+        for key in manager_time_keys
+        if _normalize_punch_token(raw.get(key))
+    }
+    if manager_events:
+        return len(manager_events)
+
+    punch_data = str(raw.get("刷卡时间数据") or "").strip()
+    if punch_data:
+        return len(re.findall(r"(\d{1,2}:\d{2})", punch_data))
+    return 0
 
 
 def _punch_round_count(record) -> int:
+    raw = record.raw_data or {}
+    if not isinstance(raw, dict):
+        raw = {}
+    if isinstance(raw.get("raw_data"), dict):
+        raw = raw.get("raw_data") or {}
+
     in_events = {_normalize_punch_token(x) for x in (record.check_in_times or [])}
     in_events = {x for x in in_events if x}
     out_events = {_normalize_punch_token(x) for x in (record.check_out_times or [])}
@@ -255,7 +314,21 @@ def _punch_round_count(record) -> int:
         out_events -= overlap
 
     # Query page shows "打卡轮次" (e.g. 上午+下午 = 2), not raw swipe points.
-    return max(len(in_events), len(out_events))
+    rounds = max(len(in_events), len(out_events))
+    if rounds:
+        return rounds
+
+    manager_pairs = (
+        ("上班1打卡时间", "下班1打卡时间"),
+        ("上班2打卡时间", "下班2打卡时间"),
+        ("上班3打卡时间", "下班3打卡时间"),
+        ("上班4打卡时间", "下班4打卡时间"),
+    )
+    manager_rounds = 0
+    for in_key, out_key in manager_pairs:
+        if str(raw.get(in_key) or "").strip() or str(raw.get(out_key) or "").strip():
+            manager_rounds += 1
+    return manager_rounds
 
 
 def _format_punch_times(values: list[object] | None) -> str:
