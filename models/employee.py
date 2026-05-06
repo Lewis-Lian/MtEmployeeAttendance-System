@@ -1,6 +1,15 @@
 from datetime import datetime
 from . import db
 
+ATTENDANCE_SOURCE_EMPLOYEE = "employee"
+ATTENDANCE_SOURCE_MANAGER = "manager"
+ATTENDANCE_SOURCE_AUTO_FALLBACK = "auto_fallback"
+ATTENDANCE_SOURCE_VALUES = (
+    ATTENDANCE_SOURCE_EMPLOYEE,
+    ATTENDANCE_SOURCE_MANAGER,
+    ATTENDANCE_SOURCE_AUTO_FALLBACK,
+)
+
 
 class Employee(db.Model):
     __tablename__ = "employees"
@@ -11,6 +20,8 @@ class Employee(db.Model):
     dept_id = db.Column(db.Integer, db.ForeignKey("departments.id"), nullable=True, index=True)
     is_manager = db.Column(db.Boolean, default=False, nullable=False)
     is_nursing = db.Column(db.Boolean, default=False, nullable=False)
+    employee_stats_attendance_source = db.Column(db.String(20), default=ATTENDANCE_SOURCE_EMPLOYEE, nullable=False)
+    manager_stats_attendance_source = db.Column(db.String(20), default=ATTENDANCE_SOURCE_MANAGER, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
 
     department = db.relationship("Department", back_populates="employees")

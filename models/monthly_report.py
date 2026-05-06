@@ -94,6 +94,8 @@ class MonthlyReport(db.Model):
     agg_84 = db.Column(db.Float)
 
     raw_data = db.Column(db.JSON, default=dict)
+    employee_raw_data = db.Column(db.JSON, default=dict)
+    manager_raw_data = db.Column(db.JSON, default=dict)
 
     employee = db.relationship("Employee", back_populates="monthly_reports")
 

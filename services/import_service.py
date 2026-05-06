@@ -220,7 +220,11 @@ class ImportService:
         clean_name = clean_text(name)
         if not clean_name:
             return None
-        return Employee.query.filter_by(name=clean_name, is_manager=True).first()
+        return (
+            Employee.query.filter(Employee.name == clean_name, Employee.is_manager.is_(True))
+            .order_by(Employee.is_manager.desc(), Employee.emp_no.asc())
+            .first()
+        )
 
     @staticmethod
     def _raw_dict_from_header_map(row: list[Any], header_map: dict[str, int]) -> dict[str, Any]:
@@ -525,24 +529,36 @@ class ImportService:
                 if out_val:
                     check_out_times.append(out_val)
 
-            existing_raw = record.raw_data if isinstance(record.raw_data, dict) else {}
-            if emp.is_manager and ImportService._is_manager_daily_raw(existing_raw):
-                continue
-
+            employee_payload = {
+                "expected_hours": parse_float(ImportService._get_row_value(row, ImportService._find_col(header_map, "应出勤小时"))),
+                "actual_hours": parse_float(ImportService._get_row_value(row, ImportService._find_col(header_map, "实出勤小时"))),
+                "absent_hours": parse_float(ImportService._get_row_value(row, ImportService._find_col(header_map, "旷工小时"))),
+                "check_in_times": check_in_times,
+                "check_out_times": check_out_times,
+                "leave_hours": parse_float(ImportService._get_row_value(row, ImportService._find_col(header_map, "请假小时"))),
+                "leave_type": clean_text(ImportService._get_row_value(row, ImportService._find_col(header_map, "假种名称"))),
+                "overtime_hours": parse_float(ImportService._get_row_value(row, ImportService._find_col(header_map, "加班小时"))),
+                "overtime_type": clean_text(ImportService._get_row_value(row, ImportService._find_col(header_map, "加班类型"))),
+                "late_minutes": parse_int(ImportService._get_row_value(row, ImportService._find_col(header_map, "迟到分钟"))),
+                "early_leave_minutes": parse_int(ImportService._get_row_value(row, ImportService._find_col(header_map, "早退分钟"))),
+                "exception_reason": clean_text(ImportService._get_row_value(row, ImportService._find_col(header_map, "异常原因"))),
+                "raw_data": {str(header_row[i]): row[i] if i < len(row) else None for i in range(len(header_row))},
+            }
             record.shift_id = shift.id if shift else None
-            record.expected_hours = parse_float(ImportService._get_row_value(row, ImportService._find_col(header_map, "应出勤小时")))
-            record.actual_hours = parse_float(ImportService._get_row_value(row, ImportService._find_col(header_map, "实出勤小时")))
-            record.absent_hours = parse_float(ImportService._get_row_value(row, ImportService._find_col(header_map, "旷工小时")))
-            record.check_in_times = check_in_times
-            record.check_out_times = check_out_times
-            record.leave_hours = parse_float(ImportService._get_row_value(row, ImportService._find_col(header_map, "请假小时")))
-            record.leave_type = clean_text(ImportService._get_row_value(row, ImportService._find_col(header_map, "假种名称")))
-            record.overtime_hours = parse_float(ImportService._get_row_value(row, ImportService._find_col(header_map, "加班小时")))
-            record.overtime_type = clean_text(ImportService._get_row_value(row, ImportService._find_col(header_map, "加班类型")))
-            record.late_minutes = parse_int(ImportService._get_row_value(row, ImportService._find_col(header_map, "迟到分钟")))
-            record.early_leave_minutes = parse_int(ImportService._get_row_value(row, ImportService._find_col(header_map, "早退分钟")))
-            record.exception_reason = clean_text(ImportService._get_row_value(row, ImportService._find_col(header_map, "异常原因")))
-            record.raw_data = {str(header_row[i]): row[i] if i < len(row) else None for i in range(len(header_row))}
+            record.expected_hours = employee_payload["expected_hours"]
+            record.actual_hours = employee_payload["actual_hours"]
+            record.absent_hours = employee_payload["absent_hours"]
+            record.check_in_times = employee_payload["check_in_times"]
+            record.check_out_times = employee_payload["check_out_times"]
+            record.leave_hours = employee_payload["leave_hours"]
+            record.leave_type = employee_payload["leave_type"]
+            record.overtime_hours = employee_payload["overtime_hours"]
+            record.overtime_type = employee_payload["overtime_type"]
+            record.late_minutes = employee_payload["late_minutes"]
+            record.early_leave_minutes = employee_payload["early_leave_minutes"]
+            record.exception_reason = employee_payload["exception_reason"]
+            record.raw_data = employee_payload["raw_data"]
+            record.employee_payload = employee_payload
             imported += 1
 
         db.session.commit()
@@ -593,10 +609,11 @@ class ImportService:
                 db.session.add(report)
 
             raw_data = ImportService._raw_dict_from_header_map(row, header_map)
-            existing_raw = report.raw_data if isinstance(report.raw_data, dict) else {}
+            existing_raw = report.manager_raw_data if isinstance(report.manager_raw_data, dict) else {}
             if ImportService._manager_raw_score(existing_raw) > ImportService._manager_raw_score(raw_data):
                 continue
             report.raw_data = raw_data
+            report.manager_raw_data = raw_data
             imported += 1
 
         db.session.commit()
@@ -648,7 +665,7 @@ class ImportService:
                 db.session.add(record)
 
             raw_data = ImportService._raw_dict_from_header_map(row, header_map)
-            existing_raw = record.raw_data if isinstance(record.raw_data, dict) else {}
+            existing_raw = record.manager_payload if isinstance(record.manager_payload, dict) else {}
             is_manager_raw = ImportService._is_manager_daily_raw(raw_data)
             existing_is_manager_raw = ImportService._is_manager_daily_raw(existing_raw)
             if existing_is_manager_raw and not is_manager_raw:
@@ -658,10 +675,19 @@ class ImportService:
                 and ImportService._manager_raw_score(existing_raw) > ImportService._manager_raw_score(raw_data)
             ):
                 continue
-            record.actual_hours = parse_float(ImportService._get_row_value(row, ImportService._find_col(header_map, "工作时长")))
-            record.late_minutes = parse_int(ImportService._get_row_value(row, ImportService._find_col(header_map, "迟到时长")))
-            record.early_leave_minutes = parse_int(ImportService._get_row_value(row, ImportService._find_col(header_map, "早退时长")))
+            manager_payload = {
+                "actual_hours": parse_float(ImportService._get_row_value(row, ImportService._find_col(header_map, "工作时长"))),
+                "late_minutes": parse_int(ImportService._get_row_value(row, ImportService._find_col(header_map, "迟到时长"))),
+                "early_leave_minutes": parse_int(ImportService._get_row_value(row, ImportService._find_col(header_map, "早退时长"))),
+                "check_in_times": [],
+                "check_out_times": [],
+                "raw_data": raw_data,
+            }
+            record.actual_hours = manager_payload["actual_hours"]
+            record.late_minutes = manager_payload["late_minutes"]
+            record.early_leave_minutes = manager_payload["early_leave_minutes"]
             record.raw_data = raw_data
+            record.manager_payload = manager_payload
             imported += 1
 
         db.session.commit()
@@ -732,10 +758,12 @@ class ImportService:
             for i in range(84):
                 setattr(report, f"agg_{i+1:02d}", metric_values[i])
 
-            report.raw_data = {
+            employee_raw_data = {
                 clean_text(header[i]) or f"COL_{i+1}": (row[i] if i < len(row) else None)
                 for i in range(len(header))
             }
+            report.raw_data = employee_raw_data
+            report.employee_raw_data = employee_raw_data
             imported += 1
 
         db.session.commit()

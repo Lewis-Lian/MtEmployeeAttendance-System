@@ -81,6 +81,19 @@ def _ensure_schema_compatibility() -> None:
     if "is_nursing" not in employee_columns:
         db.session.execute(text("ALTER TABLE employees ADD COLUMN is_nursing BOOLEAN NOT NULL DEFAULT 0"))
         db.session.commit()
+    if "include_in_manager_stats" not in employee_columns:
+        db.session.execute(text("ALTER TABLE employees ADD COLUMN include_in_manager_stats BOOLEAN NOT NULL DEFAULT 0"))
+        db.session.commit()
+    if "employee_stats_attendance_source" not in employee_columns:
+        db.session.execute(
+            text("ALTER TABLE employees ADD COLUMN employee_stats_attendance_source VARCHAR(20) NOT NULL DEFAULT 'employee'")
+        )
+        db.session.commit()
+    if "manager_stats_attendance_source" not in employee_columns:
+        db.session.execute(
+            text("ALTER TABLE employees ADD COLUMN manager_stats_attendance_source VARCHAR(20) NOT NULL DEFAULT 'manager'")
+        )
+        db.session.commit()
 
     account_set_columns = {c["name"] for c in inspector.get_columns("account_sets")}
     if "factory_rest_days" not in account_set_columns:
@@ -93,6 +106,22 @@ def _ensure_schema_compatibility() -> None:
     user_columns = {c["name"] for c in inspector.get_columns("users")}
     if "page_permissions" not in user_columns:
         db.session.execute(text("ALTER TABLE users ADD COLUMN page_permissions JSON"))
+        db.session.commit()
+
+    daily_record_columns = {c["name"] for c in inspector.get_columns("daily_records")}
+    if "employee_payload" not in daily_record_columns:
+        db.session.execute(text("ALTER TABLE daily_records ADD COLUMN employee_payload JSON"))
+        db.session.commit()
+    if "manager_payload" not in daily_record_columns:
+        db.session.execute(text("ALTER TABLE daily_records ADD COLUMN manager_payload JSON"))
+        db.session.commit()
+
+    monthly_report_columns = {c["name"] for c in inspector.get_columns("monthly_reports")}
+    if "employee_raw_data" not in monthly_report_columns:
+        db.session.execute(text("ALTER TABLE monthly_reports ADD COLUMN employee_raw_data JSON"))
+        db.session.commit()
+    if "manager_raw_data" not in monthly_report_columns:
+        db.session.execute(text("ALTER TABLE monthly_reports ADD COLUMN manager_raw_data JSON"))
         db.session.commit()
 
 

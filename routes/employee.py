@@ -22,6 +22,11 @@ from models.monthly_report import MonthlyReport
 from models.account_set import AccountSet
 from models.user import EMPLOYEE_PAGE_PERMISSION_KEYS, MANAGER_PAGE_PERMISSION_KEYS, UserEmployeeAssignment, UserDepartmentAssignment
 from services.attendance_service import AttendanceService
+from services.attendance_source_service import (
+    EMPLOYEE_STATS_CONTEXT,
+    MANAGER_STATS_CONTEXT,
+    attendance_views_by_employee,
+)
 from services.manager_attendance_service import (
     MANAGER_HEADERS,
     ManagerAttendanceOptions,
@@ -185,13 +190,13 @@ def _month_datetime_range(month: str) -> tuple[datetime, datetime] | None:
     return datetime.combine(start, time.min), datetime.combine(end, time.min)
 
 
-def _has_punch_record(record: DailyRecord) -> bool:
+def _has_punch_record(record) -> bool:
     in_times = [str(x).strip() for x in (record.check_in_times or []) if x is not None and str(x).strip()]
     out_times = [str(x).strip() for x in (record.check_out_times or []) if x is not None and str(x).strip()]
     return bool(in_times or out_times)
 
 
-def _attendance_day_value(record: DailyRecord) -> float:
+def _attendance_day_value(record) -> float:
     if not _has_punch_record(record):
         return 0.0
     if (record.actual_hours or 0) < 2:
@@ -210,7 +215,7 @@ def _normalize_punch_token(value: object) -> str:
     return f"{int(hh):02d}:{mm}"
 
 
-def _punch_events(record: DailyRecord) -> set[str]:
+def _punch_events(record) -> set[str]:
     events: set[str] = set()
     for raw in (record.check_in_times or []):
         token = _normalize_punch_token(raw)
@@ -223,7 +228,7 @@ def _punch_events(record: DailyRecord) -> set[str]:
     return events
 
 
-def _punch_count(record: DailyRecord) -> int:
+def _punch_count(record) -> int:
     in_events = {_normalize_punch_token(x) for x in (record.check_in_times or [])}
     in_events = {x for x in in_events if x}
     out_events = {_normalize_punch_token(x) for x in (record.check_out_times or [])}
@@ -238,7 +243,7 @@ def _punch_count(record: DailyRecord) -> int:
     return len(in_events) + len(out_events)
 
 
-def _punch_round_count(record: DailyRecord) -> int:
+def _punch_round_count(record) -> int:
     in_events = {_normalize_punch_token(x) for x in (record.check_in_times or [])}
     in_events = {x for x in in_events if x}
     out_events = {_normalize_punch_token(x) for x in (record.check_out_times or [])}
@@ -272,7 +277,7 @@ def _repair_mojibake(text: str) -> str:
         return text
 
 
-def _extract_raw_punch_data(record: DailyRecord) -> str:
+def _extract_raw_punch_data(record) -> str:
     raw = record.raw_data or {}
     if not isinstance(raw, dict):
         raw = {}
@@ -297,7 +302,7 @@ def _extract_raw_punch_data(record: DailyRecord) -> str:
     return ""
 
 
-def _raw_punch_count(record: DailyRecord) -> int:
+def _raw_punch_count(record) -> int:
     raw = _extract_raw_punch_data(record)
     if raw:
         tokens = re.findall(r"(\d{1,2}:\d{2})", raw)
@@ -330,7 +335,7 @@ def _parse_punch_dt(value: object, record_date) -> datetime | None:
     return None
 
 
-def _resolve_shift_for_record(record: DailyRecord):
+def _resolve_shift_for_record(record):
     if record.employee and record.employee.shift_assignment and record.employee.shift_assignment.shift:
         return record.employee.shift_assignment.shift
     if record.shift:
@@ -348,7 +353,7 @@ def _parse_slot_dt(record_date, hhmm: str, anchor: datetime | None = None) -> da
     return base
 
 
-def _build_shift_break_windows(record: DailyRecord) -> list[tuple[datetime, datetime]]:
+def _build_shift_break_windows(record) -> list[tuple[datetime, datetime]]:
     shift = _resolve_shift_for_record(record)
     slots = (shift.time_slots if shift else None) or []
     parsed_slots: list[tuple[datetime, datetime]] = []
@@ -403,7 +408,7 @@ def _build_shift_break_windows(record: DailyRecord) -> list[tuple[datetime, date
     return breaks
 
 
-def _calc_two_punch_hours_with_shift_break(record: DailyRecord) -> float | None:
+def _calc_two_punch_hours_with_shift_break(record) -> float | None:
     raw = _extract_raw_punch_data(record)
     times = re.findall(r"(\d{1,2}:\d{2})", raw)
     if len(times) != 2:
@@ -429,7 +434,7 @@ def _calc_two_punch_hours_with_shift_break(record: DailyRecord) -> float | None:
     return round(hours, 2)
 
 
-def _calc_record_work_hours(record: DailyRecord) -> tuple[float, int]:
+def _calc_record_work_hours(record) -> tuple[float, int]:
     special_hours = _calc_two_punch_hours_with_shift_break(record)
     if special_hours is not None:
         return special_hours, 0
@@ -611,16 +616,7 @@ def _build_final_rows(month: str, emp_ids: list[int]) -> list[list[object]]:
     date_range = _month_date_range(month)
     datetime_range = _month_datetime_range(month)
 
-    daily_by_emp: dict[int, list[DailyRecord]] = defaultdict(list)
-    if date_range:
-        start_date, end_date = date_range
-        daily_records = (
-            DailyRecord.query.filter(DailyRecord.emp_id.in_(emp_ids))
-            .filter(DailyRecord.record_date >= start_date, DailyRecord.record_date < end_date)
-            .all()
-        )
-        for record in daily_records:
-            daily_by_emp[record.emp_id].append(record)
+    daily_by_emp = attendance_views_by_employee(month, employees, EMPLOYEE_STATS_CONTEXT) if date_range else {}
 
     leave_by_emp: dict[int, list[LeaveRecord]] = defaultdict(list)
     if datetime_range:
@@ -689,17 +685,8 @@ def _build_abnormal_rows(month: str, emp_ids: list[int]) -> list[dict[str, objec
         .all()
     )
     data: list[dict[str, object]] = []
-    daily_by_emp: dict[int, list[DailyRecord]] = defaultdict(list)
     date_range = _month_date_range(month)
-    if date_range:
-        start_date, end_date = date_range
-        daily_records = (
-            DailyRecord.query.filter(DailyRecord.emp_id.in_(emp_ids))
-            .filter(DailyRecord.record_date >= start_date, DailyRecord.record_date < end_date)
-            .all()
-        )
-        for record in daily_records:
-            daily_by_emp[record.emp_id].append(record)
+    daily_by_emp = attendance_views_by_employee(month, employees, EMPLOYEE_STATS_CONTEXT) if date_range else {}
 
     for employee in employees:
         daily_rows = daily_by_emp.get(employee.id, [])
@@ -734,22 +721,12 @@ def _build_department_hours_rows(month: str, emp_ids: list[int]) -> list[dict[st
 
     if not employees:
         return []
-
-    date_range = _month_date_range(month)
-    rows = []
-    if date_range:
-        start_date, end_date = date_range
-        rows = (
-            DailyRecord.query.options(joinedload(DailyRecord.employee).joinedload(Employee.department))
-            .join(Employee, DailyRecord.emp_id == Employee.id)
-            .filter(DailyRecord.emp_id.in_(emp_ids))
-            .filter(DailyRecord.record_date >= start_date, DailyRecord.record_date < end_date)
-            .all()
-        )
-    for row in rows:
-        dept_name = row.employee.department.dept_name if row.employee and row.employee.department else "未分配部门"
-        totals.setdefault(dept_name, 0.0)
-        totals[dept_name] += _calc_record_work_hours(row)[0]
+    rows_by_emp = attendance_views_by_employee(month, employees, EMPLOYEE_STATS_CONTEXT)
+    for employee in employees:
+        dept_name = employee.department.dept_name if employee.department else "未分配部门"
+        for row in rows_by_emp.get(employee.id, []):
+            totals.setdefault(dept_name, 0.0)
+            totals[dept_name] += _calc_record_work_hours(row)[0]
 
     return [{"dept_name": k, "total_hours": round(v, 2)} for k, v in sorted(totals.items(), key=lambda x: x[0])]
 
@@ -780,22 +757,15 @@ def _build_manager_department_hours_rows(month: str, emp_ids: list[int]) -> list
 
     if not employees:
         return []
-
-    date_range = _month_date_range(month)
-    rows = []
-    if date_range:
-        start_date, end_date = date_range
-        rows = (
-            DailyRecord.query.options(joinedload(DailyRecord.employee).joinedload(Employee.department))
-            .join(Employee, DailyRecord.emp_id == Employee.id)
-            .filter(DailyRecord.emp_id.in_(emp_ids))
-            .filter(DailyRecord.record_date >= start_date, DailyRecord.record_date < end_date)
-            .all()
-        )
-    for row in rows:
-        dept_name = _top_level_department_name(row.employee.department if row.employee else None)
-        totals.setdefault(dept_name, 0.0)
-        totals[dept_name] += float(row.actual_hours or 0) / 60.0
+    rows_by_emp = attendance_views_by_employee(month, employees, MANAGER_STATS_CONTEXT)
+    for employee in employees:
+        dept_name = _top_level_department_name(employee.department)
+        for row in rows_by_emp.get(employee.id, []):
+            totals.setdefault(dept_name, 0.0)
+            if row.source == "manager":
+                totals[dept_name] += float(row.actual_hours or 0) / 60.0
+            else:
+                totals[dept_name] += float(row.actual_hours or 0)
 
     return [{"dept_name": k, "total_hours": round(v, 2)} for k, v in sorted(totals.items(), key=lambda x: x[0])]
 
@@ -944,18 +914,12 @@ def punch_records_api():
         return jsonify([])
 
     month = _resolve_query_month()
-    date_range = _month_date_range(month)
+    employees = Employee.query.options(joinedload(Employee.department)).filter(Employee.id.in_(emp_ids)).order_by(Employee.emp_no.asc()).all()
     rows = []
-    if date_range:
-        start_date, end_date = date_range
-        rows = (
-            DailyRecord.query.options(joinedload(DailyRecord.employee).joinedload(Employee.department))
-            .join(Employee, DailyRecord.emp_id == Employee.id)
-            .filter(DailyRecord.emp_id.in_(emp_ids))
-            .filter(DailyRecord.record_date >= start_date, DailyRecord.record_date < end_date)
-            .order_by(Employee.emp_no.asc(), DailyRecord.record_date.desc())
-            .all()
-        )
+    rows_by_emp = attendance_views_by_employee(month, employees, EMPLOYEE_STATS_CONTEXT)
+    for employee in employees:
+        rows.extend(rows_by_emp.get(employee.id, []))
+    rows.sort(key=lambda row: ((row.employee.emp_no if row.employee else ""), row.record_date or date.min), reverse=True)
 
     return jsonify(
         [
@@ -992,18 +956,12 @@ def punch_records_export_api():
         return jsonify({"error": "No employee assigned"}), 400
 
     month = _resolve_query_month()
-    date_range = _month_date_range(month)
+    employees = Employee.query.options(joinedload(Employee.department)).filter(Employee.id.in_(emp_ids)).order_by(Employee.emp_no.asc()).all()
     rows = []
-    if date_range:
-        start_date, end_date = date_range
-        rows = (
-            DailyRecord.query.options(joinedload(DailyRecord.employee).joinedload(Employee.department))
-            .join(Employee, DailyRecord.emp_id == Employee.id)
-            .filter(DailyRecord.emp_id.in_(emp_ids))
-            .filter(DailyRecord.record_date >= start_date, DailyRecord.record_date < end_date)
-            .order_by(Employee.emp_no.asc(), DailyRecord.record_date.desc())
-            .all()
-        )
+    rows_by_emp = attendance_views_by_employee(month, employees, EMPLOYEE_STATS_CONTEXT)
+    for employee in employees:
+        rows.extend(rows_by_emp.get(employee.id, []))
+    rows.sort(key=lambda row: ((row.employee.emp_no if row.employee else ""), row.record_date or date.min), reverse=True)
 
     punch_headers = [
         "日期",
@@ -1095,16 +1053,9 @@ def daily_records_api():
         return jsonify([])
 
     month = request.args.get("month") or datetime.now().strftime("%Y-%m")
-    date_range = _month_date_range(month)
-    rows = []
-    if date_range:
-        start_date, end_date = date_range
-        rows = (
-            DailyRecord.query.filter_by(emp_id=emp_id)
-            .filter(DailyRecord.record_date >= start_date, DailyRecord.record_date < end_date)
-            .order_by(DailyRecord.record_date.desc())
-            .all()
-        )
+    employee = Employee.query.get(emp_id)
+    rows = attendance_views_by_employee(month, [employee], EMPLOYEE_STATS_CONTEXT).get(emp_id, []) if employee else []
+    rows.sort(key=lambda row: row.record_date or date.min, reverse=True)
     return jsonify(
         [
             {
@@ -1275,18 +1226,12 @@ def summary_download_export_api():
         wb.remove(wb.active)
 
     if include_punch:
-        date_range = _month_date_range(month)
+        employees = Employee.query.options(joinedload(Employee.department)).filter(Employee.id.in_(emp_ids)).order_by(Employee.emp_no.asc()).all()
         punch_rows = []
-        if date_range:
-            start_date, end_date = date_range
-            punch_rows = (
-                DailyRecord.query.options(joinedload(DailyRecord.employee).joinedload(Employee.department))
-                .join(Employee, DailyRecord.emp_id == Employee.id)
-                .filter(DailyRecord.emp_id.in_(emp_ids))
-                .filter(DailyRecord.record_date >= start_date, DailyRecord.record_date < end_date)
-                .order_by(Employee.emp_no.asc(), DailyRecord.record_date.desc())
-                .all()
-            )
+        rows_by_emp = attendance_views_by_employee(month, employees, EMPLOYEE_STATS_CONTEXT)
+        for employee in employees:
+            punch_rows.extend(rows_by_emp.get(employee.id, []))
+        punch_rows.sort(key=lambda row: ((row.employee.emp_no if row.employee else ""), row.record_date or date.min), reverse=True)
 
         punch_headers = [
             "日期", "员工编号", "员工姓名", "部门", "原始打卡数据",

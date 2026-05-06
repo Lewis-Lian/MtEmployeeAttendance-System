@@ -21,6 +21,8 @@ class DailyRecord(db.Model):
     early_leave_minutes = db.Column(db.Integer, default=0)
     exception_reason = db.Column(db.Text, nullable=True)
     raw_data = db.Column(db.JSON, default=dict)
+    employee_payload = db.Column(db.JSON, default=dict)
+    manager_payload = db.Column(db.JSON, default=dict)
 
     employee = db.relationship("Employee", back_populates="daily_records")
     shift = db.relationship("Shift", back_populates="daily_records")

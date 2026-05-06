@@ -15,14 +15,26 @@ document.addEventListener("DOMContentLoaded", () => {
   const batchShiftValue = document.getElementById("batchShiftValue");
   const batchManagerValue = document.getElementById("batchManagerValue");
   const batchNursingValue = document.getElementById("batchNursingValue");
+  const batchEmployeeAttendanceSourceValue = document.getElementById("batchEmployeeAttendanceSourceValue");
+  const batchManagerAttendanceSourceValue = document.getElementById("batchManagerAttendanceSourceValue");
   const batchDeptInlineLookup = document.getElementById("batchDeptInlineLookup");
   const applyBatchBtn = document.getElementById("applyBatchBtn");
   const createShiftSelect = createForm.querySelector('[name="shift_no"]');
+  const createEmployeeIsManager = document.getElementById("createEmployeeIsManager");
+  const createEmployeeAttendanceSourceSelect = createForm.querySelector('[name="employee_stats_attendance_source"]');
+  const createManagerAttendanceSourceSelect = createForm.querySelector('[name="manager_stats_attendance_source"]');
+  const employeeAttendanceSourceHelpText = document.getElementById("employeeAttendanceSourceHelpText");
+  const managerAttendanceSourceHelpText = document.getElementById("managerAttendanceSourceHelpText");
+  const attendanceFallbackNoticeModalEl = document.getElementById("attendanceFallbackNoticeModal");
+  const attendanceFallbackNoticeConfirmBtn = document.getElementById("attendanceFallbackNoticeConfirmBtn");
+  const attendanceFallbackNoticeModal = attendanceFallbackNoticeModalEl ? new bootstrap.Modal(attendanceFallbackNoticeModalEl) : null;
 
   let employees = [];
   let shifts = [];
   let departments = [];
   let selectedEmployeeIds = new Set();
+
+  const attendanceFallbackNoticeCookie = "attendance_fallback_notice_seen";
 
   const employeeFilterContext = {
     lookupEl: document.getElementById("employeeManageFilterLookup"),
@@ -52,6 +64,55 @@ document.addEventListener("DOMContentLoaded", () => {
   function deptNameById(id) {
     const dept = departments.find((x) => String(x.id) === String(id));
     return dept ? dept.dept_name || "" : "";
+  }
+
+  function getCookie(name) {
+    const cookie = document.cookie
+      .split(";")
+      .map((item) => item.trim())
+      .find((item) => item.startsWith(`${name}=`));
+    if (!cookie) return "";
+    return decodeURIComponent(cookie.split("=").slice(1).join("="));
+  }
+
+  function setCookie(name, value, days = 365) {
+    const expires = new Date(Date.now() + days * 24 * 60 * 60 * 1000).toUTCString();
+    document.cookie = `${name}=${encodeURIComponent(value)}; expires=${expires}; path=/; SameSite=Lax`;
+  }
+
+  function hasSeenAttendanceFallbackNotice() {
+    return getCookie(attendanceFallbackNoticeCookie) === "1";
+  }
+
+  function markAttendanceFallbackNoticeSeen() {
+    setCookie(attendanceFallbackNoticeCookie, "1");
+  }
+
+  function maybeShowAttendanceFallbackNotice(value) {
+    if (value !== "auto_fallback") return;
+    if (hasSeenAttendanceFallbackNotice()) return;
+    if (!attendanceFallbackNoticeModal) return;
+    attendanceFallbackNoticeModal.show();
+  }
+
+  function syncCreateAttendanceSourceMode() {
+    const isManager = createEmployeeIsManager?.checked;
+    if (createEmployeeAttendanceSourceSelect) {
+      createEmployeeAttendanceSourceSelect.disabled = !!isManager;
+    }
+    if (createManagerAttendanceSourceSelect) {
+      createManagerAttendanceSourceSelect.disabled = !isManager;
+    }
+    if (employeeAttendanceSourceHelpText) {
+      employeeAttendanceSourceHelpText.textContent = isManager
+        ? "当前为管理人员，该项不生效且不可编辑。"
+        : "当前为普通员工，该项生效。";
+    }
+    if (managerAttendanceSourceHelpText) {
+      managerAttendanceSourceHelpText.textContent = isManager
+        ? "当前为管理人员，该项生效。"
+        : "当前为普通员工，该项不生效且不可编辑。";
+    }
   }
 
   function idsFromHidden(hiddenEl) {
@@ -108,7 +169,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const rows = getFilteredEmployees();
     syncEmployeeFilterMeta(rows.length);
     if (!rows.length) {
-      tableBody.innerHTML = `<tr><td class="text-muted" colspan="9">暂无匹配员工</td></tr>`;
+      tableBody.innerHTML = `<tr><td class="text-muted" colspan="11">暂无匹配员工</td></tr>`;
       syncSelectedCount();
       return;
     }
@@ -116,6 +177,18 @@ document.addEventListener("DOMContentLoaded", () => {
       const shiftText = employee.shift_no ? `${employee.shift_no} - ${employee.shift_name || ""}` : "-";
       const employeeType = employee.is_manager ? "管理人员" : "普通员工";
       const nursingText = employee.is_nursing ? "是" : "否";
+      const employeeAttendanceSourceText =
+        employee.employee_stats_attendance_source === "manager"
+          ? "管理人员考勤源文件取值"
+          : employee.employee_stats_attendance_source === "auto_fallback"
+            ? "自动回退"
+            : "员工考勤源文件取值";
+      const managerAttendanceSourceText =
+        employee.manager_stats_attendance_source === "employee"
+          ? "员工考勤源文件取值"
+          : employee.manager_stats_attendance_source === "auto_fallback"
+            ? "自动回退"
+            : "管理人员考勤源文件取值";
       const checked = selectedEmployeeIds.has(Number(employee.id)) ? "checked" : "";
       const tr = document.createElement("tr");
       tr.innerHTML = `
@@ -125,6 +198,8 @@ document.addEventListener("DOMContentLoaded", () => {
         <td>${employee.name}</td>
         <td>${employeeType}</td>
         <td>${nursingText}</td>
+        <td>${employeeAttendanceSourceText}</td>
+        <td>${managerAttendanceSourceText}</td>
         <td>${employee.dept_name || "-"}</td>
         <td>${shiftText}</td>
         <td><button class="btn btn-sm btn-outline-danger delete-single-btn" data-id="${employee.id}">删除</button></td>
@@ -182,6 +257,8 @@ document.addEventListener("DOMContentLoaded", () => {
     if (action === "set_shift") payload.shift_no = value;
     if (action === "set_manager") payload.is_manager = value === "1";
     if (action === "set_nursing") payload.is_nursing = value === "1";
+    if (action === "set_employee_stats_attendance_source") payload.employee_stats_attendance_source = value;
+    if (action === "set_manager_stats_attendance_source") payload.manager_stats_attendance_source = value;
 
     const res = await fetch("/admin/employees/batch", {
       method: "POST",
@@ -201,15 +278,27 @@ document.addEventListener("DOMContentLoaded", () => {
     batchShiftValue.value = "";
     batchManagerValue.value = "";
     batchNursingValue.value = "";
+    batchEmployeeAttendanceSourceValue.value = "";
+    batchManagerAttendanceSourceValue.value = "";
     deptPicker.setValue(deptLookupContexts.batch, "");
   }
 
   function syncBatchInputMode() {
     const action = batchAction.value;
-    batchValue.classList.toggle("d-none", action === "set_department" || action === "set_shift" || action === "set_manager" || action === "set_nursing");
+    batchValue.classList.toggle(
+      "d-none",
+      action === "set_department"
+        || action === "set_shift"
+        || action === "set_manager"
+        || action === "set_nursing"
+        || action === "set_employee_stats_attendance_source"
+        || action === "set_manager_stats_attendance_source"
+    );
     batchShiftValue.classList.toggle("d-none", action !== "set_shift");
     batchManagerValue.classList.toggle("d-none", action !== "set_manager");
     batchNursingValue.classList.toggle("d-none", action !== "set_nursing");
+    batchEmployeeAttendanceSourceValue.classList.toggle("d-none", action !== "set_employee_stats_attendance_source");
+    batchManagerAttendanceSourceValue.classList.toggle("d-none", action !== "set_manager_stats_attendance_source");
     batchDeptInlineLookup.classList.toggle("d-none", action !== "set_department");
 
     if (action === "set_name") {
@@ -271,6 +360,8 @@ document.addEventListener("DOMContentLoaded", () => {
       shift_no: fd.get("shift_no"),
       is_manager: fd.get("is_manager") === "on",
       is_nursing: fd.get("is_nursing") === "on",
+      employee_stats_attendance_source: fd.get("employee_stats_attendance_source"),
+      manager_stats_attendance_source: fd.get("manager_stats_attendance_source"),
     };
     const res = await fetch("/admin/employees", {
       method: "POST",
@@ -417,6 +508,30 @@ document.addEventListener("DOMContentLoaded", () => {
       await loadEmployees();
       return;
     }
+    if (action === "set_employee_stats_attendance_source") {
+      const sourceValue = batchEmployeeAttendanceSourceValue.value;
+      if (!sourceValue) {
+        window.alert("请选择员工考勤统计来源");
+        return;
+      }
+      const ok = await applyBatch("set_employee_stats_attendance_source", sourceValue, ids);
+      if (!ok) return;
+      resetBatchInputs();
+      await loadEmployees();
+      return;
+    }
+    if (action === "set_manager_stats_attendance_source") {
+      const sourceValue = batchManagerAttendanceSourceValue.value;
+      if (!sourceValue) {
+        window.alert("请选择管理人员考勤统计来源");
+        return;
+      }
+      const ok = await applyBatch("set_manager_stats_attendance_source", sourceValue, ids);
+      if (!ok) return;
+      resetBatchInputs();
+      await loadEmployees();
+      return;
+    }
     if (action !== "delete" && !value) {
       window.alert("请输入操作值");
       return;
@@ -435,6 +550,44 @@ document.addEventListener("DOMContentLoaded", () => {
     syncBatchInputMode();
   });
 
+  if (attendanceFallbackNoticeConfirmBtn) {
+    attendanceFallbackNoticeConfirmBtn.addEventListener("click", () => {
+      markAttendanceFallbackNoticeSeen();
+      attendanceFallbackNoticeModal?.hide();
+    });
+  }
+
+  if (createEmployeeAttendanceSourceSelect) {
+    createEmployeeAttendanceSourceSelect.addEventListener("change", () => {
+      if (createEmployeeAttendanceSourceSelect.disabled) return;
+      maybeShowAttendanceFallbackNotice(createEmployeeAttendanceSourceSelect.value);
+    });
+  }
+
+  if (createManagerAttendanceSourceSelect) {
+    createManagerAttendanceSourceSelect.addEventListener("change", () => {
+      if (createManagerAttendanceSourceSelect.disabled) return;
+      maybeShowAttendanceFallbackNotice(createManagerAttendanceSourceSelect.value);
+    });
+  }
+
+  if (batchEmployeeAttendanceSourceValue) {
+    batchEmployeeAttendanceSourceValue.addEventListener("change", () => {
+      maybeShowAttendanceFallbackNotice(batchEmployeeAttendanceSourceValue.value);
+    });
+  }
+
+  if (batchManagerAttendanceSourceValue) {
+    batchManagerAttendanceSourceValue.addEventListener("change", () => {
+      maybeShowAttendanceFallbackNotice(batchManagerAttendanceSourceValue.value);
+    });
+  }
+
+  if (createEmployeeIsManager) {
+    createEmployeeIsManager.addEventListener("change", syncCreateAttendanceSourceMode);
+  }
+
+  syncCreateAttendanceSourceMode();
   syncBatchInputMode();
   Promise.all([loadShifts(), loadDepartments(), loadEmployees()]);
 });

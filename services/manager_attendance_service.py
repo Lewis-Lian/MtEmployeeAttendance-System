@@ -13,6 +13,11 @@ from models.manager_attendance_override import ManagerAttendanceOverride
 from models.monthly_report import MonthlyReport
 from models.manager_month_stat import ManagerMonthStat
 from models.overtime import OvertimeRecord
+from services.attendance_source_service import (
+    MANAGER_STATS_CONTEXT,
+    attendance_views_by_employee,
+    selected_monthly_report_raw,
+)
 
 
 MANAGER_HEADERS = [
@@ -171,27 +176,24 @@ def _leave_bucket(value: str | None) -> str:
     return ""
 
 
-def _monthly_report_raw(employee_id: int, month: str) -> dict:
-    rows = MonthlyReport.query.filter_by(emp_id=employee_id, report_month=month).all()
-    candidates = [row.raw_data for row in rows if isinstance(row.raw_data, dict)]
-    manager_candidates = [raw for raw in candidates if "出勤天数" in raw]
-    if manager_candidates:
-        return max(manager_candidates, key=_manager_raw_score)
+def _monthly_report_raw(employee: Employee, month: str) -> dict:
+    raw = selected_monthly_report_raw(employee, month, MANAGER_STATS_CONTEXT)
+    if raw:
+        return raw
 
-    # Older imports of "2026年_3月管理人员..." were parsed as 1970-01.
-    # Prefer the manager-style raw shape when the correctly keyed row is absent
-    # or was overwritten by ordinary employee monthly data.
     fallback_rows = (
-        MonthlyReport.query.filter_by(emp_id=employee_id, report_month="1970-01")
-        .filter(MonthlyReport.raw_data.isnot(None))
+        MonthlyReport.query.filter_by(emp_id=employee.id, report_month="1970-01")
+        .filter(MonthlyReport.manager_raw_data.isnot(None))
         .all()
     )
     fallback_candidates = [
-        row.raw_data for row in fallback_rows if isinstance(row.raw_data, dict) and "出勤天数" in row.raw_data
+        row.manager_raw_data
+        for row in fallback_rows
+        if isinstance(row.manager_raw_data, dict) and "出勤天数" in row.manager_raw_data
     ]
     if fallback_candidates:
         return max(fallback_candidates, key=_manager_raw_score)
-    return candidates[0] if candidates else {}
+    return {}
 
 
 def _leave_rows(employee_id: int, month: str) -> list[LeaveRecord]:
@@ -375,7 +377,7 @@ _MANAGER_PUNCH_TIME_KEYS = (
 )
 
 
-def _has_manager_punch_record(record: DailyRecord) -> bool:
+def _has_manager_punch_record(record) -> bool:
     raw = record.raw_data if isinstance(record.raw_data, dict) else {}
     punch_data = str(raw.get("刷卡时间数据") or "").strip()
     if punch_data:
@@ -384,15 +386,10 @@ def _has_manager_punch_record(record: DailyRecord) -> bool:
 
 
 def _manager_attendance_days(employee_id: int, month: str) -> float:
-    date_range = _month_date_range(month)
-    if not date_range:
+    employee = Employee.query.get(employee_id)
+    if not employee:
         return 0.0
-    start_date, end_date = date_range
-    rows = (
-        DailyRecord.query.filter_by(emp_id=employee_id)
-        .filter(DailyRecord.record_date >= start_date, DailyRecord.record_date < end_date)
-        .all()
-    )
+    rows = attendance_views_by_employee(month, [employee], MANAGER_STATS_CONTEXT).get(employee_id, [])
     return _round2(sum(1 for row in rows if _has_manager_punch_record(row)))
 
 
@@ -403,15 +400,7 @@ def _manager_schedule_late_minutes(employee_id: int, month: str) -> int:
     employee = Employee.query.get(employee_id)
     if employee and employee.is_nursing:
         return 0
-    date_range = _month_date_range(month)
-    if not date_range:
-        return 0
-    start_date, end_date = date_range
-    rows = (
-        DailyRecord.query.filter_by(emp_id=employee_id)
-        .filter(DailyRecord.record_date >= start_date, DailyRecord.record_date < end_date)
-        .all()
-    )
+    rows = attendance_views_by_employee(month, [employee], MANAGER_STATS_CONTEXT).get(employee_id, [])
     total = 0
     for row in rows:
         raw = row.raw_data if isinstance(row.raw_data, dict) else {}
@@ -429,7 +418,7 @@ def build_manager_rows(
     include_overrides: bool = True,
     sync_month_stats: bool = False,
 ) -> list[dict[str, object]]:
-    query = Employee.query.filter_by(is_manager=True)
+    query = Employee.query.filter(Employee.is_manager.is_(True))
     if emp_ids is not None:
         if not emp_ids:
             return []
@@ -439,7 +428,7 @@ def build_manager_rows(
     month_days = _month_days(options.month)
 
     for employee in employees:
-        raw = _monthly_report_raw(employee.id, options.month)
+        raw = _monthly_report_raw(employee, options.month)
         raw_attendance_days = _raw_float(raw, "出勤天数")
 
         # 哺乳假管理人员不计算迟到\早退

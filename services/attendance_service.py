@@ -8,6 +8,8 @@ from models import db
 from models.daily_record import DailyRecord
 from models.leave import LeaveRecord
 from models.annual_leave import AnnualLeave
+from models.employee import Employee
+from services.attendance_source_service import EMPLOYEE_STATS_CONTEXT, attendance_views_by_employee
 
 
 LEAVE_TYPES = ["病假", "事假", "工伤", "丧假", "婚假", "出差", "补休（调休）"]
@@ -26,25 +28,20 @@ def _month_date_range(month: str) -> tuple[date, date] | None:
 class AttendanceService:
     @staticmethod
     def monthly_summary(emp_id: int, month: str) -> dict:
-        date_range = _month_date_range(month)
-        if not date_range:
+        employee = Employee.query.get(emp_id)
+        if not employee:
             totals = [0, 0, 0, 0, 0, 0, 0]
         else:
-            start_date, end_date = date_range
-            totals = (
-                db.session.query(
-                    func.coalesce(func.sum(DailyRecord.expected_hours), 0),
-                    func.coalesce(func.sum(DailyRecord.actual_hours), 0),
-                    func.coalesce(func.sum(DailyRecord.absent_hours), 0),
-                    func.coalesce(func.sum(DailyRecord.leave_hours), 0),
-                    func.coalesce(func.sum(DailyRecord.overtime_hours), 0),
-                    func.coalesce(func.sum(DailyRecord.late_minutes), 0),
-                    func.coalesce(func.sum(DailyRecord.early_leave_minutes), 0),
-                )
-                .filter(DailyRecord.emp_id == emp_id)
-                .filter(DailyRecord.record_date >= start_date, DailyRecord.record_date < end_date)
-                .first()
-            )
+            rows = attendance_views_by_employee(month, [employee], EMPLOYEE_STATS_CONTEXT).get(emp_id, [])
+            totals = [
+                sum(float(row.expected_hours or 0) for row in rows),
+                sum(float(row.actual_hours or 0) for row in rows),
+                sum(float(row.absent_hours or 0) for row in rows),
+                sum(float(row.leave_hours or 0) for row in rows),
+                sum(float(row.overtime_hours or 0) for row in rows),
+                sum(int(row.late_minutes or 0) for row in rows),
+                sum(int(row.early_leave_minutes or 0) for row in rows),
+            ]
 
         return {
             "expected_hours": float(totals[0] or 0),
@@ -58,16 +55,17 @@ class AttendanceService:
 
     @staticmethod
     def yearly_summary(emp_id: int, year: int) -> dict:
-        daily_totals = (
-            db.session.query(
-                func.coalesce(func.sum(DailyRecord.actual_hours), 0),
-                func.coalesce(func.sum(DailyRecord.absent_hours), 0),
-                func.coalesce(func.sum(DailyRecord.overtime_hours), 0),
-            )
-            .filter(DailyRecord.emp_id == emp_id)
-            .filter(func.strftime("%Y", DailyRecord.record_date) == str(year))
-            .first()
-        )
+        employee = Employee.query.get(emp_id)
+        actual_hours = 0.0
+        absent_hours = 0.0
+        overtime_hours = 0.0
+        if employee:
+            for month in range(1, 13):
+                month_key = f"{year}-{month:02d}"
+                rows = attendance_views_by_employee(month_key, [employee], EMPLOYEE_STATS_CONTEXT).get(emp_id, [])
+                actual_hours += sum(float(row.actual_hours or 0) for row in rows)
+                absent_hours += sum(float(row.absent_hours or 0) for row in rows)
+                overtime_hours += sum(float(row.overtime_hours or 0) for row in rows)
 
         leave_total = (
             db.session.query(func.coalesce(func.sum(LeaveRecord.duration), 0))
@@ -77,9 +75,9 @@ class AttendanceService:
         )
 
         return {
-            "actual_hours": float(daily_totals[0] or 0),
-            "absent_hours": float(daily_totals[1] or 0),
-            "overtime_hours": float(daily_totals[2] or 0),
+            "actual_hours": float(actual_hours or 0),
+            "absent_hours": float(absent_hours or 0),
+            "overtime_hours": float(overtime_hours or 0),
             "leave_duration": float(leave_total or 0),
         }
 

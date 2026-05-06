@@ -12,6 +12,12 @@ import openpyxl
 from models import db
 from models.department import Department
 from models.employee import Employee
+from models.employee import (
+    ATTENDANCE_SOURCE_AUTO_FALLBACK,
+    ATTENDANCE_SOURCE_EMPLOYEE,
+    ATTENDANCE_SOURCE_MANAGER,
+    ATTENDANCE_SOURCE_VALUES,
+)
 from models.employee_shift import EmployeeShiftAssignment
 from models.shift import Shift
 from models.daily_record import DailyRecord
@@ -37,6 +43,14 @@ from utils.helpers import parse_bool_zh
 
 
 admin_bp = Blueprint("admin", __name__, url_prefix="/admin")
+
+
+def _manager_scope_employees():
+    return (
+        Employee.query.filter(Employee.is_manager.is_(True))
+        .order_by(Employee.dept_id.asc(), Employee.emp_no.asc(), Employee.name.asc())
+        .all()
+    )
 
 
 def _convert_uploaded_xls_to_xlsx(xls_path: str) -> str | None:
@@ -146,6 +160,8 @@ def _serialize_employee(employee: Employee) -> dict:
         "name": employee.name,
         "is_manager": bool(employee.is_manager),
         "is_nursing": bool(employee.is_nursing),
+        "employee_stats_attendance_source": employee.employee_stats_attendance_source or ATTENDANCE_SOURCE_EMPLOYEE,
+        "manager_stats_attendance_source": employee.manager_stats_attendance_source or ATTENDANCE_SOURCE_MANAGER,
         "dept_id": employee.dept_id,
         "dept_no": employee.department.dept_no if employee.department else "",
         "dept_name": employee.department.dept_name if employee.department else "",
@@ -154,6 +170,13 @@ def _serialize_employee(employee: Employee) -> dict:
         "shift_no": shift.shift_no if shift else "",
         "shift_name": shift.shift_name if shift else "",
     }
+
+
+def _parse_attendance_source(value: Any, default: str) -> str:
+    source = str(value or "").strip() or default
+    if source not in ATTENDANCE_SOURCE_VALUES:
+        return default
+    return source
 
 
 def _serialize_account_set(row: AccountSet) -> dict:
@@ -539,11 +562,7 @@ def manager_annual_leave_page():
 @admin_bp.route("/manager-attendance-overrides")
 @admin_required
 def manager_attendance_overrides_page():
-    employees = (
-        Employee.query.filter_by(is_manager=True)
-        .order_by(Employee.dept_id.asc(), Employee.emp_no.asc(), Employee.name.asc())
-        .all()
-    )
+    employees = _manager_scope_employees()
     return render_template("admin/manager_attendance_overrides.html", employees=employees)
 
 
@@ -801,7 +820,7 @@ def _manager_export_months(year: int) -> list[tuple[str, str]]:
 
 
 def _manager_base_month_values() -> dict[str, dict[str, object]]:
-    employees = Employee.query.filter_by(is_manager=True).order_by(Employee.dept_id.asc(), Employee.emp_no.asc()).all()
+    employees = _manager_scope_employees()
     return {
         employee.name: {
             "emp_id": employee.id,
@@ -882,7 +901,11 @@ def _stat_col_keys(stat_type: str) -> list[tuple[str, str]]:
 def _apply_saved_manager_stats(values_by_name: dict[str, dict[str, object]], year: int, stat_type: str) -> None:
     rows = (
         ManagerMonthStat.query.join(Employee, ManagerMonthStat.emp_id == Employee.id)
-        .filter(ManagerMonthStat.year == year, ManagerMonthStat.stat_type == stat_type, Employee.is_manager.is_(True))
+        .filter(
+            ManagerMonthStat.year == year,
+            ManagerMonthStat.stat_type == stat_type,
+            Employee.is_manager.is_(True),
+        )
         .all()
     )
     for row in rows:
@@ -1083,7 +1106,7 @@ def _sync_manager_stats_from_manager_rows(month: str, manager_rows: list[dict[st
     but no longer writes to the stat tables to avoid double-writing.
     """
     year, key = _stat_key_for_month(month)
-    employees_by_name = {employee.name: employee for employee in Employee.query.filter_by(is_manager=True).all()}
+    employees_by_name = {employee.name: employee for employee in _manager_scope_employees()}
     errors: list[str] = []
 
     for item in manager_rows:
@@ -1121,7 +1144,7 @@ def _download_manager_stat_template(stat_type: str):
     ws = wb.active
     ws.title = "年休统计表" if stat_type == "annual_leave" else "加班统计表"
     ws.append(_stat_headers(stat_type))
-    employees = Employee.query.filter_by(is_manager=True).order_by(Employee.dept_id.asc(), Employee.emp_no.asc()).all()
+    employees = _manager_scope_employees()
     for employee in employees:
         values = [employee.department.dept_name if employee.department else "", employee.name]
         values.extend("" for _key, _label in _stat_col_keys(stat_type))
@@ -1162,7 +1185,7 @@ def _import_manager_stat_file(stat_type: str, year: int):
 
     imported = 0
     errors: list[str] = []
-    employees_by_name = {employee.name: employee for employee in Employee.query.filter_by(is_manager=True).all()}
+    employees_by_name = {employee.name: employee for employee in _manager_scope_employees()}
     for row_idx in range(2, ws.max_row + 1):
         name = str(ws.cell(row_idx, headers["姓名"]).value or "").strip()
         if not name:
@@ -1623,6 +1646,12 @@ def create_employee():
     shift_no = (data.get("shift_no") or "").strip()
     is_manager = bool(data.get("is_manager"))
     is_nursing = bool(data.get("is_nursing"))
+    employee_stats_attendance_source = _parse_attendance_source(
+        data.get("employee_stats_attendance_source"), ATTENDANCE_SOURCE_EMPLOYEE
+    )
+    manager_stats_attendance_source = _parse_attendance_source(
+        data.get("manager_stats_attendance_source"), ATTENDANCE_SOURCE_MANAGER
+    )
 
     if not emp_no or not name:
         return jsonify({"error": "emp_no and name are required"}), 400
@@ -1630,7 +1659,15 @@ def create_employee():
         return jsonify({"error": "emp_no already exists"}), 400
 
     department = _resolve_department(dept_name) if dept_name else None
-    employee = Employee(emp_no=emp_no, name=name, dept_id=department.id if department else None, is_manager=is_manager, is_nursing=is_nursing)
+    employee = Employee(
+        emp_no=emp_no,
+        name=name,
+        dept_id=department.id if department else None,
+        is_manager=is_manager,
+        is_nursing=is_nursing,
+        employee_stats_attendance_source=employee_stats_attendance_source,
+        manager_stats_attendance_source=manager_stats_attendance_source,
+    )
     db.session.add(employee)
     db.session.flush()
     _assign_employee_shift(employee, _resolve_shift(shift_no))
@@ -1648,6 +1685,8 @@ def update_employee(employee_id: int):
     shift_no = (data.get("shift_no") or "").strip()
     is_manager = bool(data.get("is_manager"))
     is_nursing = data.get("is_nursing")
+    employee_stats_attendance_source = data.get("employee_stats_attendance_source")
+    manager_stats_attendance_source = data.get("manager_stats_attendance_source")
     if is_nursing is not None:
         is_nursing = bool(is_nursing)
 
@@ -1665,6 +1704,12 @@ def update_employee(employee_id: int):
     employee.is_manager = is_manager
     if is_nursing is not None:
         employee.is_nursing = is_nursing
+    employee.employee_stats_attendance_source = _parse_attendance_source(
+        employee_stats_attendance_source, employee.employee_stats_attendance_source or ATTENDANCE_SOURCE_EMPLOYEE
+    )
+    employee.manager_stats_attendance_source = _parse_attendance_source(
+        manager_stats_attendance_source, employee.manager_stats_attendance_source or ATTENDANCE_SOURCE_MANAGER
+    )
     if dept_name:
         department = _resolve_department(dept_name)
         employee.dept_id = department.id if department else None
@@ -1732,6 +1777,20 @@ def batch_operate_employees():
         is_nursing = bool(data.get("is_nursing"))
         for employee in employees:
             employee.is_nursing = is_nursing
+        db.session.commit()
+        return jsonify({"status": "ok", "action": action, "affected": len(employees)})
+
+    if action == "set_employee_stats_attendance_source":
+        source = _parse_attendance_source(data.get("employee_stats_attendance_source"), ATTENDANCE_SOURCE_EMPLOYEE)
+        for employee in employees:
+            employee.employee_stats_attendance_source = source
+        db.session.commit()
+        return jsonify({"status": "ok", "action": action, "affected": len(employees)})
+
+    if action == "set_manager_stats_attendance_source":
+        source = _parse_attendance_source(data.get("manager_stats_attendance_source"), ATTENDANCE_SOURCE_MANAGER)
+        for employee in employees:
+            employee.manager_stats_attendance_source = source
         db.session.commit()
         return jsonify({"status": "ok", "action": action, "affected": len(employees)})
 

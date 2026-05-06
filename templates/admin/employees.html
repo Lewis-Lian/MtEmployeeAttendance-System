@@ -50,6 +50,24 @@
               <input class="form-check-input" type="checkbox" name="is_nursing" id="createEmployeeIsNursing">
               <label class="form-check-label" for="createEmployeeIsNursing">哺乳假</label>
             </div>
+            <div class="mb-2">
+              <label class="form-label">员工考勤统计来源</label>
+              <select class="form-select" name="employee_stats_attendance_source">
+                <option value="employee">员工考勤源文件取值</option>
+                <option value="manager">管理人员考勤源文件取值</option>
+                <option value="auto_fallback">自动回退</option>
+              </select>
+              <div class="form-text" id="employeeAttendanceSourceHelpText">普通员工使用此项，管理人员时该项不可编辑。</div>
+            </div>
+            <div class="mb-3">
+              <label class="form-label">管理人员考勤统计来源</label>
+              <select class="form-select" name="manager_stats_attendance_source">
+                <option value="manager">管理人员考勤源文件取值</option>
+                <option value="employee">员工考勤源文件取值</option>
+                <option value="auto_fallback">自动回退</option>
+              </select>
+              <div class="form-text" id="managerAttendanceSourceHelpText">管理人员使用此项，普通员工时该项不可编辑。</div>
+            </div>
             <button class="btn btn-primary w-100" type="submit">创建员工</button>
           </form>
           <div id="employeeCreateResult" class="small text-muted mt-2"></div>
@@ -66,7 +84,7 @@
               <a class="btn btn-outline-secondary" href="/admin/employees/template">下载示例模板</a>
             </div>
           </form>
-          <div class="panel-note mt-2 mb-0">模板列：人员编号、人员姓名、部门名称、班次编号、是否管理人员。</div>
+          <div class="panel-note mt-2 mb-0">模板列：人员编号、人员姓名、部门名称、班次编号、是否管理人员。统计归属与考勤来源先在后台手工维护。</div>
           <div id="employeeImportResult" class="small text-muted mt-2"></div>
         </div>
       </div>
@@ -116,6 +134,8 @@
               <option value="set_shift">更改班次</option>
               <option value="set_manager">设置人员类型</option>
               <option value="set_nursing">设置哺乳假</option>
+              <option value="set_employee_stats_attendance_source">设置员工考勤统计来源</option>
+              <option value="set_manager_stats_attendance_source">设置管理人员考勤统计来源</option>
               <option value="delete">删除</option>
             </select>
           </div>
@@ -137,6 +157,18 @@
               <option value="0">否</option>
               <option value="1">是</option>
             </select>
+            <select class="form-select form-select-sm d-none" id="batchEmployeeAttendanceSourceValue">
+              <option value="">选择员工考勤统计来源</option>
+              <option value="employee">员工考勤源文件取值</option>
+              <option value="manager">管理人员考勤源文件取值</option>
+              <option value="auto_fallback">自动回退</option>
+            </select>
+            <select class="form-select form-select-sm d-none" id="batchManagerAttendanceSourceValue">
+              <option value="">选择管理人员考勤统计来源</option>
+              <option value="manager">管理人员考勤源文件取值</option>
+              <option value="employee">员工考勤源文件取值</option>
+              <option value="auto_fallback">自动回退</option>
+            </select>
             <div class="employee-lookup d-none" id="batchDeptInlineLookup">
               <div class="input-group input-group-sm">
                 <input class="form-control form-control-sm" id="batchDeptInlineInput" placeholder="选择部门" autocomplete="off">
@@ -155,7 +187,7 @@
             <button class="btn btn-sm btn-outline-dark w-100" id="clearSelectionBtn">清空选择</button>
           </div>
         </div>
-        <div class="small text-muted mt-2">更改姓名/人员编号使用文本输入；更改部门使用部门选择器；更改班次和人员类型使用下拉。</div>
+        <div class="small text-muted mt-2">更改姓名/人员编号使用文本输入；更改部门使用部门选择器；更改班次、人员类型和考勤来源使用下拉。</div>
       </div>
       <div class="table-responsive">
         <table class="table table-sm table-striped mb-0 align-middle">
@@ -167,6 +199,8 @@
               <th>人员姓名</th>
               <th>人员类型</th>
               <th>哺乳假</th>
+              <th>员工考勤统计来源</th>
+              <th>管理人员考勤统计来源</th>
               <th>部门名称</th>
               <th>班次</th>
               <th>操作</th>
@@ -262,6 +296,34 @@
       <div class="modal-footer">
         <button class="btn btn-outline-secondary" data-bs-dismiss="modal">取消</button>
         <button class="btn btn-primary" id="employeeDeptPickerConfirmBtn" type="button">确定</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="attendanceFallbackNoticeModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">自动回退说明</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <div class="mb-3">
+          <div class="fw-semibold mb-1">员工考勤统计来源 选择“自动回退”时</div>
+          <div class="small text-muted">先取 员工考勤源文件取值；如果这个月员工源文件没有这人的可用考勤数据，再回退去取 管理人员考勤源文件取值。</div>
+        </div>
+        <div class="mb-3">
+          <div class="fw-semibold mb-1">管理人员考勤统计来源 选择“自动回退”时</div>
+          <div class="small text-muted">先取 管理人员考勤源文件取值；如果这个月管理人员源文件没有这人的可用考勤数据，再回退去取 员工考勤源文件取值。</div>
+        </div>
+        <div class="alert alert-light border mb-0">
+          <div>不是两边混着算，也不是按天拼接。</div>
+          <div>系统会先选一个主来源；主来源没数据时，整月回退到另一来源。</div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-primary" id="attendanceFallbackNoticeConfirmBtn" type="button">我知道了</button>
       </div>
     </div>
   </div>
