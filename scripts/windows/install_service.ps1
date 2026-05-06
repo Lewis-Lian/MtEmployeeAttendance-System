@@ -1,17 +1,43 @@
 [CmdletBinding()]
 param(
-    [string]$ProjectRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\..") ).Path,
+    [string]$ProjectRoot = "",
     [string]$ServiceName = "attendance-system",
     [int]$Port = 5000,
-    [string]$NssmPath = "C:\\tools\\nssm\\win64\\nssm.exe",
+    [string]$NssmPath = "",
     [string]$VenvDir = ".venv-win-prod"
 )
 
 $ErrorActionPreference = "Stop"
 
-if (!(Test-Path $NssmPath)) {
-    throw "nssm.exe not found: $NssmPath"
+if ([string]::IsNullOrWhiteSpace($ProjectRoot)) {
+    $scriptBase = if ($PSScriptRoot) { $PSScriptRoot } elseif ($MyInvocation.MyCommand.Path) { Split-Path -Parent $MyInvocation.MyCommand.Path } else { (Get-Location).Path }
+    $ProjectRoot = (Resolve-Path (Join-Path $scriptBase "..\..")).Path
 }
+
+function Resolve-NssmPath([string]$ConfiguredPath) {
+    if (![string]::IsNullOrWhiteSpace($ConfiguredPath) -and (Test-Path $ConfiguredPath)) {
+        return (Resolve-Path $ConfiguredPath).Path
+    }
+
+    $desktopDir = [Environment]::GetFolderPath("Desktop")
+    if (-not [string]::IsNullOrWhiteSpace($desktopDir) -and (Test-Path $desktopDir)) {
+        $desktopMatch = Get-ChildItem -Path $desktopDir -Filter nssm.exe -Recurse -File -ErrorAction SilentlyContinue |
+            Select-Object -First 1
+        if ($null -ne $desktopMatch) {
+            return $desktopMatch.FullName
+        }
+    }
+
+    foreach ($path in @("C:\tools\nssm\win64\nssm.exe", "C:\tools\nssm\nssm.exe")) {
+        if (Test-Path $path) {
+            return (Resolve-Path $path).Path
+        }
+    }
+
+    throw "nssm.exe not found. Put it on Desktop or pass -NssmPath explicitly."
+}
+
+$NssmPath = Resolve-NssmPath $NssmPath
 
 $pythonExe = Join-Path $ProjectRoot "$VenvDir\Scripts\python.exe"
 if (!(Test-Path $pythonExe)) {

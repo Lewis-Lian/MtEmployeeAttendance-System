@@ -1,15 +1,21 @@
 [CmdletBinding()]
 param(
-    [string]$ProjectRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\..") ).Path,
+    [string]$ProjectRoot = "",
     [string]$ServiceName = "attendance-system",
-    [string]$Host = "0.0.0.0",
+    [string]$BindHost = "0.0.0.0",
     [int]$DefaultPort = 8000,
     [string]$VenvDir = ".venv-win-prod",
-    [string]$NssmPath = "C:\\tools\\nssm\\win64\\nssm.exe",
-    [string]$PythonCmd = "python"
+    [string]$NssmPath = "",
+    [string]$PythonCmd = "python",
+    [string]$ManagerExePath = ""
 )
 
 $ErrorActionPreference = "Stop"
+
+if ([string]::IsNullOrWhiteSpace($ProjectRoot)) {
+    $scriptBase = if ($PSScriptRoot) { $PSScriptRoot } elseif ($MyInvocation.MyCommand.Path) { Split-Path -Parent $MyInvocation.MyCommand.Path } else { (Get-Location).Path }
+    $ProjectRoot = (Resolve-Path (Join-Path $scriptBase "..\..")).Path
+}
 
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
@@ -37,11 +43,58 @@ $configPath = Join-Path $configDir "windows_service_manager.json"
 $logDir = Join-Path $ProjectRoot "logs"
 $stdoutLog = Join-Path $logDir "service-stdout.log"
 $stderrLog = Join-Path $logDir "service-stderr.log"
+$startupShortcutName = "Attendance Service Manager.lnk"
+$appTitle = "考勤服务管理器"
+
+function Resolve-NssmPath([string]$ConfiguredPath) {
+    if (![string]::IsNullOrWhiteSpace($ConfiguredPath) -and (Test-Path $ConfiguredPath)) {
+        return (Resolve-Path $ConfiguredPath).Path
+    }
+
+    $desktopDir = [Environment]::GetFolderPath("Desktop")
+    if (-not [string]::IsNullOrWhiteSpace($desktopDir) -and (Test-Path $desktopDir)) {
+        $desktopMatch = Get-ChildItem -Path $desktopDir -Filter nssm.exe -Recurse -File -ErrorAction SilentlyContinue |
+            Select-Object -First 1
+        if ($null -ne $desktopMatch) {
+            return $desktopMatch.FullName
+        }
+    }
+
+    foreach ($path in @("C:\tools\nssm\win64\nssm.exe", "C:\tools\nssm\nssm.exe")) {
+        if (Test-Path $path) {
+            return (Resolve-Path $path).Path
+        }
+    }
+
+    return $null
+}
+
+function Resolve-ManagerExePath([string]$ConfiguredPath) {
+    if (![string]::IsNullOrWhiteSpace($ConfiguredPath) -and (Test-Path $ConfiguredPath)) {
+        return (Resolve-Path $ConfiguredPath).Path
+    }
+
+    $exeCandidate = [System.Diagnostics.Process]::GetCurrentProcess().MainModule.FileName
+    $exeName = [System.IO.Path]::GetFileName($exeCandidate)
+    if (
+        ![string]::IsNullOrWhiteSpace($exeCandidate) -and
+        $exeCandidate -like "*.exe" -and
+        (Test-Path $exeCandidate) -and
+        $exeName -notin @("powershell.exe", "pwsh.exe")
+    ) {
+        return $exeCandidate
+    }
+
+    return $null
+}
+
+$NssmPath = Resolve-NssmPath $NssmPath
+$ManagerExePath = Resolve-ManagerExePath $ManagerExePath
 
 function Show-Info([string]$Message) {
     [System.Windows.Forms.MessageBox]::Show(
         $Message,
-        "考勤服务管理器",
+        $appTitle,
         [System.Windows.Forms.MessageBoxButtons]::OK,
         [System.Windows.Forms.MessageBoxIcon]::Information
     ) | Out-Null
@@ -50,7 +103,7 @@ function Show-Info([string]$Message) {
 function Show-ErrorDialog([string]$Message) {
     [System.Windows.Forms.MessageBox]::Show(
         $Message,
-        "考勤服务管理器",
+        $appTitle,
         [System.Windows.Forms.MessageBoxButtons]::OK,
         [System.Windows.Forms.MessageBoxIcon]::Error
     ) | Out-Null
@@ -58,28 +111,26 @@ function Show-ErrorDialog([string]$Message) {
 
 function Ensure-ProjectDirs() {
     $null = New-Item -ItemType Directory -Force -Path $configDir
-    $null = New-Item -ItemType Directory -Force -Path (Join-Path $ProjectRoot "instance")
     $null = New-Item -ItemType Directory -Force -Path (Join-Path $ProjectRoot "static\uploads")
     $null = New-Item -ItemType Directory -Force -Path $logDir
 }
 
 function Ensure-Nssm() {
-    if (!(Test-Path $NssmPath)) {
-        throw "未找到 nssm.exe：$NssmPath"
+    if ([string]::IsNullOrWhiteSpace($NssmPath) -or !(Test-Path $NssmPath)) {
+        throw "未找到 nssm.exe。请将 nssm.exe 放到桌面，或放到 C:\tools\nssm\win64\ 下。"
     }
 }
 
 function Get-ServiceObject() {
-    return Get-Service -Name $ServiceName -ErrorAction SilentlyContinue
+    Get-Service -Name $ServiceName -ErrorAction SilentlyContinue
 }
 
 function Get-ServicePortFromNssm() {
-    if (!(Test-Path $NssmPath)) {
+    if ([string]::IsNullOrWhiteSpace($NssmPath) -or !(Test-Path $NssmPath)) {
         return $null
     }
 
-    $service = Get-ServiceObject
-    if ($null -eq $service) {
+    if ($null -eq (Get-ServiceObject)) {
         return $null
     }
 
@@ -95,32 +146,43 @@ function Get-ServicePortFromNssm() {
     return $null
 }
 
+function Get-StartupShortcutPath() {
+    $startupDir = [Environment]::GetFolderPath("Startup")
+    return Join-Path $startupDir $startupShortcutName
+}
+
 function Read-ManagerConfig() {
     Ensure-ProjectDirs
 
-    $port = Get-ServicePortFromNssm
     if (Test-Path $configPath) {
         $config = Get-Content $configPath -Raw | ConvertFrom-Json
     } else {
         $config = [pscustomobject]@{
-            Host = $Host
+            Host = $BindHost
             Port = $DefaultPort
             VenvDir = $VenvDir
+            AutoStartManager = $false
         }
     }
 
-    if ($null -ne $port) {
-        $config.Port = $port
+    $servicePort = Get-ServicePortFromNssm
+    if ($null -ne $servicePort) {
+        $config.Port = $servicePort
     }
 
     if ([string]::IsNullOrWhiteSpace($config.Host)) {
-        $config.Host = $Host
+        $config.Host = $BindHost
     }
 
     if ([string]::IsNullOrWhiteSpace($config.VenvDir)) {
         $config.VenvDir = $VenvDir
     }
 
+    if ($null -eq $config.PSObject.Properties["AutoStartManager"]) {
+        $config | Add-Member -NotePropertyName AutoStartManager -NotePropertyValue $false
+    }
+
+    $config.AutoStartManager = Test-Path (Get-StartupShortcutPath)
     Write-ManagerConfig $config
     return $config
 }
@@ -142,12 +204,12 @@ function Ensure-ProductionEnvironment() {
 
     $python = Get-Command $PythonCmd -ErrorAction SilentlyContinue
     if ($null -eq $python) {
-        throw "未找到 Python，请先安装 Python，或调整脚本里的 PythonCmd 参数。"
+        throw "未找到 Python。请先安装 Python，并确保 python 在 PATH 中。"
     }
 
     & $python.Source -m venv $venvRoot
     if ($LASTEXITCODE -ne 0) {
-        throw "创建虚拟环境失败：$venvRoot"
+        throw "创建生产虚拟环境失败：$venvRoot"
     }
 
     & $venvPython -m pip install --upgrade pip
@@ -157,7 +219,7 @@ function Ensure-ProductionEnvironment() {
 
     & $venvPython -m pip install -r (Join-Path $ProjectRoot "requirements.txt") waitress
     if ($LASTEXITCODE -ne 0) {
-        throw "安装依赖失败。"
+        throw "安装生产依赖失败。"
     }
 
     $envPath = Join-Path $ProjectRoot ".env"
@@ -171,18 +233,18 @@ function Ensure-ProductionEnvironment() {
 
 function Ensure-ServiceConfigured([int]$Port) {
     Ensure-Nssm
-    $pythonExe = Ensure-ProductionEnvironment
     Ensure-ProjectDirs
+    $pythonExe = Ensure-ProductionEnvironment
 
     $service = Get-ServiceObject
     if ($null -eq $service) {
-        & $NssmPath install $ServiceName $pythonExe
+        & $NssmPath install $ServiceName $pythonExe | Out-Null
         if ($LASTEXITCODE -ne 0) {
-            throw "创建服务失败：$ServiceName"
+            throw "创建 Windows 服务失败：$ServiceName"
         }
     }
 
-    $appParameters = "-m waitress --host=$Host --port=$Port --threads=8 --channel-timeout=120 app:app"
+    $appParameters = "-m waitress --host=$BindHost --port=$Port --threads=8 --channel-timeout=120 app:app"
 
     & $NssmPath set $ServiceName Application $pythonExe | Out-Null
     & $NssmPath set $ServiceName AppParameters $appParameters | Out-Null
@@ -202,8 +264,8 @@ function Ensure-ServiceConfigured([int]$Port) {
 }
 
 function Get-ServiceState() {
-    $service = Get-ServiceObject
     $config = Read-ManagerConfig
+    $service = Get-ServiceObject
 
     if ($null -eq $service) {
         return [pscustomobject]@{
@@ -211,6 +273,7 @@ function Get-ServiceState() {
             Running = $false
             Status = "未安装"
             Port = $config.Port
+            AutoStartManager = $config.AutoStartManager
         }
     }
 
@@ -219,6 +282,7 @@ function Get-ServiceState() {
         Running = $service.Status -eq [System.ServiceProcess.ServiceControllerStatus]::Running
         Status = [string]$service.Status
         Port = $config.Port
+        AutoStartManager = $config.AutoStartManager
     }
 }
 
@@ -227,6 +291,10 @@ function Start-ServiceSafe() {
     Ensure-ServiceConfigured $config.Port
 
     $service = Get-ServiceObject
+    if ($null -eq $service) {
+        throw "服务创建失败。"
+    }
+
     if ($service.Status -ne [System.ServiceProcess.ServiceControllerStatus]::Running) {
         Start-Service -Name $ServiceName
     }
@@ -244,16 +312,13 @@ function Stop-ServiceSafe() {
 }
 
 function Restart-ServiceSafe() {
-    $service = Get-ServiceObject
-    if ($null -eq $service) {
-        $config = Read-ManagerConfig
-        Ensure-ServiceConfigured $config.Port
-        Start-Service -Name $ServiceName
-        return
-    }
-
     $config = Read-ManagerConfig
     Ensure-ServiceConfigured $config.Port
+
+    $service = Get-ServiceObject
+    if ($null -eq $service) {
+        throw "服务尚未安装。"
+    }
 
     if ($service.Status -eq [System.ServiceProcess.ServiceControllerStatus]::Running) {
         Restart-Service -Name $ServiceName -Force
@@ -290,6 +355,31 @@ function Update-Port() {
     }
 }
 
+function Set-ManagerAutoStart([bool]$Enabled) {
+    if ([string]::IsNullOrWhiteSpace($ManagerExePath) -or !(Test-Path $ManagerExePath)) {
+        throw "当前未检测到可用于开机自启的 EXE 路径。请使用打包后的 EXE 运行。"
+    }
+
+    $shortcutPath = Get-StartupShortcutPath
+    if ($Enabled) {
+        $shell = New-Object -ComObject WScript.Shell
+        $shortcut = $shell.CreateShortcut($shortcutPath)
+        $shortcut.TargetPath = $ManagerExePath
+        $shortcut.WorkingDirectory = Split-Path $ManagerExePath -Parent
+        $shortcut.WindowStyle = 7
+        $shortcut.Description = $appTitle
+        $shortcut.Save()
+    } else {
+        if (Test-Path $shortcutPath) {
+            Remove-Item -LiteralPath $shortcutPath -Force
+        }
+    }
+
+    $config = Read-ManagerConfig
+    $config.AutoStartManager = $Enabled
+    Write-ManagerConfig $config
+}
+
 [System.Windows.Forms.Application]::EnableVisualStyles()
 
 $notifyIcon = New-Object System.Windows.Forms.NotifyIcon
@@ -301,21 +391,26 @@ $statusItem = New-Object System.Windows.Forms.ToolStripMenuItem
 $statusItem.Enabled = $false
 $portItem = New-Object System.Windows.Forms.ToolStripMenuItem
 $portItem.Enabled = $false
+$autoStartStatusItem = New-Object System.Windows.Forms.ToolStripMenuItem
+$autoStartStatusItem.Enabled = $false
 $separator1 = New-Object System.Windows.Forms.ToolStripSeparator
 $startItem = New-Object System.Windows.Forms.ToolStripMenuItem "启动服务"
-$stopItem = New-Object System.Windows.Forms.ToolStripMenuItem "关闭服务"
+$stopItem = New-Object System.Windows.Forms.ToolStripMenuItem "停止服务"
 $restartItem = New-Object System.Windows.Forms.ToolStripMenuItem "重启服务"
 $changePortItem = New-Object System.Windows.Forms.ToolStripMenuItem "修改端口"
+$autoStartManagerItem = New-Object System.Windows.Forms.ToolStripMenuItem "开机自动启动管理器"
 $separator2 = New-Object System.Windows.Forms.ToolStripSeparator
 $exitItem = New-Object System.Windows.Forms.ToolStripMenuItem "退出程序"
 
 $null = $contextMenu.Items.Add($statusItem)
 $null = $contextMenu.Items.Add($portItem)
+$null = $contextMenu.Items.Add($autoStartStatusItem)
 $null = $contextMenu.Items.Add($separator1)
 $null = $contextMenu.Items.Add($startItem)
 $null = $contextMenu.Items.Add($stopItem)
 $null = $contextMenu.Items.Add($restartItem)
 $null = $contextMenu.Items.Add($changePortItem)
+$null = $contextMenu.Items.Add($autoStartManagerItem)
 $null = $contextMenu.Items.Add($separator2)
 $null = $contextMenu.Items.Add($exitItem)
 
@@ -325,17 +420,20 @@ function Refresh-Ui() {
     $state = Get-ServiceState
     $statusItem.Text = "服务状态：$($state.Status)"
     $portItem.Text = "当前端口：$($state.Port)"
+    $autoStartStatusItem.Text = "开机自启：$(if ($state.AutoStartManager) { '已开启' } else { '未开启' })"
     $startItem.Enabled = !$state.Running
     $stopItem.Enabled = $state.Exists -and $state.Running
-    $restartItem.Enabled = $true
-    $notifyIcon.Text = "考勤服务管理器 - $($state.Status) - 端口 $($state.Port)"
+    $restartItem.Enabled = $state.Exists
+    $changePortItem.Enabled = $true
+    $autoStartManagerItem.Checked = [bool]$state.AutoStartManager
+    $notifyIcon.Text = "$appTitle - $($state.Status) - 端口 $($state.Port)"
 }
 
 $startItem.Add_Click({
     try {
         Start-ServiceSafe
         Refresh-Ui
-        Show-Info("服务已启动。")
+        Show-Info("服务已启动，当前为生产模式。")
     } catch {
         Show-ErrorDialog($_.Exception.Message)
         Refresh-Ui
@@ -346,7 +444,7 @@ $stopItem.Add_Click({
     try {
         Stop-ServiceSafe
         Refresh-Ui
-        Show-Info("服务已关闭。")
+        Show-Info("服务已停止。")
     } catch {
         Show-ErrorDialog($_.Exception.Message)
         Refresh-Ui
@@ -374,6 +472,22 @@ $changePortItem.Add_Click({
     }
 })
 
+$autoStartManagerItem.Add_Click({
+    try {
+        $targetState = -not $autoStartManagerItem.Checked
+        Set-ManagerAutoStart $targetState
+        Refresh-Ui
+        if ($targetState) {
+            Show-Info("已开启开机自动启动管理器。")
+        } else {
+            Show-Info("已关闭开机自动启动管理器。")
+        }
+    } catch {
+        Show-ErrorDialog($_.Exception.Message)
+        Refresh-Ui
+    }
+})
+
 $exitItem.Add_Click({
     $notifyIcon.Visible = $false
     $notifyIcon.Dispose()
@@ -388,8 +502,14 @@ $contextMenu.Add_Opening({
 $notifyIcon.Add_DoubleClick({
     Refresh-Ui
     $state = Get-ServiceState
-    Show-Info("服务状态：$($state.Status)`n当前端口：$($state.Port)`n服务名称：$ServiceName")
+    Show-Info("服务状态：$($state.Status)`n当前端口：$($state.Port)`n服务名：$ServiceName")
 })
+
+try {
+    Start-ServiceSafe
+} catch {
+    Show-ErrorDialog($_.Exception.Message)
+}
 
 Refresh-Ui
 [System.Windows.Forms.Application]::Run()

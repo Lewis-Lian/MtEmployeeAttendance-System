@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [string]$ProjectRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\..") ).Path,
+    [string]$ProjectRoot = "",
     [string]$PythonCmd = "python",
     [string]$PipIndexUrl = "https://pypi.tuna.tsinghua.edu.cn/simple",
     [string]$PipTrustedHost = "pypi.tuna.tsinghua.edu.cn",
@@ -10,6 +10,11 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+
+if ([string]::IsNullOrWhiteSpace($ProjectRoot)) {
+    $scriptBase = if ($PSScriptRoot) { $PSScriptRoot } elseif ($MyInvocation.MyCommand.Path) { Split-Path -Parent $MyInvocation.MyCommand.Path } else { (Get-Location).Path }
+    $ProjectRoot = (Resolve-Path (Join-Path $scriptBase "..\..")).Path
+}
 
 Write-Host "[1/6] Project root: $ProjectRoot"
 Set-Location $ProjectRoot

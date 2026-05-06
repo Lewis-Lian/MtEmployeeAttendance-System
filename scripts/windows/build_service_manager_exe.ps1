@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [string]$ProjectRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\..") ).Path,
+    [string]$ProjectRoot = "",
     [string]$OutputDir = "",
     [string]$ExeName = "AttendanceServiceManager.exe",
     [string]$ModuleScope = "CurrentUser",
@@ -8,6 +8,11 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+
+if ([string]::IsNullOrWhiteSpace($ProjectRoot)) {
+    $scriptBase = if ($PSScriptRoot) { $PSScriptRoot } elseif ($MyInvocation.MyCommand.Path) { Split-Path -Parent $MyInvocation.MyCommand.Path } else { (Get-Location).Path }
+    $ProjectRoot = (Resolve-Path (Join-Path $scriptBase "..\..")).Path
+}
 
 Set-Location $ProjectRoot
 
@@ -25,28 +30,34 @@ $outputExe = Join-Path $OutputDir $ExeName
 
 $ps2exeCommand = Get-Command Invoke-PS2EXE -ErrorAction SilentlyContinue
 if (($null -eq $ps2exeCommand) -or $ForceInstallModule.IsPresent) {
-    Write-Host "[1/3] 安装或更新 ps2exe 模块..."
+    Write-Host "[1/3] Installing or updating ps2exe..."
     Install-Module -Name ps2exe -Scope $ModuleScope -Force -AllowClobber
     $ps2exeCommand = Get-Command Invoke-PS2EXE -ErrorAction Stop
-}
-else {
-    Write-Host "[1/3] 已找到 ps2exe 模块。"
+} else {
+    Write-Host "[1/3] ps2exe found."
 }
 
-Write-Host "[2/3] 开始打包 EXE..."
+Write-Host "[2/3] Building EXE..."
 Invoke-PS2EXE `
     -InputFile $sourceScript `
     -OutputFile $outputExe `
     -NoConsole `
-    -Title "考勤服务管理器" `
-    -Description "考勤系统 Windows 后台服务管理器" `
+    -Title "Attendance Service Manager" `
+    -Description "Attendance system Windows background service manager" `
     -Company "MtEmployeeAttendance-System" `
     -Product "Attendance Service Manager" `
     -Copyright "Lewis"
 
 if (!(Test-Path $outputExe)) {
-    throw "打包失败，未生成 EXE：$outputExe"
+    throw "Build failed, EXE not found: $outputExe"
 }
 
-Write-Host "[3/3] 打包完成：$outputExe"
-Write-Host "可直接双击运行，或放到 Windows 开机启动目录。"
+$startBat = Join-Path $OutputDir "StartAttendanceServiceManager.bat"
+$startBatContent = @"
+@echo off
+start "" "%~dp0$ExeName"
+"@
+Set-Content -Path $startBat -Encoding ASCII -Value $startBatContent
+
+Write-Host "[3/3] Build completed: $outputExe"
+Write-Host "Launcher created: $startBat"

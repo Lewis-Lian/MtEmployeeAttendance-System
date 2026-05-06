@@ -1,0 +1,6 @@
+﻿{
+    "Host":  "0.0.0.0",
+    "Port":  8000,
+    "VenvDir":  ".venv-win-prod",
+    "AutoStartManager":  false
+}
