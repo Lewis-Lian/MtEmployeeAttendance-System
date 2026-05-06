@@ -281,6 +281,8 @@ def _extract_raw_punch_data(record) -> str:
     raw = record.raw_data or {}
     if not isinstance(raw, dict):
         raw = {}
+    if isinstance(raw.get("raw_data"), dict):
+        raw = raw.get("raw_data") or {}
 
     direct_keys = {"刷卡时间数据", "原始刷卡数据", "刷卡时间", "打卡记录"}
     for key in direct_keys:
@@ -295,10 +297,6 @@ def _extract_raw_punch_data(record) -> str:
         if ("刷卡" in repaired and "时间" in repaired) or ("打卡" in repaired and "记录" in repaired):
             return str(value).strip()
 
-    in_text = _format_punch_times(record.check_in_times)
-    out_text = _format_punch_times(record.check_out_times)
-    if in_text or out_text:
-        return f"上班:{in_text} 下班:{out_text}".strip()
     return ""
 
 
