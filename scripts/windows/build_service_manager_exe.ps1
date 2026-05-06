@@ -24,11 +24,12 @@ $null = New-Item -ItemType Directory -Force -Path $OutputDir
 $outputExe = Join-Path $OutputDir $ExeName
 
 $ps2exeCommand = Get-Command Invoke-PS2EXE -ErrorAction SilentlyContinue
-if ($null -eq $ps2exeCommand -or $ForceInstallModule) {
+if (($null -eq $ps2exeCommand) -or $ForceInstallModule.IsPresent) {
     Write-Host "[1/3] 安装或更新 ps2exe 模块..."
     Install-Module -Name ps2exe -Scope $ModuleScope -Force -AllowClobber
     $ps2exeCommand = Get-Command Invoke-PS2EXE -ErrorAction Stop
-} else {
+}
+else {
     Write-Host "[1/3] 已找到 ps2exe 模块。"
 }
 
