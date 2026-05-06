@@ -13,6 +13,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const editModal = new bootstrap.Modal(document.getElementById("editShiftModal"));
 
   let shifts = [];
+  window.AppFeedback.setResult(createResult, "", "muted");
 
   function slotRow(start = "", end = "") {
     const row = document.createElement("div");
@@ -38,7 +39,7 @@ document.addEventListener("DOMContentLoaded", () => {
       if (!target.classList.contains("remove-slot-btn")) return;
       const rows = container.querySelectorAll(".slot-row");
       if (rows.length <= 1) {
-        window.alert("至少保留一个时间段");
+        window.AppDialog.alert("至少保留一个时间段");
         return;
       }
       const row = target.closest(".slot-row");
@@ -101,7 +102,7 @@ document.addEventListener("DOMContentLoaded", () => {
     try {
       timeSlots = collectSlots(createSlotList);
     } catch (err) {
-      window.alert(err.message);
+      window.AppDialog.alert(err.message, "校验失败");
       return;
     }
     const fd = new FormData(createForm);
@@ -118,10 +119,12 @@ document.addEventListener("DOMContentLoaded", () => {
     });
     const data = await res.json();
     if (!res.ok) {
-      createResult.textContent = data.error || "创建失败";
+      window.AppFeedback.setResult(createResult, data.error || "创建失败", "danger");
+      window.AppToast.error(data.error || "创建失败", "创建班次失败");
       return;
     }
-    createResult.textContent = "创建成功";
+    window.AppFeedback.setResult(createResult, "创建成功", "success");
+    window.AppToast.success("创建成功", "创建班次成功");
     createForm.reset();
     createSlotList.innerHTML = "";
     createSlotList.appendChild(slotRow());
@@ -151,11 +154,11 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     if (target.classList.contains("delete-shift-btn")) {
-      if (!window.confirm(`确认删除班次 ${shift.shift_no} 吗？`)) return;
+      if (!(await window.AppDialog.confirm(`确认删除班次 ${shift.shift_no} 吗？`, "删除班次"))) return;
       const res = await fetch(`/admin/shifts/${shift.id}`, { method: "DELETE" });
       const data = await res.json();
       if (!res.ok) {
-        window.alert(data.error || "删除失败");
+        window.AppDialog.alert(data.error || "删除失败", "删除失败");
         return;
       }
       await loadShifts();
@@ -168,7 +171,7 @@ document.addEventListener("DOMContentLoaded", () => {
     try {
       timeSlots = collectSlots(editSlotList);
     } catch (err) {
-      window.alert(err.message);
+      window.AppDialog.alert(err.message, "校验失败");
       return;
     }
     const payload = {
@@ -184,7 +187,7 @@ document.addEventListener("DOMContentLoaded", () => {
     });
     const data = await res.json();
     if (!res.ok) {
-      window.alert(data.error || "更新失败");
+      window.AppDialog.alert(data.error || "更新失败", "更新失败");
       return;
     }
     editModal.hide();

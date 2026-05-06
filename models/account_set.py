@@ -10,6 +10,9 @@ class AccountSet(db.Model):
     month = db.Column(db.String(7), unique=True, nullable=False, index=True)  # YYYY-MM
     name = db.Column(db.String(100), nullable=False)
     is_active = db.Column(db.Boolean, default=False, nullable=False)
+    is_locked = db.Column(db.Boolean, default=False, nullable=False)
+    locked_at = db.Column(db.DateTime, nullable=True)
+    locked_by = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=True)
     factory_rest_days = db.Column(db.Float, default=0, nullable=False)
     monthly_benefit_days = db.Column(db.Float, default=0, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)

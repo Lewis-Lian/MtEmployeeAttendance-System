@@ -14,6 +14,29 @@ function displayValue(value) {
   return value === null || value === undefined || value === "" ? "" : String(value);
 }
 
+async function accountSetLockState(month) {
+  const query = new URLSearchParams();
+  if (month) query.set("month", month);
+  const res = await fetch(`/admin/account-sets?${query.toString()}`);
+  const rows = await res.json();
+  if (!Array.isArray(rows)) return null;
+  return rows.find((row) => row.month === month) || null;
+}
+
+function applyEmployeeOverrideLockState(accountSet) {
+  const locked = Boolean(accountSet?.is_locked);
+  document.getElementById("employeeAttendanceOverrideSaveBtn").disabled = locked;
+  document.getElementById("employeeAttendanceOverrideClearBtn").disabled = locked;
+  document.querySelectorAll("#employeeAttendanceOverrideBody [data-field]").forEach((input) => {
+    input.disabled = locked;
+  });
+  const notice = document.getElementById("employeeAttendanceOverrideLockNotice");
+  notice.className = `small mt-2 ${locked ? "text-danger" : "text-muted"}`;
+  notice.textContent = locked
+    ? `${accountSet.month} 账套已锁定，当前仅可查看`
+    : "当前月份未锁定，可保存或清空修正";
+}
+
 function updateEmployeeMetrics(status = null, data = null) {
   const month = document.getElementById("employeeAttendanceOverrideMonth").value || "-";
   const selectedIds = selectedEmployeeIds();
@@ -64,11 +87,11 @@ function selectedQuery() {
   const ids = selectedEmployeeIds();
   const empId = ids[0];
   if (!month || !empId) {
-    window.alert("请选择月份和员工");
+    window.AppDialog.alert("请选择月份和员工");
     return null;
   }
   if (ids.length > 1) {
-    window.alert("员工考勤修正一次只能维护一名员工，请只选择一个人");
+    window.AppDialog.alert("员工考勤修正一次只能维护一名员工，请只选择一个人");
     return null;
   }
   return { month, empId };
@@ -78,13 +101,17 @@ async function loadEmployeeAttendanceOverride() {
   const selected = selectedQuery();
   if (!selected) return;
   const query = new URLSearchParams({ month: selected.month, emp_id: selected.empId });
-  const res = await fetch(`/admin/employee-attendance-overrides/record?${query.toString()}`);
+  const [res, accountSet] = await Promise.all([
+    fetch(`/admin/employee-attendance-overrides/record?${query.toString()}`),
+    accountSetLockState(selected.month),
+  ]);
   const data = await res.json();
   if (!res.ok) {
-    window.alert(data.error || "查询失败");
+    window.AppDialog.alert(data.error || "查询失败", "查询失败");
     return;
   }
   renderEmployeeRows(data);
+  applyEmployeeOverrideLockState(accountSet);
   updateEmployeeMetrics("已查询", data);
 }
 
@@ -106,7 +133,7 @@ async function saveEmployeeAttendanceOverride() {
   });
   const data = await res.json();
   if (!res.ok) {
-    window.alert(data.error || "保存失败");
+    window.AppDialog.alert(data.error || "保存失败", "保存失败");
     return;
   }
   renderEmployeeRows(data);
@@ -122,7 +149,7 @@ async function clearEmployeeAttendanceOverride() {
   });
   const data = await res.json();
   if (!res.ok) {
-    window.alert(data.error || "清空失败");
+    window.AppDialog.alert(data.error || "清空失败", "清空失败");
     return;
   }
   renderEmployeeRows(data);
@@ -135,6 +162,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   monthInput.value = currentMonthValue();
   await employeeSelector.init();
   updateEmployeeMetrics("等待查询");
+  applyEmployeeOverrideLockState(null);
   monthInput.addEventListener("input", () => updateEmployeeMetrics("等待查询"));
   document
     .getElementById("selectedEmpIds")

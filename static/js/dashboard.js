@@ -100,7 +100,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   document.getElementById("downloadBtn").addEventListener("click", () => {
     const { query, selectedCount } = buildFinalDataQuery(employeeSelector);
     if (!selectedCount) {
-      window.alert("请先选择员工");
+      window.AppDialog.alert("请先选择员工");
       return;
     }
     window.location.href = `/employee/api/final-data/export?${query.toString()}`;

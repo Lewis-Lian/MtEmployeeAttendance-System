@@ -23,6 +23,7 @@
 
           <label class="form-label small mb-1">当前账套</label>
           <select class="form-select mb-2" id="accountSetSelect"></select>
+          <div id="accountSetLockNotice" class="small mb-2 text-muted">请选择账套</div>
           <div class="row g-2 mb-2">
             <div class="col-6">
               <label class="form-label small mb-1">本月厂休天数</label>
@@ -36,6 +37,8 @@
           <div class="toolbar">
             <button class="btn btn-outline-primary btn-sm" id="saveAccountSetParamsBtn" type="button">保存参数</button>
             <button class="btn btn-outline-secondary btn-sm" id="activateAccountSetBtn" type="button">设为当前</button>
+            <button class="btn btn-outline-warning btn-sm" id="lockAccountSetBtn" type="button">锁定账套</button>
+            <button class="btn btn-outline-success btn-sm" id="unlockAccountSetBtn" type="button">解锁账套</button>
             <button class="btn btn-outline-danger btn-sm" id="deleteAccountSetBtn" type="button">删除</button>
             <button class="btn btn-outline-secondary btn-sm" id="refreshAccountSetsBtn" type="button">刷新</button>
           </div>

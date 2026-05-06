@@ -10,13 +10,18 @@ document.addEventListener("DOMContentLoaded", () => {
   const monthlyBenefitDaysInput = document.getElementById("monthlyBenefitDaysInput");
   const saveAccountSetParamsBtn = document.getElementById("saveAccountSetParamsBtn");
   const activateAccountSetBtn = document.getElementById("activateAccountSetBtn");
+  const lockAccountSetBtn = document.getElementById("lockAccountSetBtn");
+  const unlockAccountSetBtn = document.getElementById("unlockAccountSetBtn");
   const deleteAccountSetBtn = document.getElementById("deleteAccountSetBtn");
   const refreshAccountSetsBtn = document.getElementById("refreshAccountSetsBtn");
   const accountSetResult = document.getElementById("accountSetResult");
   const accountSetImportsBody = document.getElementById("accountSetImportsBody");
+  const accountSetLockNotice = document.getElementById("accountSetLockNotice");
 
   uploadResult.style.whiteSpace = "pre-line";
   let accountSets = [];
+  window.AppFeedback.setResult(accountSetResult, "", "muted");
+  window.AppFeedback.setResult(uploadResult, "", "muted");
 
   function currentAccountSetId() {
     return Number(accountSetSelect.value || 0);
@@ -31,6 +36,20 @@ document.addEventListener("DOMContentLoaded", () => {
     const row = currentAccountSet();
     factoryRestDaysInput.value = row ? String(row.factory_rest_days || 0) : "0";
     monthlyBenefitDaysInput.value = row ? String(row.monthly_benefit_days || 0) : "0";
+    const isLocked = Boolean(row?.is_locked);
+    factoryRestDaysInput.disabled = isLocked;
+    monthlyBenefitDaysInput.disabled = isLocked;
+    saveAccountSetParamsBtn.disabled = isLocked || !row;
+    deleteAccountSetBtn.disabled = isLocked || !row;
+    importRawBtn.disabled = isLocked || !row;
+    calculateEmployeeBtn.disabled = isLocked || !row;
+    calculateManagerBtn.disabled = isLocked || !row;
+    lockAccountSetBtn.disabled = !row || isLocked;
+    unlockAccountSetBtn.disabled = !row || !isLocked;
+    accountSetLockNotice.className = `small mb-2 ${isLocked ? "text-danger" : "text-muted"}`;
+    accountSetLockNotice.textContent = !row
+      ? "请选择账套"
+      : (isLocked ? "该账套已锁定，仅允许查看、设为当前和解锁。" : "该账套未锁定，可继续上传、计算和修改。");
   }
 
   function renderAccountSets() {
@@ -101,12 +120,12 @@ document.addEventListener("DOMContentLoaded", () => {
     });
     const data = await res.json();
     if (!res.ok) {
-      accountSetResult.className = "small mt-2 text-danger";
-      accountSetResult.textContent = data.error || "创建账套失败";
+      window.AppFeedback.setResult(accountSetResult, data.error || "创建账套失败", "danger");
+      window.AppToast.error(data.error || "创建账套失败", "创建账套失败");
       return;
     }
-    accountSetResult.className = "small mt-2 text-success";
-    accountSetResult.textContent = `创建成功：${data.account_set.name}`;
+    window.AppFeedback.setResult(accountSetResult, `创建成功：${data.account_set.name}`, "success");
+    window.AppToast.success(`创建成功：${data.account_set.name}`, "创建账套成功");
     createAccountSetForm.reset();
     await loadAccountSets();
   });
@@ -114,8 +133,7 @@ document.addEventListener("DOMContentLoaded", () => {
   saveAccountSetParamsBtn.addEventListener("click", async () => {
     const id = currentAccountSetId();
     if (!id) {
-      accountSetResult.className = "small mt-2 text-danger";
-      accountSetResult.textContent = "请先选择账套";
+      window.AppFeedback.setResult(accountSetResult, "请先选择账套", "danger");
       return;
     }
     const res = await fetch(`/admin/account-sets/${id}`, {
@@ -128,52 +146,88 @@ document.addEventListener("DOMContentLoaded", () => {
     });
     const data = await res.json();
     if (!res.ok) {
-      accountSetResult.className = "small mt-2 text-danger";
-      accountSetResult.textContent = data.error || "保存账套参数失败";
+      window.AppFeedback.setResult(accountSetResult, data.error || "保存账套参数失败", "danger");
+      window.AppToast.error(data.error || "保存账套参数失败", "保存失败");
       return;
     }
-    accountSetResult.className = "small mt-2 text-success";
-    accountSetResult.textContent = "账套参数已保存";
+    window.AppFeedback.setResult(accountSetResult, "账套参数已保存", "success");
+    window.AppToast.success("账套参数已保存", "保存成功");
     await loadAccountSets();
   });
 
   activateAccountSetBtn.addEventListener("click", async () => {
     const id = currentAccountSetId();
     if (!id) {
-      accountSetResult.className = "small mt-2 text-danger";
-      accountSetResult.textContent = "请先选择账套";
+      window.AppFeedback.setResult(accountSetResult, "请先选择账套", "danger");
       return;
     }
     const res = await fetch(`/admin/account-sets/${id}/activate`, { method: "POST" });
     const data = await res.json();
     if (!res.ok) {
-      accountSetResult.className = "small mt-2 text-danger";
-      accountSetResult.textContent = data.error || "设置当前账套失败";
+      window.AppFeedback.setResult(accountSetResult, data.error || "设置当前账套失败", "danger");
+      window.AppToast.error(data.error || "设置当前账套失败", "切换失败");
       return;
     }
-    accountSetResult.className = "small mt-2 text-success";
-    accountSetResult.textContent = `已切换当前账套：${data.account_set.name}`;
+    window.AppFeedback.setResult(accountSetResult, `已切换当前账套：${data.account_set.name}`, "success");
+    window.AppToast.success(`已切换当前账套：${data.account_set.name}`, "切换成功");
+    await loadAccountSets();
+  });
+
+  lockAccountSetBtn.addEventListener("click", async () => {
+    const id = currentAccountSetId();
+    if (!id) {
+      window.AppFeedback.setResult(accountSetResult, "请先选择账套", "danger");
+      return;
+    }
+    if (!(await window.AppDialog.confirm("确认锁定该账套吗？锁定后将不能上传、计算、修正或删除。", "锁定账套"))) return;
+    const res = await fetch(`/admin/account-sets/${id}/lock`, { method: "POST" });
+    const data = await res.json();
+    if (!res.ok) {
+      window.AppFeedback.setResult(accountSetResult, data.error || "锁定账套失败", "danger");
+      window.AppToast.error(data.error || "锁定账套失败", "锁定失败");
+      return;
+    }
+    window.AppFeedback.setResult(accountSetResult, `账套已锁定：${data.account_set.name}`, "success");
+    window.AppToast.success(`账套已锁定：${data.account_set.name}`, "锁定成功");
+    await loadAccountSets();
+  });
+
+  unlockAccountSetBtn.addEventListener("click", async () => {
+    const id = currentAccountSetId();
+    if (!id) {
+      window.AppFeedback.setResult(accountSetResult, "请先选择账套", "danger");
+      return;
+    }
+    if (!(await window.AppDialog.confirm("确认解锁该账套吗？解锁后将恢复修改能力。", "解锁账套"))) return;
+    const res = await fetch(`/admin/account-sets/${id}/unlock`, { method: "POST" });
+    const data = await res.json();
+    if (!res.ok) {
+      window.AppFeedback.setResult(accountSetResult, data.error || "解锁账套失败", "danger");
+      window.AppToast.error(data.error || "解锁账套失败", "解锁失败");
+      return;
+    }
+    window.AppFeedback.setResult(accountSetResult, `账套已解锁：${data.account_set.name}`, "success");
+    window.AppToast.success(`账套已解锁：${data.account_set.name}`, "解锁成功");
     await loadAccountSets();
   });
 
   deleteAccountSetBtn.addEventListener("click", async () => {
     const id = currentAccountSetId();
     if (!id) {
-      accountSetResult.className = "small mt-2 text-danger";
-      accountSetResult.textContent = "请先选择账套";
+      window.AppFeedback.setResult(accountSetResult, "请先选择账套", "danger");
       return;
     }
-    if (!window.confirm("确认删除该账套吗？将同时删除账套下的归档文件记录。")) return;
+    if (!(await window.AppDialog.confirm("确认删除该账套吗？将同时删除账套下的归档文件记录。", "删除账套"))) return;
 
     const res = await fetch(`/admin/account-sets/${id}`, { method: "DELETE" });
     const data = await res.json();
     if (!res.ok) {
-      accountSetResult.className = "small mt-2 text-danger";
-      accountSetResult.textContent = data.error || "删除账套失败";
+      window.AppFeedback.setResult(accountSetResult, data.error || "删除账套失败", "danger");
+      window.AppToast.error(data.error || "删除账套失败", "删除失败");
       return;
     }
-    accountSetResult.className = "small mt-2 text-success";
-    accountSetResult.textContent = "账套已删除";
+    window.AppFeedback.setResult(accountSetResult, "账套已删除", "success");
+    window.AppToast.success("账套已删除", "删除成功");
     await loadAccountSets();
   });
 
@@ -187,8 +241,7 @@ document.addEventListener("DOMContentLoaded", () => {
     e.preventDefault();
     const accountSetId = currentAccountSetId();
     if (!accountSetId) {
-      uploadResult.className = "small mt-2 text-danger";
-      uploadResult.textContent = "请先创建并选择账套";
+      window.AppFeedback.setResult(uploadResult, "请先创建并选择账套", "danger");
       return;
     }
 
@@ -196,7 +249,7 @@ document.addEventListener("DOMContentLoaded", () => {
     formData.append("account_set_id", String(accountSetId));
     importRawBtn.disabled = true;
     importRawBtn.textContent = "上传中...";
-    uploadResult.textContent = "";
+    window.AppFeedback.setResult(uploadResult, "", "muted");
     try {
       const res = await fetch("/admin/import/raw-files", { method: "POST", body: formData });
       const data = await res.json();
@@ -204,18 +257,18 @@ document.addEventListener("DOMContentLoaded", () => {
       const failedRows = results.filter((x) => x.status !== "ok");
 
       if (res.ok && failedRows.length === 0 && (data.failed || 0) === 0) {
-        uploadResult.className = "small mt-2 text-success";
-        uploadResult.textContent = "上传成功，已归档到账套，点击“开始计算”后才会生成考勤数据。";
+        window.AppFeedback.setResult(uploadResult, "上传成功，已归档到账套，点击“开始计算”后才会生成考勤数据。", "success");
+        window.AppToast.success("上传成功，已归档到账套。", "上传成功");
       } else {
         const details = failedRows.map((x, i) => `${i + 1}. ${x.file || "未知文件"}: ${x.error || "上传失败"}`);
-        uploadResult.className = "small mt-2 text-danger";
-        uploadResult.textContent = `上传失败，错误明细：\n${details.join("\n")}`;
+        window.AppFeedback.setResult(uploadResult, `上传失败，错误明细：\n${details.join("\n")}`, "danger");
+        window.AppToast.error("上传失败，请查看错误明细。", "上传失败");
       }
       await loadAccountSets();
       await loadAccountSetImports();
     } catch (err) {
-      uploadResult.className = "small mt-2 text-danger";
-      uploadResult.textContent = `上传失败：${err?.message || "网络或服务异常"}`;
+      window.AppFeedback.setResult(uploadResult, `上传失败：${err?.message || "网络或服务异常"}`, "danger");
+      window.AppToast.error(err?.message || "网络或服务异常", "上传失败");
     } finally {
       importRawBtn.disabled = false;
       importRawBtn.textContent = "上传原始文件";
@@ -225,8 +278,7 @@ document.addEventListener("DOMContentLoaded", () => {
   async function runCalculation(mode, button, label) {
     const accountSetId = currentAccountSetId();
     if (!accountSetId) {
-      uploadResult.className = "small mt-2 text-danger";
-      uploadResult.textContent = "请先选择账套";
+      window.AppFeedback.setResult(uploadResult, "请先选择账套", "danger");
       return;
     }
     calculateEmployeeBtn.disabled = true;
@@ -254,18 +306,18 @@ document.addEventListener("DOMContentLoaded", () => {
       }
 
       if (res.ok && failedRows.length === 0) {
-        uploadResult.className = "small mt-2 text-success";
-        uploadResult.textContent = `${label}成功\n${summaryLines.join("\n")}`;
+        window.AppFeedback.setResult(uploadResult, `${label}成功\n${summaryLines.join("\n")}`, "success");
+        window.AppToast.success(`${label}成功`, label);
       } else {
         const details = failedRows.map((x, i) => `${i + 1}. ${x.file || "未知文件"}: ${x.error || "计算失败"}`);
-        uploadResult.className = "small mt-2 text-danger";
-        uploadResult.textContent = `${label}失败，错误明细：\n${details.join("\n")}\n\n已处理统计：\n${summaryLines.join("\n")}`;
+        window.AppFeedback.setResult(uploadResult, `${label}失败，错误明细：\n${details.join("\n")}\n\n已处理统计：\n${summaryLines.join("\n")}`, "danger");
+        window.AppToast.error(`${label}失败，请查看错误明细。`, label);
       }
       await loadAccountSets();
       await loadAccountSetImports();
     } catch (err) {
-      uploadResult.className = "small mt-2 text-danger";
-      uploadResult.textContent = `${label}失败：${err?.message || "网络或服务异常"}`;
+      window.AppFeedback.setResult(uploadResult, `${label}失败：${err?.message || "网络或服务异常"}`, "danger");
+      window.AppToast.error(err?.message || "网络或服务异常", `${label}失败`);
     } finally {
       calculateEmployeeBtn.disabled = false;
       calculateManagerBtn.disabled = false;

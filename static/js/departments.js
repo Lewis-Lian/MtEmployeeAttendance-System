@@ -18,6 +18,8 @@ document.addEventListener("DOMContentLoaded", () => {
   const confirmBatchParentBtn = document.getElementById("confirmBatchParentDeptBtn");
 
   let departments = [];
+  window.AppFeedback.setResult(createResult, "", "muted");
+  window.AppFeedback.setResult(importResult, "", "muted");
 
   function getSelectedIds() {
     return Array.from(tableBody.querySelectorAll(".dept-check:checked")).map((x) => Number(x.value));
@@ -64,7 +66,7 @@ document.addEventListener("DOMContentLoaded", () => {
     });
     const data = await res.json();
     if (!res.ok) {
-      window.alert(data.error || "删除失败");
+      window.AppDialog.alert(data.error || "删除失败", "删除失败");
       return false;
     }
     return true;
@@ -78,7 +80,7 @@ document.addEventListener("DOMContentLoaded", () => {
     });
     const data = await res.json();
     if (!res.ok) {
-      window.alert(data.error || "更新失败");
+      window.AppDialog.alert(data.error || "更新失败", "更新失败");
       return false;
     }
     return true;
@@ -92,7 +94,7 @@ document.addEventListener("DOMContentLoaded", () => {
     });
     const data = await res.json();
     if (!res.ok) {
-      window.alert(data.error || "更新失败");
+      window.AppDialog.alert(data.error || "更新失败", "更新失败");
       return false;
     }
     return true;
@@ -171,10 +173,12 @@ document.addEventListener("DOMContentLoaded", () => {
     });
     const data = await res.json();
     if (!res.ok) {
-      createResult.textContent = data.error || "创建失败";
+      window.AppFeedback.setResult(createResult, data.error || "创建失败", "danger");
+      window.AppToast.error(data.error || "创建失败", "创建部门失败");
       return;
     }
-    createResult.textContent = "创建成功";
+    window.AppFeedback.setResult(createResult, "创建成功", "success");
+    window.AppToast.success("创建成功", "创建部门成功");
     createForm.reset();
     parentPicker.setValue(lookupContexts.create, "");
     await loadDepartments();
@@ -186,10 +190,12 @@ document.addEventListener("DOMContentLoaded", () => {
     const res = await fetch("/admin/departments/import", { method: "POST", body: formData });
     const data = await res.json();
     if (!res.ok) {
-      importResult.textContent = data.error || "导入失败";
+      window.AppFeedback.setResult(importResult, data.error || "导入失败", "danger");
+      window.AppToast.error(data.error || "导入失败", "导入部门失败");
       return;
     }
-    importResult.textContent = `导入成功，处理 ${data.imported} 条`;
+    window.AppFeedback.setResult(importResult, `导入成功，处理 ${data.imported} 条`, "success");
+    window.AppToast.success(`导入成功，处理 ${data.imported} 条`, "导入部门成功");
     importForm.reset();
     await loadDepartments();
   });
@@ -209,17 +215,17 @@ document.addEventListener("DOMContentLoaded", () => {
   applyBatchActionBtn.addEventListener("click", async () => {
     const ids = getSelectedIds();
     if (!ids.length) {
-      window.alert("请先选择部门");
+      window.AppDialog.alert("请先选择部门");
       return;
     }
     const action = batchActionSelect.value;
     if (!action) {
-      window.alert("请选择批量操作");
+      window.AppDialog.alert("请选择批量操作");
       return;
     }
 
     if (action === "delete") {
-      if (!window.confirm(`确认删除已选 ${ids.length} 个部门吗`)) return;
+      if (!(await window.AppDialog.confirm(`确认删除已选 ${ids.length} 个部门吗`, "批量删除部门"))) return;
       const ok = await deleteDepartments(ids);
       if (!ok) return;
       selectAll.checked = false;
@@ -245,7 +251,7 @@ document.addEventListener("DOMContentLoaded", () => {
   confirmBatchParentBtn.addEventListener("click", async () => {
     const ids = getSelectedIds();
     if (!ids.length) {
-      window.alert("请先选择部门");
+      window.AppDialog.alert("请先选择部门");
       return;
     }
     const ok = await setDepartmentsParent(ids, lookupContexts.batch.hiddenEl.value);
@@ -257,18 +263,19 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   deleteUnboundBtn.addEventListener("click", async () => {
-    if (!window.confirm("确认一键删除未绑定员工的部门吗？")) return;
+    if (!(await window.AppDialog.confirm("确认一键删除未绑定员工的部门吗？", "删除未绑定部门"))) return;
     const res = await fetch("/admin/departments/delete-unbound", { method: "POST" });
     const data = await res.json();
     if (!res.ok) {
-      window.alert(data.error || "操作失败");
+      window.AppDialog.alert(data.error || "操作失败", "操作失败");
       return;
     }
-    window.alert(
+    window.AppDialog.alert(
       `处理完成：删除 ${data.deleted || 0} 个，` +
       `跳过锁定部门 ${data.skipped_locked || 0} 个，` +
       `跳过已绑定员工 ${data.skipped_employee_bound || 0} 个，` +
-      `跳过已绑定账号权限 ${data.skipped_account_bound || 0} 个`
+      `跳过已绑定账号权限 ${data.skipped_account_bound || 0} 个`,
+      "处理完成"
     );
     selectAll.checked = false;
     await loadDepartments();
@@ -292,7 +299,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     if (target.classList.contains("delete-btn")) {
-      if (!window.confirm(`确认删除部门 ${dept.dept_name} 吗`)) return;
+      if (!(await window.AppDialog.confirm(`确认删除部门 ${dept.dept_name} 吗`, "删除部门"))) return;
       const ok = await deleteDepartments([dept.id]);
       if (!ok) return;
       await loadDepartments();
@@ -314,7 +321,7 @@ document.addEventListener("DOMContentLoaded", () => {
     });
     const data = await res.json();
     if (!res.ok) {
-      window.alert(data.error || "更新失败");
+      window.AppDialog.alert(data.error || "更新失败", "更新失败");
       return;
     }
     editModal.hide();

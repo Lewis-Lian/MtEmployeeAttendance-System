@@ -102,6 +102,15 @@ def _ensure_schema_compatibility() -> None:
     if "monthly_benefit_days" not in account_set_columns:
         db.session.execute(text("ALTER TABLE account_sets ADD COLUMN monthly_benefit_days FLOAT NOT NULL DEFAULT 0"))
         db.session.commit()
+    if "is_locked" not in account_set_columns:
+        db.session.execute(text("ALTER TABLE account_sets ADD COLUMN is_locked BOOLEAN NOT NULL DEFAULT 0"))
+        db.session.commit()
+    if "locked_at" not in account_set_columns:
+        db.session.execute(text("ALTER TABLE account_sets ADD COLUMN locked_at DATETIME"))
+        db.session.commit()
+    if "locked_by" not in account_set_columns:
+        db.session.execute(text("ALTER TABLE account_sets ADD COLUMN locked_by INTEGER"))
+        db.session.commit()
 
     user_columns = {c["name"] for c in inspector.get_columns("users")}
     if "page_permissions" not in user_columns:

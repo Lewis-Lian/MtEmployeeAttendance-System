@@ -83,12 +83,12 @@ function getSelectedSheets() {
 async function doDownload(employeeSelector) {
   const { query, selectedCount } = buildDownloadQuery(employeeSelector);
   if (!selectedCount) {
-    window.alert("请先选择员工");
+    window.AppDialog.alert("请先选择员工");
     return;
   }
   const sheets = getSelectedSheets();
   if (!sheets.length) {
-    window.alert("请至少选择一种报表");
+    window.AppDialog.alert("请至少选择一种报表");
     return;
   }
   query.set("sheets", sheets.join(","));

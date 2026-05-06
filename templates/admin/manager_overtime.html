@@ -51,6 +51,7 @@
           <button class="btn btn-outline-primary" id="managerOvertimeSaveBtn">保存修改</button>
           <button class="btn btn-outline-success" id="managerOvertimeExportBtn">导出XLSX</button>
         </div>
+        <div class="small text-muted mt-2" id="managerOvertimeLockNotice">请选择年份后查询</div>
       </div>
     </div>
     <div class="row g-3 align-items-end mt-1">
@@ -98,6 +99,23 @@
         <tr><td class="text-muted" colspan="17">请点击查询</td></tr>
       </tbody>
     </table>
+  </div>
+</div>
+
+<div class="modal fade" id="managerOvertimeMessageModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="managerOvertimeMessageModalTitle">提示</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <div id="managerOvertimeMessageModalBody" class="small" style="white-space: pre-line;"></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-primary" data-bs-dismiss="modal">确定</button>
+      </div>
+    </div>
   </div>
 </div>
 {% endblock %}

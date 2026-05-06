@@ -24,6 +24,7 @@ document.addEventListener("DOMContentLoaded", () => {
   let users = [];
   let employees = [];
   let departments = [];
+  window.AppFeedback.setResult(createResult, "", "muted");
 
   const empLookup = {
     create: {
@@ -220,10 +221,12 @@ document.addEventListener("DOMContentLoaded", () => {
     });
     const data = await response.json();
     if (!response.ok) {
-      createResult.textContent = data.error || "创建失败";
+      window.AppFeedback.setResult(createResult, data.error || "创建失败", "danger");
+      window.AppToast.error(data.error || "创建失败", "创建账号失败");
       return;
     }
-    createResult.textContent = "创建成功";
+    window.AppFeedback.setResult(createResult, "创建成功", "success");
+    window.AppToast.success("创建成功", "创建账号成功");
     createUserForm.reset();
     resetCreateSelectors();
     setPermissionCheckboxes(
@@ -254,7 +257,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     if (target.classList.contains("reset-btn")) {
-      const nextPassword = window.prompt(`请输入 ${user.username} 的新密码：`);
+      const nextPassword = await window.AppDialog.prompt(`请输入 ${user.username} 的新密码：`, "", "重置密码", "新密码");
       if (!nextPassword) return;
       const response = await fetch(`/admin/users/${user.id}/password`, {
         method: "PUT",
@@ -263,21 +266,23 @@ document.addEventListener("DOMContentLoaded", () => {
       });
       const data = await response.json();
       if (!response.ok) {
-        window.alert(data.error || "重置密码失败");
+        window.AppDialog.alert(data.error || "重置密码失败", "重置密码失败");
         return;
       }
-      window.alert("密码已重置");
+      window.AppDialog.alert("密码已重置", "重置成功");
+      window.AppToast.success("密码已重置", "重置成功");
       return;
     }
 
     if (target.classList.contains("delete-btn")) {
-      if (!window.confirm(`确定删除账号 ${user.username} 吗？`)) return;
+      if (!(await window.AppDialog.confirm(`确定删除账号 ${user.username} 吗？`, "删除账号"))) return;
       const response = await fetch(`/admin/users/${user.id}`, { method: "DELETE" });
       const data = await response.json();
       if (!response.ok) {
-        window.alert(data.error || "删除失败");
+        window.AppDialog.alert(data.error || "删除失败", "删除失败");
         return;
       }
+      window.AppToast.success("账号已删除", "删除成功");
       await refreshUsers();
     }
   });
@@ -292,9 +297,10 @@ document.addEventListener("DOMContentLoaded", () => {
     });
     const data = await response.json();
     if (!response.ok) {
-      window.alert(data.error || "更新失败");
+      window.AppDialog.alert(data.error || "更新失败", "更新失败");
       return;
     }
+    window.AppToast.success("账号已更新", "更新成功");
     editUserModal.hide();
     await refreshUsers();
   });

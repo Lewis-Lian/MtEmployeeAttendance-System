@@ -38,6 +38,8 @@ document.addEventListener("DOMContentLoaded", () => {
   let shifts = [];
   let departments = [];
   let selectedEmployeeIds = new Set();
+  window.AppFeedback.setResult(createResult, "", "muted");
+  window.AppFeedback.setResult(importResult, "", "muted");
 
   const attendanceFallbackNoticeCookie = "attendance_fallback_notice_seen";
 
@@ -297,7 +299,7 @@ document.addEventListener("DOMContentLoaded", () => {
     });
     const data = await res.json();
     if (!res.ok) {
-      window.alert(data.error || "批量操作失败");
+      window.AppDialog.alert(data.error || "批量操作失败", "批量操作失败");
       return false;
     }
     return true;
@@ -400,10 +402,12 @@ document.addEventListener("DOMContentLoaded", () => {
     });
     const data = await res.json();
     if (!res.ok) {
-      createResult.textContent = data.error || "创建失败";
+      window.AppFeedback.setResult(createResult, data.error || "创建失败", "danger");
+      window.AppToast.error(data.error || "创建失败", "创建员工失败");
       return;
     }
-    createResult.textContent = "创建成功";
+    window.AppFeedback.setResult(createResult, "创建成功", "success");
+    window.AppToast.success("创建成功", "创建员工成功");
     createForm.reset();
     deptPicker.setValue(deptLookupContexts.create, "");
     await loadEmployees();
@@ -415,10 +419,12 @@ document.addEventListener("DOMContentLoaded", () => {
     const res = await fetch("/admin/employees/import", { method: "POST", body: formData });
     const data = await res.json();
     if (!res.ok) {
-      importResult.textContent = data.error || "导入失败";
+      window.AppFeedback.setResult(importResult, data.error || "导入失败", "danger");
+      window.AppToast.error(data.error || "导入失败", "导入员工失败");
       return;
     }
-    importResult.textContent = `导入成功，处理 ${data.imported} 条`;
+    window.AppFeedback.setResult(importResult, `导入成功，处理 ${data.imported} 条`, "success");
+    window.AppToast.success(`导入成功，处理 ${data.imported} 条`, "导入员工成功");
     importForm.reset();
     await loadEmployees();
   });
@@ -455,7 +461,7 @@ document.addEventListener("DOMContentLoaded", () => {
     if (!(target instanceof HTMLButtonElement)) return;
     if (!target.classList.contains("delete-single-btn")) return;
     const id = Number(target.dataset.id);
-    if (!window.confirm("确认删除该员工吗？")) return;
+    if (!(await window.AppDialog.confirm("确认删除该员工吗？", "删除员工"))) return;
     const ok = await applyBatch("delete", "", [id]);
     if (ok) {
       selectedEmployeeIds.delete(id);
@@ -490,7 +496,7 @@ document.addEventListener("DOMContentLoaded", () => {
     exportFilteredEmployeesBtn.addEventListener("click", () => {
       const rows = getFilteredEmployees();
       if (!rows.length) {
-        window.alert("当前筛选结果为空");
+        window.AppDialog.alert("当前筛选结果为空");
         return;
       }
       const query = new URLSearchParams();
@@ -502,19 +508,19 @@ document.addEventListener("DOMContentLoaded", () => {
   applyBatchBtn.addEventListener("click", async () => {
     const ids = getSelectedIds();
     if (!ids.length) {
-      window.alert("请先选择员工");
+      window.AppDialog.alert("请先选择员工");
       return;
     }
     const action = batchAction.value;
     const value = batchValue.value.trim();
     if (!action) {
-      window.alert("请选择批量操作");
+      window.AppDialog.alert("请选择批量操作");
       return;
     }
     if (action === "set_department") {
       const deptName = deptNameById(deptLookupContexts.batch.hiddenEl.value);
       if (!deptName) {
-        window.alert("请选择部门");
+        window.AppDialog.alert("请选择部门");
         return;
       }
       const ok = await applyBatch("set_department", deptName, ids);
@@ -526,7 +532,7 @@ document.addEventListener("DOMContentLoaded", () => {
     if (action === "set_shift") {
       const shiftNo = batchShiftValue.value;
       if (!shiftNo) {
-        window.alert("请选择班次");
+        window.AppDialog.alert("请选择班次");
         return;
       }
       const ok = await applyBatch("set_shift", shiftNo, ids);
@@ -538,7 +544,7 @@ document.addEventListener("DOMContentLoaded", () => {
     if (action === "set_manager") {
       const managerValue = batchManagerValue.value;
       if (managerValue === "") {
-        window.alert("请选择人员类型");
+        window.AppDialog.alert("请选择人员类型");
         return;
       }
       const ok = await applyBatch("set_manager", managerValue, ids);
@@ -550,7 +556,7 @@ document.addEventListener("DOMContentLoaded", () => {
     if (action === "set_nursing") {
       const nursingValue = batchNursingValue.value;
       if (nursingValue === "") {
-        window.alert("请选择哺乳假");
+        window.AppDialog.alert("请选择哺乳假");
         return;
       }
       const ok = await applyBatch("set_nursing", nursingValue, ids);
@@ -562,7 +568,7 @@ document.addEventListener("DOMContentLoaded", () => {
     if (action === "set_employee_stats_attendance_source") {
       const sourceValue = batchEmployeeAttendanceSourceValue.value;
       if (!sourceValue) {
-        window.alert("请选择员工考勤统计来源");
+        window.AppDialog.alert("请选择员工考勤统计来源");
         return;
       }
       const ok = await applyBatch("set_employee_stats_attendance_source", sourceValue, ids);
@@ -574,7 +580,7 @@ document.addEventListener("DOMContentLoaded", () => {
     if (action === "set_manager_stats_attendance_source") {
       const sourceValue = batchManagerAttendanceSourceValue.value;
       if (!sourceValue) {
-        window.alert("请选择管理人员考勤统计来源");
+        window.AppDialog.alert("请选择管理人员考勤统计来源");
         return;
       }
       const ok = await applyBatch("set_manager_stats_attendance_source", sourceValue, ids);
@@ -584,10 +590,10 @@ document.addEventListener("DOMContentLoaded", () => {
       return;
     }
     if (action !== "delete" && !value) {
-      window.alert("请输入操作值");
+      window.AppDialog.alert("请输入操作值");
       return;
     }
-    if (action === "delete" && !window.confirm(`确认删除已选 ${ids.length} 名员工吗？`)) {
+    if (action === "delete" && !(await window.AppDialog.confirm(`确认删除已选 ${ids.length} 名员工吗？`, "批量删除员工"))) {
       return;
     }
     const ok = await applyBatch(action, value, ids);

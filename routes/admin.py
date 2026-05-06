@@ -199,6 +199,9 @@ def _serialize_account_set(row: AccountSet) -> dict:
         "month": row.month,
         "name": row.name,
         "is_active": row.is_active,
+        "is_locked": bool(row.is_locked),
+        "locked_at": row.locked_at.isoformat() if row.locked_at else None,
+        "locked_by": row.locked_by,
         "factory_rest_days": row.factory_rest_days or 0,
         "monthly_benefit_days": row.monthly_benefit_days or 0,
         "created_at": row.created_at.isoformat() if row.created_at else None,
@@ -208,6 +211,76 @@ def _serialize_account_set(row: AccountSet) -> dict:
         "error_count": error_count,
         "latest_import_at": latest_import_at.isoformat() if latest_import_at else None,
     }
+
+
+def _account_set_file_type(filename: str) -> str:
+    if "加班" in filename:
+        return "overtime"
+    if "请假" in filename:
+        return "leave"
+    if "管理人员" in filename and "月报" in filename:
+        return "manager_monthly"
+    if "管理人员" in filename:
+        return "manager_daily"
+    if "月报" in filename:
+        return "monthly"
+    return "daily"
+
+
+def _account_set_for_month(month: str | None) -> AccountSet | None:
+    key = (month or "").strip()
+    if not key:
+        return None
+    return AccountSet.query.filter_by(month=key).first()
+
+
+def _locked_account_set_error(account_set: AccountSet, action_label: str):
+    return jsonify({"error": f"{account_set.month} 账套已锁定，不能{action_label}"}), 400
+
+
+def _ensure_account_set_unlocked(account_set: AccountSet | None, action_label: str):
+    if account_set and account_set.is_locked:
+        return _locked_account_set_error(account_set, action_label)
+    return None
+
+
+def _locked_months_for_year(year: int, include_prev_dec: bool = False) -> list[str]:
+    months = [f"{year}-{month:02d}" for month in range(1, 13)]
+    if include_prev_dec:
+        months.insert(0, f"{year - 1}-12")
+    locked = []
+    for month in months:
+        account_set = _account_set_for_month(month)
+        if account_set and account_set.is_locked:
+            locked.append(month)
+    return locked
+
+
+def _ensure_year_months_unlocked(year: int, action_label: str, include_prev_dec: bool = False):
+    locked_months = _locked_months_for_year(year, include_prev_dec=include_prev_dec)
+    if locked_months:
+        return jsonify({"error": f"{', '.join(locked_months)} 账套已锁定，不能{action_label}"}), 400
+    return None
+
+
+def _stat_key_month(year: int, stat_key: str) -> str | None:
+    if stat_key == "prev_dec":
+        return f"{year - 1}-12"
+    if stat_key.startswith("m") and stat_key[1:].isdigit():
+        month_no = int(stat_key[1:])
+        if 1 <= month_no <= 12:
+            return f"{year}-{month_no:02d}"
+    return None
+
+
+def _stat_key_lock_state(year: int, stat_key: str) -> str:
+    month = _stat_key_month(year, stat_key)
+    if not month:
+        return "editable"
+    account_set = _account_set_for_month(month)
+    if not account_set:
+        return "missing_account_set"
+    return "locked" if account_set.is_locked else "editable"
 
 
 def _next_auto_dept_no() -> str:
@@ -358,6 +431,9 @@ def create_account_set():
 @admin_required
 def update_account_set(account_set_id: int):
     row = AccountSet.query.get_or_404(account_set_id)
+    locked_error = _ensure_account_set_unlocked(row, "修改账套参数")
+    if locked_error:
+        return locked_error
     data = request.json or {}
     row.factory_rest_days = float(data.get("factory_rest_days") or 0)
     row.monthly_benefit_days = float(data.get("monthly_benefit_days") or 0)
@@ -375,10 +451,37 @@ def activate_account_set(account_set_id: int):
     return jsonify({"status": "ok", "account_set": _serialize_account_set(row)})
 
 
+@admin_bp.route("/account-sets/<int:account_set_id>/lock", methods=["POST"])
+@admin_required
+def lock_account_set(account_set_id: int):
+    row = AccountSet.query.get_or_404(account_set_id)
+    if not row.is_locked:
+        row.is_locked = True
+        row.locked_at = datetime.utcnow()
+        row.locked_by = g.current_user.id
+        db.session.commit()
+    return jsonify({"status": "ok", "account_set": _serialize_account_set(row)})
+
+
+@admin_bp.route("/account-sets/<int:account_set_id>/unlock", methods=["POST"])
+@admin_required
+def unlock_account_set(account_set_id: int):
+    row = AccountSet.query.get_or_404(account_set_id)
+    if row.is_locked:
+        row.is_locked = False
+        row.locked_at = None
+        row.locked_by = None
+        db.session.commit()
+    return jsonify({"status": "ok", "account_set": _serialize_account_set(row)})
+
+
 @admin_bp.route("/account-sets/<int:account_set_id>", methods=["DELETE"])
 @admin_required
 def delete_account_set(account_set_id: int):
     row = AccountSet.query.get_or_404(account_set_id)
+    locked_error = _ensure_account_set_unlocked(row, "删除账套")
+    if locked_error:
+        return locked_error
 
     # best-effort cleanup archived files
     for record in row.imports:
@@ -429,6 +532,9 @@ def list_account_set_imports(account_set_id: int):
 @admin_required
 def calculate_account_set(account_set_id: int):
     row = AccountSet.query.get_or_404(account_set_id)
+    locked_error = _ensure_account_set_unlocked(row, "重新计算")
+    if locked_error:
+        return locked_error
     mode = (request.args.get("mode") or "all").strip()
     records_query = AccountSetImport.query.filter_by(account_set_id=row.id)
     if mode == "employee":
@@ -591,6 +697,9 @@ def import_raw_files():
     account_set = AccountSet.query.get(account_set_id) if account_set_id else AccountSet.query.filter_by(is_active=True).first()
     if not account_set:
         return jsonify({"status": "error", "message": "请先创建并选择账套"}), 400
+    locked_error = _ensure_account_set_unlocked(account_set, "上传原始文件")
+    if locked_error:
+        return locked_error
 
     uploaded_files = request.files.getlist("files")
     if not uploaded_files:
@@ -606,24 +715,26 @@ def import_raw_files():
             results.append({"file": "", "status": "error", "error": "invalid filename"})
             continue
 
+        file_type = _account_set_file_type(filename)
+        previous_record = AccountSetImport.query.filter_by(account_set_id=account_set.id, file_type=file_type).first()
+        replaced = previous_record is not None
+
+        if previous_record:
+            old_path = (previous_record.stored_path or "").strip()
+            if old_path and os.path.exists(old_path):
+                try:
+                    os.remove(old_path)
+                except Exception:
+                    pass
+            db.session.delete(previous_record)
+            db.session.flush()
+
         account_set_dir = os.path.join(current_app.config["UPLOAD_FOLDER"], "account_sets", account_set.month)
         os.makedirs(account_set_dir, exist_ok=True)
         save_name = f"{int(datetime.now().timestamp())}_{filename}"
         save_path = os.path.join(account_set_dir, save_name)
         os.makedirs(os.path.dirname(save_path), exist_ok=True)
         file.save(save_path)
-
-        file_type = "daily"
-        if "加班" in filename:
-            file_type = "overtime"
-        elif "请假" in filename:
-            file_type = "leave"
-        elif "管理人员" in filename and "月报" in filename:
-            file_type = "manager_monthly"
-        elif "管理人员" in filename:
-            file_type = "manager_daily"
-        elif "月报" in filename:
-            file_type = "monthly"
 
         import_record = AccountSetImport(
             account_set_id=account_set.id,
@@ -638,7 +749,7 @@ def import_raw_files():
         try:
             success += 1
             import_record.error_message = None
-            results.append({"file": filename, "status": "ok", "message": "uploaded"})
+            results.append({"file": filename, "status": "ok", "message": "replaced" if replaced else "uploaded"})
         except Exception as exc:
             failed += 1
             import_record.status = "error"
@@ -793,6 +904,9 @@ def download_manager_overtime_template():
 @admin_required
 def import_manager_overtime():
     year = request.form.get("year", type=int) or datetime.now().year
+    locked_error = _ensure_year_months_unlocked(year, "导入管理人员加班统计", include_prev_dec=True)
+    if locked_error:
+        return locked_error
     return _import_manager_stat_file("overtime", year)
 
 
@@ -802,6 +916,11 @@ def update_manager_overtime_record(record_id: int):
     row = OvertimeRecord.query.get_or_404(record_id)
     if not row.employee or not row.employee.is_manager:
         return jsonify({"error": "record is not a manager overtime record"}), 400
+    month = row.date.strftime("%Y-%m") if row.date else None
+    account_set = _account_set_for_month(month)
+    locked_error = _ensure_account_set_unlocked(account_set, "修改管理人员加班记录")
+    if locked_error:
+        return locked_error
     data = request.json or {}
     row.effective_hours = float(data.get("effective_hours") or 0)
     row.salary_option = (data.get("salary_option") or "").strip()
@@ -945,8 +1064,33 @@ def _save_manager_month_stat(stat_type: str) -> tuple[dict[str, str], int]:
     data = request.json or {}
     emp_id = int(data.get("emp_id") or 0)
     year = int(data.get("year") or datetime.now().year)
-    values = {key: float(_number_or_blank(data.get(key)) or 0) for key in _stat_value_keys(stat_type)}
-    return _upsert_manager_month_stat(stat_type, emp_id, year, values, data.get("remark") or "")
+    keys = _stat_value_keys(stat_type)
+    submitted_values = {key: float(_number_or_blank(data.get(key)) or 0) for key in keys}
+    employee = Employee.query.get_or_404(emp_id)
+    if not employee.is_manager:
+        return {"error": "employee is not manager"}, 400
+
+    row = ManagerMonthStat.query.filter_by(emp_id=employee.id, year=year, stat_type=stat_type).first()
+    values = {
+        key: float(getattr(row, key) or 0) if row else 0.0
+        for key in keys
+    }
+    skipped_locked_months: list[str] = []
+    for key in keys:
+        month = _stat_key_month(year, key)
+        if _stat_key_lock_state(year, key) == "locked":
+            if month:
+                skipped_locked_months.append(month)
+            continue
+        values[key] = submitted_values[key]
+
+    payload, status = _upsert_manager_month_stat(stat_type, emp_id, year, values, data.get("remark") or "")
+    if status != 200:
+        return payload, status
+    if skipped_locked_months:
+        payload["skipped_locked_months"] = sorted(set(skipped_locked_months))
+        payload["warning"] = f"已跳过锁定月份：{'、'.join(payload['skipped_locked_months'])}"
+    return payload, status
 
 
 _MANAGER_ATTENDANCE_OVERRIDE_FIELDS = (
@@ -1051,6 +1195,10 @@ def save_manager_attendance_override_record():
     month = _validate_month(data.get("month"))
     if not emp_id or not month:
         return jsonify({"error": "请选择管理人员和有效月份"}), 400
+    account_set = _account_set_for_month(month)
+    locked_error = _ensure_account_set_unlocked(account_set, "保存管理人员考勤修正")
+    if locked_error:
+        return locked_error
     employee = Employee.query.get(emp_id)
     if not employee or not employee.is_manager:
         return jsonify({"error": "employee is not manager"}), 400
@@ -1087,6 +1235,10 @@ def delete_manager_attendance_override_record():
     month = _validate_month(request.args.get("month"))
     if not emp_id or not month:
         return jsonify({"error": "请选择管理人员和有效月份"}), 400
+    account_set = _account_set_for_month(month)
+    locked_error = _ensure_account_set_unlocked(account_set, "清空管理人员考勤修正")
+    if locked_error:
+        return locked_error
     row = ManagerAttendanceOverride.query.filter_by(emp_id=emp_id, month=month).first()
     if row:
         db.session.delete(row)
@@ -1185,6 +1337,7 @@ def _import_manager_stat_file(stat_type: str, year: int):
 
     imported = 0
     errors: list[str] = []
+    skipped_locked_months: set[str] = set()
     employees_by_name = {employee.name: employee for employee in _manager_scope_employees()}
     for row_idx in range(2, ws.max_row + 1):
         name = str(ws.cell(row_idx, headers["姓名"]).value or "").strip()
@@ -1195,9 +1348,18 @@ def _import_manager_stat_file(stat_type: str, year: int):
             errors.append(f"第{row_idx}行：未找到管理人员 {name}")
             continue
 
-        values: dict[str, float] = {}
+        existing_row = ManagerMonthStat.query.filter_by(emp_id=employee.id, year=year, stat_type=stat_type).first()
+        values = {
+            key: float(getattr(existing_row, key) or 0) if existing_row else 0.0
+            for key in _stat_value_keys(stat_type)
+        }
         for key, label in _stat_col_keys(stat_type):
             col_idx = headers.get(label)
+            month = _stat_key_month(year, key)
+            if _stat_key_lock_state(year, key) == "locked":
+                if month:
+                    skipped_locked_months.add(month)
+                continue
             values[key] = float(_number_or_blank(ws.cell(row_idx, col_idx).value if col_idx else None) or 0)
         remark_col = headers.get("备注")
         remark = str(ws.cell(row_idx, remark_col).value or "").strip() if remark_col else ""
@@ -1207,7 +1369,16 @@ def _import_manager_stat_file(stat_type: str, year: int):
             continue
         imported += 1
 
-    return jsonify({"status": "ok", "imported": imported, "errors": errors, "error_count": len(errors)})
+    response = {
+        "status": "ok",
+        "imported": imported,
+        "errors": errors,
+        "error_count": len(errors),
+        "skipped_locked_months": sorted(skipped_locked_months),
+    }
+    if skipped_locked_months:
+        response["warning"] = f"已跳过锁定月份：{'、'.join(response['skipped_locked_months'])}"
+    return jsonify(response)
 
 
 def _manager_overtime_values(year: int) -> dict[str, dict[str, object]]:
@@ -1321,6 +1492,9 @@ def update_manager_annual_leave_record():
 
     emp_id = int(data.get("emp_id") or 0)
     year = int(data.get("year") or datetime.now().year)
+    locked_error = _ensure_year_months_unlocked(year, "修改管理人员年休统计")
+    if locked_error:
+        return locked_error
     employee = Employee.query.get_or_404(emp_id)
     if not employee.is_manager:
         return jsonify({"error": "employee is not manager"}), 400
@@ -1345,6 +1519,9 @@ def download_manager_annual_leave_template():
 @admin_required
 def import_manager_annual_leave():
     year = request.form.get("year", type=int) or datetime.now().year
+    locked_error = _ensure_year_months_unlocked(year, "导入管理人员年休统计")
+    if locked_error:
+        return locked_error
     return _import_manager_stat_file("annual_leave", year)
 
 
@@ -2201,6 +2378,10 @@ def save_employee_attendance_override_record():
     month = _validate_month(data.get("month"))
     if not emp_id or not month:
         return jsonify({"error": "请选择员工和有效月份"}), 400
+    account_set = _account_set_for_month(month)
+    locked_error = _ensure_account_set_unlocked(account_set, "保存员工考勤修正")
+    if locked_error:
+        return locked_error
     employee = Employee.query.get(emp_id)
     if not employee or employee.is_manager:
         return jsonify({"error": "员工不存在或是管理人员"}), 400
@@ -2238,6 +2419,10 @@ def delete_employee_attendance_override_record():
     month = _validate_month(request.args.get("month"))
     if not emp_id or not month:
         return jsonify({"error": "请选择员工和有效月份"}), 400
+    account_set = _account_set_for_month(month)
+    locked_error = _ensure_account_set_unlocked(account_set, "清空员工考勤修正")
+    if locked_error:
+        return locked_error
     row = EmployeeAttendanceOverride.query.filter_by(emp_id=emp_id, month=month).first()
     if row:
         db.session.delete(row)
