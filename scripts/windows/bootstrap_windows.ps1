@@ -5,7 +5,8 @@ param(
     [string]$PipIndexUrl = "https://pypi.tuna.tsinghua.edu.cn/simple",
     [string]$PipTrustedHost = "pypi.tuna.tsinghua.edu.cn",
     [switch]$InitEnv,
-    [int]$Port = 5000
+    [int]$Port = 5000,
+    [string]$VenvDir = ".venv-win-prod"
 )
 
 $ErrorActionPreference = "Stop"
@@ -13,10 +14,10 @@ $ErrorActionPreference = "Stop"
 Write-Host "[1/6] Project root: $ProjectRoot"
 Set-Location $ProjectRoot
 
-$venvPython = Join-Path $ProjectRoot ".venv\Scripts\python.exe"
+$venvPython = Join-Path $ProjectRoot "$VenvDir\Scripts\python.exe"
 if (!(Test-Path $venvPython)) {
     Write-Host "[2/6] Creating virtualenv..."
-    & $PythonCmd -m venv .venv
+    & $PythonCmd -m venv $VenvDir
 }
 
 Write-Host "[3/6] Installing dependencies..."
@@ -43,4 +44,4 @@ if ($InitEnv) {
 }
 
 Write-Host "\nDone. Manual run command:"
-Write-Host ".\\.venv\\Scripts\\python.exe -m waitress --host=0.0.0.0 --port=$Port app:app"
+Write-Host ".\\$VenvDir\\Scripts\\python.exe -m waitress --host=0.0.0.0 --port=$Port app:app"

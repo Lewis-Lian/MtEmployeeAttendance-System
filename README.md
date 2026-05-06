@@ -47,7 +47,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\windows\bootstrap_windows.ps1
 Manual run (for smoke test):
 
 ```powershell
-.\.venv\Scripts\python.exe -m waitress --host=0.0.0.0 --port=5000 app:app
+.\.venv-win-prod\Scripts\python.exe -m waitress --host=0.0.0.0 --port=5000 app:app
 ```
 
 Do not use `python app.py` in production. That runs Flask development server and will show:
@@ -59,6 +59,52 @@ Do not use `python app.py` in production. That runs Flask development server and
 cd D:\attendance_system
 powershell -ExecutionPolicy Bypass -File .\scripts\windows\install_service.ps1 -ProjectRoot "D:\attendance_system" -ServiceName "attendance-system" -Port 5000 -NssmPath "C:\tools\nssm\win64\nssm.exe"
 ```
+
+### 3.1) Use the background tray manager
+
+After Python and NSSM are ready, you can start the background manager directly:
+
+```powershell
+cd D:\attendance_system
+.\scripts\windows\run_service_manager.bat
+```
+
+Features in the tray menu:
+- Start service
+- Stop service
+- Restart service
+- Change port
+
+Notes:
+- The tray manager still uses `waitress + nssm` internally, matching production startup.
+- Service control usually needs Administrator privileges on Windows.
+- Current port config is stored in `instance\windows_service_manager.json`.
+
+### 3.2) Package as EXE
+
+On a Windows machine, run:
+
+```powershell
+cd D:\attendance_system
+.\scripts\windows\build_service_manager_exe.bat
+```
+
+Or:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\windows\build_service_manager_exe.ps1 -ProjectRoot "D:\attendance_system"
+```
+
+Default output:
+
+```text
+D:\attendance_system\dist\windows-service-manager\AttendanceServiceManager.exe
+```
+
+Notes:
+- The packaging script uses the PowerShell module `ps2exe`.
+- If `ps2exe` is missing, the script installs it automatically for the current user by default.
+- The generated `exe` is a GUI/background program with no console window.
 
 Service logs:
 - `D:\attendance_system\logs\service-stdout.log`

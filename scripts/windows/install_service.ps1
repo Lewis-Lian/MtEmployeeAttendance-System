@@ -3,7 +3,8 @@ param(
     [string]$ProjectRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\..") ).Path,
     [string]$ServiceName = "attendance-system",
     [int]$Port = 5000,
-    [string]$NssmPath = "C:\\tools\\nssm\\win64\\nssm.exe"
+    [string]$NssmPath = "C:\\tools\\nssm\\win64\\nssm.exe",
+    [string]$VenvDir = ".venv-win-prod"
 )
 
 $ErrorActionPreference = "Stop"
@@ -12,7 +13,7 @@ if (!(Test-Path $NssmPath)) {
     throw "nssm.exe not found: $NssmPath"
 }
 
-$pythonExe = Join-Path $ProjectRoot ".venv\Scripts\python.exe"
+$pythonExe = Join-Path $ProjectRoot "$VenvDir\Scripts\python.exe"
 if (!(Test-Path $pythonExe)) {
     throw "Python venv not found. Run scripts/windows/bootstrap_windows.ps1 first."
 }
