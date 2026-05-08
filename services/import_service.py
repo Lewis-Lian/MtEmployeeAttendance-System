@@ -11,7 +11,7 @@ from typing import Any
 
 from models import db
 from models.department import Department
-from models.employee import Employee
+from models.employee import ATTENDANCE_SOURCE_EMPLOYEE, ATTENDANCE_SOURCE_MANAGER, Employee
 from models.shift import Shift
 from models.daily_record import DailyRecord
 from models.monthly_report import MonthlyReport
@@ -31,6 +31,22 @@ from utils.helpers import (
 
 
 class ImportService:
+    @staticmethod
+    def _can_receive_manager_source(employee: Employee | None) -> bool:
+        if not employee:
+            return False
+        return bool(employee.is_manager) or (
+            employee.employee_stats_attendance_source == ATTENDANCE_SOURCE_MANAGER
+        )
+
+    @staticmethod
+    def _can_receive_employee_source(employee: Employee | None) -> bool:
+        if not employee:
+            return False
+        return (not bool(employee.is_manager)) or (
+            employee.manager_stats_attendance_source == ATTENDANCE_SOURCE_EMPLOYEE
+        )
+
     @staticmethod
     def import_file(file_path: str) -> dict:
         filename = os.path.basename(file_path)
@@ -220,11 +236,37 @@ class ImportService:
         clean_name = clean_text(name)
         if not clean_name:
             return None
-        return (
-            Employee.query.filter(Employee.name == clean_name, Employee.is_manager.is_(True))
+        candidates = (
+            Employee.query.filter(Employee.name == clean_name)
             .order_by(Employee.is_manager.desc(), Employee.emp_no.asc())
-            .first()
+            .all()
         )
+        for employee in candidates:
+            if ImportService._can_receive_manager_source(employee):
+                return employee
+        return None
+
+    @staticmethod
+    def _find_manager_by_emp_no(emp_no: str) -> Employee | None:
+        clean_emp_no = clean_text(emp_no)
+        if not clean_emp_no:
+            return None
+        employee = Employee.query.filter(Employee.emp_no == clean_emp_no).first()
+        if ImportService._can_receive_manager_source(employee):
+            return employee
+        return None
+
+    @staticmethod
+    def _resolve_manager_employee(header_map: dict[str, int], row: list[Any]) -> tuple[Employee | None, str, str]:
+        emp_no = clean_text(
+            ImportService._get_row_value(row, ImportService._find_col(header_map, "工号", "人员编号"))
+        )
+        name = clean_text(ImportService._get_row_value(row, ImportService._find_col(header_map, "姓名")))
+
+        employee = ImportService._find_manager_by_emp_no(emp_no) if emp_no else None
+        if not employee and name:
+            employee = ImportService._find_manager_by_name(name)
+        return employee, emp_no, name
 
     @staticmethod
     def _raw_dict_from_header_map(row: list[Any], header_map: dict[str, int]) -> dict[str, Any]:
@@ -497,7 +539,7 @@ class ImportService:
                 continue
             scanned += 1
             emp = ImportService._find_existing_employee(emp_no)
-            if not emp:
+            if not emp or not ImportService._can_receive_employee_source(emp):
                 skipped_unknown_employee += 1
                 continue
 
@@ -580,8 +622,9 @@ class ImportService:
         skipped_no_key = 0
         skipped_unknown_employee = 0
 
+        emp_no_idx = ImportService._find_col(header_map, "工号", "人员编号")
         name_idx = ImportService._find_col(header_map, "姓名")
-        if name_idx < 0:
+        if emp_no_idx < 0 and name_idx < 0:
             return {
                 "total_rows": 0,
                 "scanned": 0,
@@ -592,13 +635,12 @@ class ImportService:
             }
 
         for row in rows[header_idx + 2 :]:
-            name = clean_text(ImportService._get_row_value(row, name_idx))
-            if not name:
+            emp, emp_no, name = ImportService._resolve_manager_employee(header_map, row)
+            if not emp_no and not name:
                 skipped_no_key += 1
                 continue
             scanned += 1
 
-            emp = ImportService._find_manager_by_name(name)
             if not emp:
                 skipped_unknown_employee += 1
                 continue
@@ -634,9 +676,10 @@ class ImportService:
         skipped_no_key = 0
         skipped_unknown_employee = 0
 
+        emp_no_idx = ImportService._find_col(header_map, "工号", "人员编号")
         name_idx = ImportService._find_col(header_map, "姓名")
         date_idx = ImportService._find_col(header_map, "日期")
-        if name_idx < 0 or date_idx < 0:
+        if (emp_no_idx < 0 and name_idx < 0) or date_idx < 0:
             return {
                 "total_rows": 0,
                 "scanned": 0,
@@ -647,14 +690,13 @@ class ImportService:
             }
 
         for row in rows[header_idx + 2 :]:
-            name = clean_text(ImportService._get_row_value(row, name_idx))
+            emp, emp_no, name = ImportService._resolve_manager_employee(header_map, row)
             record_date = ImportService._parse_manager_record_date(ImportService._get_row_value(row, date_idx))
-            if not name or not record_date:
+            if (not emp_no and not name) or not record_date:
                 skipped_no_key += 1
                 continue
             scanned += 1
 
-            emp = ImportService._find_manager_by_name(name)
             if not emp:
                 skipped_unknown_employee += 1
                 continue
@@ -736,7 +778,7 @@ class ImportService:
             scanned += 1
 
             emp = ImportService._find_existing_employee(emp_no)
-            if not emp:
+            if not emp or not ImportService._can_receive_employee_source(emp):
                 skipped_unknown_employee += 1
                 continue
 

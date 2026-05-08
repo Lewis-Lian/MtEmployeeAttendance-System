@@ -245,6 +245,15 @@ document.addEventListener("DOMContentLoaded", () => {
       return;
     }
 
+    const selectedFiles = Array.from(importRawForm.querySelectorAll('input[type="file"][name="files"]'))
+      .flatMap((input) => Array.from(input.files || []))
+      .filter((file) => file.name);
+    if (!selectedFiles.length) {
+      window.AppFeedback.setResult(uploadResult, "请至少选择一个要上传的源文件", "danger");
+      window.AppToast.error("请至少选择一个要上传的源文件", "上传失败");
+      return;
+    }
+
     const formData = new FormData(importRawForm);
     formData.append("account_set_id", String(accountSetId));
     importRawBtn.disabled = true;
@@ -257,7 +266,7 @@ document.addEventListener("DOMContentLoaded", () => {
       const failedRows = results.filter((x) => x.status !== "ok");
 
       if (res.ok && failedRows.length === 0 && (data.failed || 0) === 0) {
-        window.AppFeedback.setResult(uploadResult, "上传成功，已归档到账套，点击“开始计算”后才会生成考勤数据。", "success");
+        window.AppFeedback.setResult(uploadResult, "", "muted");
         window.AppToast.success("上传成功，已归档到账套。", "上传成功");
       } else {
         const details = failedRows.map((x, i) => `${i + 1}. ${x.file || "未知文件"}: ${x.error || "上传失败"}`);
@@ -306,7 +315,7 @@ document.addEventListener("DOMContentLoaded", () => {
       }
 
       if (res.ok && failedRows.length === 0) {
-        window.AppFeedback.setResult(uploadResult, `${label}成功\n${summaryLines.join("\n")}`, "success");
+        window.AppFeedback.setResult(uploadResult, "", "muted");
         window.AppToast.success(`${label}成功`, label);
       } else {
         const details = failedRows.map((x, i) => `${i + 1}. ${x.file || "未知文件"}: ${x.error || "计算失败"}`);

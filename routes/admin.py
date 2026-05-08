@@ -701,19 +701,15 @@ def import_raw_files():
     if locked_error:
         return locked_error
 
-    uploaded_files = request.files.getlist("files")
+    uploaded_files = [file for file in request.files.getlist("files") if (file.filename or "").strip()]
     if not uploaded_files:
-        return jsonify({"status": "error", "message": "No files uploaded"}), 400
+        return jsonify({"status": "error", "message": "请至少选择一个要上传的源文件"}), 400
 
     results = []
     success = 0
     failed = 0
     for file in uploaded_files:
-        filename = (file.filename or "").strip()
-        if not filename:
-            failed += 1
-            results.append({"file": "", "status": "error", "error": "invalid filename"})
-            continue
+        filename = file.filename.strip()
 
         file_type = _account_set_file_type(filename)
         previous_record = AccountSetImport.query.filter_by(account_set_id=account_set.id, file_type=file_type).first()
