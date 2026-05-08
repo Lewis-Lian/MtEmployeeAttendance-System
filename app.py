@@ -23,6 +23,7 @@ from models.manager_month_stat import ManagerMonthStat
 from models.manager_attendance_override import ManagerAttendanceOverride
 from models.employee_shift import EmployeeShiftAssignment
 from models.employee_attendance_override import EmployeeAttendanceOverride
+from models.attendance_override_history import AttendanceOverrideHistory
 from models.account_set import AccountSet, AccountSetImport
 from routes import register_routes
 

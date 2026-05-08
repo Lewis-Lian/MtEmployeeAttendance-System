@@ -29,6 +29,7 @@ function applyManagerOverrideLockState(accountSet) {
   const locked = Boolean(accountSet?.is_locked);
   document.getElementById("managerAttendanceOverrideSaveBtn").disabled = locked;
   document.getElementById("managerAttendanceOverrideClearBtn").disabled = locked;
+  document.getElementById("managerAttendanceOverrideImportBtn").disabled = locked;
   document.querySelectorAll("#managerAttendanceOverrideBody [data-field]").forEach((input) => {
     input.disabled = locked;
   });
@@ -51,11 +52,44 @@ function updateAttendanceOverrideMetrics(status = null, data = null) {
     document.getElementById("managerAttendanceOverrideMetricStatus").textContent = status;
   }
   if (data?.override?.updated_at) {
+    const userLabel = data.override.updated_by_name ? `${data.override.updated_by_name} ` : "";
     document.getElementById("managerAttendanceOverrideUpdatedAt").textContent =
-      `最近保存 ${data.override.updated_at.replace("T", " ").slice(0, 19)}`;
+      `最近保存 ${userLabel}${data.override.updated_at.replace("T", " ").slice(0, 19)}`;
   } else if (data) {
     document.getElementById("managerAttendanceOverrideUpdatedAt").textContent = "未保存";
   }
+}
+
+function renderManagerHistory(rows) {
+  const wrap = document.getElementById("managerAttendanceOverrideHistory");
+  if (!Array.isArray(rows) || !rows.length) {
+    wrap.innerHTML = '<div class="text-muted small">当前账套月份暂无修正记录</div>';
+    return;
+  }
+  wrap.innerHTML = rows
+    .map((row) => {
+      const changes = Array.isArray(row.changes)
+        ? row.changes
+            .map((item) => `${item.label}：${displayValue(item.before)} → ${displayValue(item.after)}`)
+            .join("<br>")
+        : "";
+      const sourceText = row.source_file_name ? `导入：${row.source_file_name}` : "手工操作";
+      const actionMap = { manual_save: "保存", clear: "清空", import: "导入" };
+      return `
+        <div class="override-history-item">
+          <div class="override-history-meta">
+            <span>${row.created_at ? row.created_at.replace("T", " ").slice(0, 19) : ""}</span>
+            <span>${row.emp_no || ""} ${row.employee_name || ""}</span>
+            <span>${row.operator_name || "未知用户"}</span>
+            <span>${actionMap[row.action_type] || row.action_type}</span>
+            <span>${sourceText}</span>
+          </div>
+          <div class="override-history-remark">${row.remark || "无备注"}</div>
+          <div class="override-history-changes small">${changes || "无字段变化摘要"}</div>
+        </div>
+      `;
+    })
+    .join("");
 }
 
 function selectedManagerIds() {
@@ -113,6 +147,7 @@ async function loadManagerAttendanceOverride() {
     return;
   }
   renderAttendanceOverrideRows(data);
+  renderManagerHistory(data.history || []);
   applyManagerOverrideLockState(accountSet);
   updateAttendanceOverrideMetrics("已查询", data);
 }
@@ -139,6 +174,7 @@ async function saveManagerAttendanceOverride() {
     return;
   }
   renderAttendanceOverrideRows(data);
+  renderManagerHistory(data.history || []);
   updateAttendanceOverrideMetrics("已保存", data);
 }
 
@@ -155,12 +191,56 @@ async function clearManagerAttendanceOverride() {
     return;
   }
   renderAttendanceOverrideRows(data);
+  renderManagerHistory(data.history || []);
   updateAttendanceOverrideMetrics("已清空", data);
+}
+
+function selectedMonthOnly() {
+  const month = document.getElementById("managerAttendanceOverrideMonth").value;
+  if (!month) {
+    window.AppDialog.alert("请选择月份");
+    return null;
+  }
+  return month;
+}
+
+function downloadManagerOverrideFile(type) {
+  const month = selectedMonthOnly();
+  if (!month) return;
+  window.location.href = `/admin/manager-attendance-overrides/${type}?month=${encodeURIComponent(month)}`;
+}
+
+async function importManagerAttendanceOverride(file) {
+  const month = selectedMonthOnly();
+  if (!month || !file) return;
+  const form = new FormData();
+  form.append("month", month);
+  form.append("file", file);
+  const res = await fetch("/admin/manager-attendance-overrides/import", {
+    method: "POST",
+    body: form,
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    window.AppDialog.alert(data.error || "导入失败", "导入失败");
+    return;
+  }
+  const summary = [
+    `成功 ${data.success_count} 条`,
+    `跳过 ${data.skipped_count} 条`,
+    `失败 ${data.failed_count} 条`,
+    `实际变更 ${data.changed_count} 条`,
+  ];
+  if (Array.isArray(data.errors) && data.errors.length) {
+    summary.push("", data.errors.join("\n"));
+  }
+  window.AppDialog.alert(summary.join("\n"), "导入结果");
 }
 
 document.addEventListener("DOMContentLoaded", async () => {
   const employeeSelector = window.SelectorComponent.createEmployeeSelector();
   const monthInput = document.getElementById("managerAttendanceOverrideMonth");
+  const fileInput = document.getElementById("managerAttendanceOverrideFileInput");
   monthInput.value = currentMonthValue();
   await employeeSelector.init();
   updateAttendanceOverrideMetrics("等待查询");
@@ -178,4 +258,18 @@ document.addEventListener("DOMContentLoaded", async () => {
   document
     .getElementById("managerAttendanceOverrideClearBtn")
     .addEventListener("click", clearManagerAttendanceOverride);
+  document
+    .getElementById("managerAttendanceOverrideExportBtn")
+    .addEventListener("click", () => downloadManagerOverrideFile("export"));
+  document
+    .getElementById("managerAttendanceOverrideTemplateBtn")
+    .addEventListener("click", () => downloadManagerOverrideFile("template"));
+  document
+    .getElementById("managerAttendanceOverrideImportBtn")
+    .addEventListener("click", () => fileInput.click());
+  fileInput.addEventListener("change", async () => {
+    const file = fileInput.files?.[0];
+    await importManagerAttendanceOverride(file);
+    fileInput.value = "";
+  });
 });

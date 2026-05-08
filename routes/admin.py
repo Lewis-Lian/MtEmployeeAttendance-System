@@ -27,6 +27,7 @@ from models.annual_leave import AnnualLeave
 from models.manager_month_stat import ManagerMonthStat
 from models.manager_attendance_override import ManagerAttendanceOverride
 from models.employee_attendance_override import EmployeeAttendanceOverride
+from models.attendance_override_history import AttendanceOverrideHistory
 from models.user import (
     ALL_PAGE_PERMISSION_KEYS,
     EMPLOYEE_PAGE_PERMISSION_KEYS,
@@ -43,6 +44,41 @@ from utils.helpers import parse_bool_zh
 
 
 admin_bp = Blueprint("admin", __name__, url_prefix="/admin")
+
+
+_EMPLOYEE_OVERRIDE_FIELDS = (
+    "attendance_days",
+    "work_hours",
+    "half_days",
+    "late_early_minutes",
+)
+
+_EMPLOYEE_OVERRIDE_LABELS = {
+    "attendance_days": "考勤天数",
+    "work_hours": "工时",
+    "half_days": "半勤天数",
+    "late_early_minutes": "迟到早退",
+    "remark": "备注",
+}
+
+_MANAGER_ATTENDANCE_OVERRIDE_FIELDS = (
+    "attendance_days",
+    "injury_days",
+    "business_trip_days",
+    "marriage_days",
+    "funeral_days",
+    "late_early_minutes",
+)
+
+_MANAGER_OVERRIDE_LABELS = {
+    "attendance_days": "出勤天数",
+    "injury_days": "工伤",
+    "business_trip_days": "出差",
+    "marriage_days": "婚假",
+    "funeral_days": "丧假",
+    "late_early_minutes": "迟到早退",
+    "remark": "备注",
+}
 
 
 def _manager_scope_employees():
@@ -242,6 +278,106 @@ def _ensure_account_set_unlocked(account_set: AccountSet | None, action_label: s
     if account_set and account_set.is_locked:
         return _locked_account_set_error(account_set, action_label)
     return None
+
+
+def _user_display_name(user: User | None) -> str:
+    return user.username if user else ""
+
+
+def _override_field_labels(override_type: str) -> dict[str, str]:
+    return _EMPLOYEE_OVERRIDE_LABELS if override_type == "employee" else _MANAGER_OVERRIDE_LABELS
+
+
+def _override_field_names(override_type: str) -> tuple[str, ...]:
+    return _EMPLOYEE_OVERRIDE_FIELDS if override_type == "employee" else _MANAGER_ATTENDANCE_OVERRIDE_FIELDS
+
+
+def _override_state_from_row(row: object | None, fields: tuple[str, ...]) -> dict[str, object]:
+    state = {field: getattr(row, field) if row else None for field in fields}
+    state["remark"] = row.remark if row else ""
+    return state
+
+
+def _has_override_state_changes(before: dict[str, object], after: dict[str, object]) -> bool:
+    keys = set(before.keys()) | set(after.keys())
+    return any(before.get(key) != after.get(key) for key in keys)
+
+
+def _changed_override_fields(before: dict[str, object], after: dict[str, object]) -> list[str]:
+    keys = [key for key in after.keys() if key in before or key == "remark"]
+    return [key for key in keys if before.get(key) != after.get(key)]
+
+
+def _record_override_history(
+    override_type: str,
+    emp_id: int,
+    month: str,
+    action_type: str,
+    before_values: dict[str, object],
+    after_values: dict[str, object],
+    source_file_name: str | None = None,
+) -> None:
+    history = AttendanceOverrideHistory(
+        override_type=override_type,
+        emp_id=emp_id,
+        month=month,
+        action_type=action_type,
+        changed_fields_json=_changed_override_fields(before_values, after_values),
+        before_values_json=before_values,
+        after_values_json=after_values,
+        remark=str(after_values.get("remark") or ""),
+        source_file_name=(source_file_name or "").strip() or None,
+        operator_user_id=g.current_user.id if getattr(g, "current_user", None) else None,
+    )
+    db.session.add(history)
+
+
+def _serialize_override_history(row: AttendanceOverrideHistory) -> dict[str, object]:
+    labels = _override_field_labels(row.override_type)
+    before = row.before_values_json if isinstance(row.before_values_json, dict) else {}
+    after = row.after_values_json if isinstance(row.after_values_json, dict) else {}
+    changed_fields = list(row.changed_fields_json or [])
+    changes = [
+        {
+            "field": field,
+            "label": labels.get(field, field),
+            "before": before.get(field),
+            "after": after.get(field),
+        }
+        for field in changed_fields
+    ]
+    return {
+        "id": row.id,
+        "override_type": row.override_type,
+        "action_type": row.action_type,
+        "month": row.month,
+        "emp_id": row.emp_id,
+        "emp_no": row.employee.emp_no if row.employee else "",
+        "employee_name": row.employee.name if row.employee else "",
+        "remark": row.remark or "",
+        "source_file_name": row.source_file_name or "",
+        "operator_name": _user_display_name(row.operator_user),
+        "created_at": row.created_at.isoformat() if row.created_at else None,
+        "changes": changes,
+    }
+
+
+def _history_rows(override_type: str, emp_id: int, month: str) -> list[dict[str, object]]:
+    rows = (
+        AttendanceOverrideHistory.query.filter_by(override_type=override_type, emp_id=emp_id, month=month)
+        .order_by(AttendanceOverrideHistory.created_at.desc(), AttendanceOverrideHistory.id.desc())
+        .all()
+    )
+    return [_serialize_override_history(row) for row in rows]
+
+
+def _history_rows_for_month(override_type: str, month: str) -> list[dict[str, object]]:
+    rows = (
+        AttendanceOverrideHistory.query.filter_by(override_type=override_type, month=month)
+        .order_by(AttendanceOverrideHistory.created_at.desc(), AttendanceOverrideHistory.id.desc())
+        .all()
+    )
+    return [_serialize_override_history(row) for row in rows]
 
 
 def _locked_months_for_year(year: int, include_prev_dec: bool = False) -> list[str]:
@@ -1088,17 +1224,6 @@ def _save_manager_month_stat(stat_type: str) -> tuple[dict[str, str], int]:
         payload["warning"] = f"已跳过锁定月份：{'、'.join(payload['skipped_locked_months'])}"
     return payload, status
 
-
-_MANAGER_ATTENDANCE_OVERRIDE_FIELDS = (
-    "attendance_days",
-    "injury_days",
-    "business_trip_days",
-    "marriage_days",
-    "funeral_days",
-    "late_early_minutes",
-)
-
-
 def _validate_month(value: str | None) -> str | None:
     text = (value or "").strip()
     try:
@@ -1121,6 +1246,7 @@ def _manager_attendance_override_payload(row: ManagerAttendanceOverride | None) 
     payload = {field: getattr(row, field) if row else None for field in _MANAGER_ATTENDANCE_OVERRIDE_FIELDS}
     payload["remark"] = row.remark if row else ""
     payload["updated_at"] = row.updated_at.isoformat() if row and row.updated_at else None
+    payload["updated_by_name"] = _user_display_name(row.updated_by_user) if row else ""
     return payload
 
 
@@ -1143,6 +1269,7 @@ def _manager_attendance_response(emp_id: int, month: str) -> tuple[dict[str, obj
         "automatic": automatic,
         "override": _manager_attendance_override_payload(override),
         "applied": applied,
+        "history": _history_rows_for_month("manager", month),
     }, 200
 
 
@@ -1211,14 +1338,19 @@ def save_manager_attendance_override_record():
     values["late_early_minutes"] = late_value
 
     row = ManagerAttendanceOverride.query.filter_by(emp_id=emp_id, month=month).first()
-    if not row:
-        row = ManagerAttendanceOverride(emp_id=emp_id, month=month)
-        db.session.add(row)
-    for key, value in values.items():
-        setattr(row, key, value)
-    row.remark = (data.get("remark") or "").strip()
-    row.updated_by = g.current_user.id
-    db.session.commit()
+    before_values = _override_state_from_row(row, _MANAGER_ATTENDANCE_OVERRIDE_FIELDS)
+    after_values = dict(values)
+    after_values["remark"] = (data.get("remark") or "").strip()
+    if _has_override_state_changes(before_values, after_values):
+        if not row:
+            row = ManagerAttendanceOverride(emp_id=emp_id, month=month)
+            db.session.add(row)
+        for key, value in values.items():
+            setattr(row, key, value)
+        row.remark = after_values["remark"]
+        row.updated_by = g.current_user.id
+        _record_override_history("manager", emp_id, month, "manual_save", before_values, after_values)
+        db.session.commit()
 
     payload, status = _manager_attendance_response(emp_id, month)
     return jsonify(payload), status
@@ -1237,10 +1369,291 @@ def delete_manager_attendance_override_record():
         return locked_error
     row = ManagerAttendanceOverride.query.filter_by(emp_id=emp_id, month=month).first()
     if row:
+        before_values = _override_state_from_row(row, _MANAGER_ATTENDANCE_OVERRIDE_FIELDS)
+        after_values = _override_state_from_row(None, _MANAGER_ATTENDANCE_OVERRIDE_FIELDS)
+        _record_override_history("manager", emp_id, month, "clear", before_values, after_values)
         db.session.delete(row)
         db.session.commit()
     payload, status = _manager_attendance_response(emp_id, month)
     return jsonify(payload), status
+
+
+def _override_workbook_response(wb: openpyxl.Workbook, filename: str):
+    output = BytesIO()
+    wb.save(output)
+    output.seek(0)
+    return send_file(
+        output,
+        as_attachment=True,
+        download_name=filename,
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+
+
+def _employee_override_export_headers() -> list[str]:
+    return [
+        "月份",
+        "工号",
+        "姓名",
+        "系统考勤天数",
+        "系统工时",
+        "系统半勤天数",
+        "系统迟到早退",
+        "考勤天数",
+        "工时",
+        "半勤天数",
+        "迟到早退",
+        "备注",
+    ]
+
+
+def _manager_override_export_headers() -> list[str]:
+    return [
+        "月份",
+        "工号",
+        "姓名",
+        "系统出勤天数",
+        "系统工伤",
+        "系统出差",
+        "系统婚假",
+        "系统丧假",
+        "系统迟到早退",
+        "出勤天数",
+        "工伤",
+        "出差",
+        "婚假",
+        "丧假",
+        "迟到早退",
+        "备注",
+    ]
+
+
+def _build_employee_override_export_workbook(month: str, include_real_rows: bool) -> openpyxl.Workbook:
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "员工考勤修正"
+    ws.append(_employee_override_export_headers())
+    if include_real_rows:
+        employees = (
+            Employee.query.filter_by(is_manager=False)
+            .order_by(Employee.dept_id.asc(), Employee.emp_no.asc(), Employee.name.asc())
+            .all()
+        )
+        for employee in employees:
+            automatic = _employee_automatic_row(employee.id, month) or {}
+            override = EmployeeAttendanceOverride.query.filter_by(emp_id=employee.id, month=month).first()
+            ws.append(
+                [
+                    month,
+                    employee.emp_no,
+                    employee.name,
+                    automatic.get("attendance_days"),
+                    automatic.get("work_hours"),
+                    automatic.get("half_days"),
+                    automatic.get("late_early_minutes"),
+                    override.attendance_days if override else "",
+                    override.work_hours if override else "",
+                    override.half_days if override else "",
+                    override.late_early_minutes if override else "",
+                    override.remark if override and override.remark else "",
+                ]
+            )
+    else:
+        ws.append(["2026-05", "1001001", "张三", 20, 160, 0, 5, "", "", "", "", "留空表示不覆盖"])
+    return wb
+
+
+def _build_manager_override_export_workbook(month: str, include_real_rows: bool) -> openpyxl.Workbook:
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "管理人员考勤修正"
+    ws.append(_manager_override_export_headers())
+    if include_real_rows:
+        for employee in _manager_scope_employees():
+            automatic = _manager_attendance_row(employee.id, month, include_overrides=False) or {}
+            override = ManagerAttendanceOverride.query.filter_by(emp_id=employee.id, month=month).first()
+            ws.append(
+                [
+                    month,
+                    employee.emp_no,
+                    employee.name,
+                    automatic.get("attendance_days"),
+                    automatic.get("injury_days"),
+                    automatic.get("business_trip_days"),
+                    automatic.get("marriage_days"),
+                    automatic.get("funeral_days"),
+                    automatic.get("late_early_minutes"),
+                    override.attendance_days if override else "",
+                    override.injury_days if override else "",
+                    override.business_trip_days if override else "",
+                    override.marriage_days if override else "",
+                    override.funeral_days if override else "",
+                    override.late_early_minutes if override else "",
+                    override.remark if override and override.remark else "",
+                ]
+            )
+    else:
+        ws.append(["2026-05", "2001001", "李经理", 22, 0, 2, 0, 0, 0, "", "", "", "", "", "", "留空表示不覆盖"])
+    return wb
+
+
+def _import_summary(success_count: int, skipped_count: int, failed_count: int, changed_count: int, errors: list[str]) -> dict[str, object]:
+    return {
+        "success_count": success_count,
+        "skipped_count": skipped_count,
+        "failed_count": failed_count,
+        "changed_count": changed_count,
+        "errors": errors,
+    }
+
+
+def _apply_employee_override_updates(
+    row: EmployeeAttendanceOverride | None,
+    emp_id: int,
+    month: str,
+    updates: dict[str, object],
+    action_type: str,
+    source_file_name: str | None = None,
+) -> bool:
+    before_values = _override_state_from_row(row, _EMPLOYEE_OVERRIDE_FIELDS)
+    after_values = dict(before_values)
+    after_values.update(updates)
+    if not _has_override_state_changes(before_values, after_values):
+        return False
+    if not row:
+        row = EmployeeAttendanceOverride(emp_id=emp_id, month=month)
+        db.session.add(row)
+    for field in _EMPLOYEE_OVERRIDE_FIELDS:
+        setattr(row, field, after_values.get(field))
+    row.remark = str(after_values.get("remark") or "")
+    row.updated_by = g.current_user.id
+    _record_override_history("employee", emp_id, month, action_type, before_values, after_values, source_file_name)
+    return True
+
+
+def _apply_manager_override_updates(
+    row: ManagerAttendanceOverride | None,
+    emp_id: int,
+    month: str,
+    updates: dict[str, object],
+    action_type: str,
+    source_file_name: str | None = None,
+) -> bool:
+    before_values = _override_state_from_row(row, _MANAGER_ATTENDANCE_OVERRIDE_FIELDS)
+    after_values = dict(before_values)
+    after_values.update(updates)
+    if not _has_override_state_changes(before_values, after_values):
+        return False
+    if not row:
+        row = ManagerAttendanceOverride(emp_id=emp_id, month=month)
+        db.session.add(row)
+    for field in _MANAGER_ATTENDANCE_OVERRIDE_FIELDS:
+        setattr(row, field, after_values.get(field))
+    row.remark = str(after_values.get("remark") or "")
+    row.updated_by = g.current_user.id
+    _record_override_history("manager", emp_id, month, action_type, before_values, after_values, source_file_name)
+    return True
+
+
+@admin_bp.route("/manager-attendance-overrides/history", methods=["GET"])
+@admin_required
+def manager_attendance_override_history():
+    month = _validate_month(request.args.get("month"))
+    if not month:
+        return jsonify({"error": "请选择有效月份"}), 400
+    return jsonify({"rows": _history_rows_for_month("manager", month)})
+
+
+@admin_bp.route("/manager-attendance-overrides/template", methods=["GET"])
+@admin_required
+def download_manager_attendance_override_template():
+    month = _validate_month(request.args.get("month")) or datetime.now().strftime("%Y-%m")
+    return _override_workbook_response(_build_manager_override_export_workbook(month, include_real_rows=False), "管理人员考勤修正导入示例.xlsx")
+
+
+@admin_bp.route("/manager-attendance-overrides/export", methods=["GET"])
+@admin_required
+def export_manager_attendance_overrides():
+    month = _validate_month(request.args.get("month"))
+    if not month:
+        return jsonify({"error": "请选择有效月份"}), 400
+    return _override_workbook_response(_build_manager_override_export_workbook(month, include_real_rows=True), f"管理人员考勤修正导出_{month}.xlsx")
+
+
+@admin_bp.route("/manager-attendance-overrides/import", methods=["POST"])
+@admin_required
+def import_manager_attendance_overrides():
+    month = _validate_month(request.form.get("month"))
+    if not month:
+        return jsonify({"error": "请选择有效月份"}), 400
+    account_set = _account_set_for_month(month)
+    locked_error = _ensure_account_set_unlocked(account_set, "导入管理人员考勤修正")
+    if locked_error:
+        return locked_error
+    file = request.files.get("file")
+    if not file or not file.filename:
+        return jsonify({"error": "请选择导入文件"}), 400
+    wb = openpyxl.load_workbook(file, data_only=True, read_only=True)
+    ws = wb[wb.sheetnames[0]]
+    rows = [list(r) for r in ws.iter_rows(values_only=True)]
+    if not rows:
+        return jsonify({"error": "empty file"}), 400
+    header_idx, header_map = _parse_header_row(rows, ["月份", "工号", "姓名", "出勤天数", "备注"])
+    required = ["月份", "工号", "姓名", "出勤天数", "工伤", "出差", "婚假", "丧假", "迟到早退", "备注"]
+    missing = [key for key in required if key not in header_map]
+    if missing:
+        return jsonify({"error": f"缺少列：{', '.join(missing)}"}), 400
+    success_count = skipped_count = failed_count = changed_count = 0
+    errors: list[str] = []
+    for row_index, raw in enumerate(rows[header_idx + 1 :], start=header_idx + 2):
+        row_month = str(raw[header_map["月份"]]).strip() if header_map["月份"] < len(raw) and raw[header_map["月份"]] is not None else ""
+        emp_no = str(raw[header_map["工号"]]).strip() if header_map["工号"] < len(raw) and raw[header_map["工号"]] is not None else ""
+        if not row_month and not emp_no:
+            skipped_count += 1
+            continue
+        if row_month != month:
+            failed_count += 1
+            errors.append(f"第 {row_index} 行：月份 {row_month or '空'} 与当前月份 {month} 不一致")
+            continue
+        employee = Employee.query.filter_by(emp_no=emp_no).first()
+        if not employee or not employee.is_manager:
+            failed_count += 1
+            errors.append(f"第 {row_index} 行：工号 {emp_no or '空'} 未找到管理人员")
+            continue
+        updates: dict[str, object] = {}
+        for key in ("attendance_days", "injury_days", "business_trip_days", "marriage_days", "funeral_days"):
+            label = _MANAGER_OVERRIDE_LABELS[key]
+            value = raw[header_map[label]] if header_map[label] < len(raw) else None
+            parsed, error = _nullable_float({key: value}, key)
+            if error:
+                failed_count += 1
+                errors.append(f"第 {row_index} 行：{error}")
+                updates = {}
+                break
+            if value not in (None, ""):
+                updates[key] = parsed
+        if not updates and failed_count and len(errors) and errors[-1].startswith(f"第 {row_index} 行"):
+            continue
+        late_value = raw[header_map["迟到早退"]] if header_map["迟到早退"] < len(raw) else None
+        parsed_late, error = _nullable_int({"late_early_minutes": late_value}, "late_early_minutes")
+        if error:
+            failed_count += 1
+            errors.append(f"第 {row_index} 行：{error}")
+            continue
+        if late_value not in (None, ""):
+            updates["late_early_minutes"] = parsed_late
+        remark_value = raw[header_map["备注"]] if header_map["备注"] < len(raw) else None
+        if remark_value not in (None, ""):
+            updates["remark"] = str(remark_value).strip()
+        row_obj = ManagerAttendanceOverride.query.filter_by(emp_id=employee.id, month=month).first()
+        changed = _apply_manager_override_updates(row_obj, employee.id, month, updates, "import", file.filename)
+        if changed:
+            success_count += 1
+            changed_count += 1
+        else:
+            skipped_count += 1
+    db.session.commit()
+    return jsonify(_import_summary(success_count, skipped_count, failed_count, changed_count, errors))
 
 
 def _stat_key_for_month(month: str) -> tuple[int, str]:
@@ -2285,15 +2698,6 @@ def employee_attendance_overrides_page():
     )
     return render_template("admin/employee_attendance_overrides.html", employees=employees)
 
-
-_EMPLOYEE_OVERRIDE_FIELDS = (
-    "attendance_days",
-    "work_hours",
-    "half_days",
-    "late_early_minutes",
-)
-
-
 def _employee_override_values(override: EmployeeAttendanceOverride | None) -> dict[str, float | int | None]:
     return {field: getattr(override, field) if override else None for field in _EMPLOYEE_OVERRIDE_FIELDS}
 
@@ -2332,6 +2736,7 @@ def _employee_override_payload(row: EmployeeAttendanceOverride | None) -> dict[s
     payload = {field: getattr(row, field) if row else None for field in _EMPLOYEE_OVERRIDE_FIELDS}
     payload["remark"] = row.remark if row else ""
     payload["updated_at"] = row.updated_at.isoformat() if row and row.updated_at else None
+    payload["updated_by_name"] = _user_display_name(row.updated_by_user) if row else ""
     return payload
 
 
@@ -2352,6 +2757,7 @@ def _employee_override_response(emp_id: int, month: str) -> tuple[dict[str, obje
         "automatic": automatic,
         "override": _employee_override_payload(override),
         "applied": applied,
+        "history": _history_rows_for_month("employee", month),
     }, 200
 
 
@@ -2395,14 +2801,10 @@ def save_employee_attendance_override_record():
         values[key] = value
 
     row = EmployeeAttendanceOverride.query.filter_by(emp_id=emp_id, month=month).first()
-    if not row:
-        row = EmployeeAttendanceOverride(emp_id=emp_id, month=month)
-        db.session.add(row)
-    for key, value in values.items():
-        setattr(row, key, value)
-    row.remark = (data.get("remark") or "").strip()
-    row.updated_by = g.current_user.id
-    db.session.commit()
+    updates = dict(values)
+    updates["remark"] = (data.get("remark") or "").strip()
+    if _apply_employee_override_updates(row, emp_id, month, updates, "manual_save"):
+        db.session.commit()
 
     payload, status = _employee_override_response(emp_id, month)
     return jsonify(payload), status
@@ -2421,10 +2823,120 @@ def delete_employee_attendance_override_record():
         return locked_error
     row = EmployeeAttendanceOverride.query.filter_by(emp_id=emp_id, month=month).first()
     if row:
+        before_values = _override_state_from_row(row, _EMPLOYEE_OVERRIDE_FIELDS)
+        after_values = _override_state_from_row(None, _EMPLOYEE_OVERRIDE_FIELDS)
+        _record_override_history("employee", emp_id, month, "clear", before_values, after_values)
         db.session.delete(row)
         db.session.commit()
     payload, status = _employee_override_response(emp_id, month)
     return jsonify(payload), status
+
+
+@admin_bp.route("/employee-attendance-overrides/history", methods=["GET"])
+@admin_required
+def employee_attendance_override_history():
+    month = _validate_month(request.args.get("month"))
+    if not month:
+        return jsonify({"error": "请选择有效月份"}), 400
+    return jsonify({"rows": _history_rows_for_month("employee", month)})
+
+
+@admin_bp.route("/employee-attendance-overrides/template", methods=["GET"])
+@admin_required
+def download_employee_attendance_override_template():
+    month = _validate_month(request.args.get("month")) or datetime.now().strftime("%Y-%m")
+    return _override_workbook_response(_build_employee_override_export_workbook(month, include_real_rows=False), "员工考勤修正导入示例.xlsx")
+
+
+@admin_bp.route("/employee-attendance-overrides/export", methods=["GET"])
+@admin_required
+def export_employee_attendance_overrides():
+    month = _validate_month(request.args.get("month"))
+    if not month:
+        return jsonify({"error": "请选择有效月份"}), 400
+    return _override_workbook_response(_build_employee_override_export_workbook(month, include_real_rows=True), f"员工考勤修正导出_{month}.xlsx")
+
+
+@admin_bp.route("/employee-attendance-overrides/import", methods=["POST"])
+@admin_required
+def import_employee_attendance_overrides():
+    month = _validate_month(request.form.get("month"))
+    if not month:
+        return jsonify({"error": "请选择有效月份"}), 400
+    account_set = _account_set_for_month(month)
+    locked_error = _ensure_account_set_unlocked(account_set, "导入员工考勤修正")
+    if locked_error:
+        return locked_error
+    file = request.files.get("file")
+    if not file or not file.filename:
+        return jsonify({"error": "请选择导入文件"}), 400
+    wb = openpyxl.load_workbook(file, data_only=True, read_only=True)
+    ws = wb[wb.sheetnames[0]]
+    rows = [list(r) for r in ws.iter_rows(values_only=True)]
+    if not rows:
+        return jsonify({"error": "empty file"}), 400
+    header_idx, header_map = _parse_header_row(rows, ["月份", "工号", "姓名", "考勤天数", "备注"])
+    required = ["月份", "工号", "姓名", "考勤天数", "工时", "半勤天数", "迟到早退", "备注"]
+    missing = [key for key in required if key not in header_map]
+    if missing:
+        return jsonify({"error": f"缺少列：{', '.join(missing)}"}), 400
+    success_count = skipped_count = failed_count = changed_count = 0
+    errors: list[str] = []
+    for row_index, raw in enumerate(rows[header_idx + 1 :], start=header_idx + 2):
+        row_month = str(raw[header_map["月份"]]).strip() if header_map["月份"] < len(raw) and raw[header_map["月份"]] is not None else ""
+        emp_no = str(raw[header_map["工号"]]).strip() if header_map["工号"] < len(raw) and raw[header_map["工号"]] is not None else ""
+        if not row_month and not emp_no:
+            skipped_count += 1
+            continue
+        if row_month != month:
+            failed_count += 1
+            errors.append(f"第 {row_index} 行：月份 {row_month or '空'} 与当前月份 {month} 不一致")
+            continue
+        employee = Employee.query.filter_by(emp_no=emp_no).first()
+        if not employee or employee.is_manager:
+            failed_count += 1
+            errors.append(f"第 {row_index} 行：工号 {emp_no or '空'} 未找到普通员工")
+            continue
+        updates: dict[str, object] = {}
+        numeric_error = False
+        for key in ("attendance_days", "work_hours"):
+            label = _EMPLOYEE_OVERRIDE_LABELS[key]
+            value = raw[header_map[label]] if header_map[label] < len(raw) else None
+            parsed, error = _nullable_float({key: value}, key)
+            if error:
+                failed_count += 1
+                errors.append(f"第 {row_index} 行：{error}")
+                numeric_error = True
+                break
+            if value not in (None, ""):
+                updates[key] = parsed
+        if numeric_error:
+            continue
+        for key in ("half_days", "late_early_minutes"):
+            label = _EMPLOYEE_OVERRIDE_LABELS[key]
+            value = raw[header_map[label]] if header_map[label] < len(raw) else None
+            parsed, error = _nullable_int({key: value}, key)
+            if error:
+                failed_count += 1
+                errors.append(f"第 {row_index} 行：{error}")
+                numeric_error = True
+                break
+            if value not in (None, ""):
+                updates[key] = parsed
+        if numeric_error:
+            continue
+        remark_value = raw[header_map["备注"]] if header_map["备注"] < len(raw) else None
+        if remark_value not in (None, ""):
+            updates["remark"] = str(remark_value).strip()
+        row_obj = EmployeeAttendanceOverride.query.filter_by(emp_id=employee.id, month=month).first()
+        changed = _apply_employee_override_updates(row_obj, employee.id, month, updates, "import", file.filename)
+        if changed:
+            success_count += 1
+            changed_count += 1
+        else:
+            skipped_count += 1
+    db.session.commit()
+    return jsonify(_import_summary(success_count, skipped_count, failed_count, changed_count, errors))
 
 
 @admin_bp.route("/")
