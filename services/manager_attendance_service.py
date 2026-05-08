@@ -18,6 +18,7 @@ from services.attendance_source_service import (
     attendance_views_by_employee,
     selected_monthly_report_raw,
 )
+from utils.helpers import overlap_duration_days
 
 
 MANAGER_HEADERS = [
@@ -134,13 +135,10 @@ def _stat_year_key(month: str) -> tuple[int, str]:
 def normalize_days(value: float | int | None) -> float:
     """Convert decimal hours to days using the rule:
     <0.084 -> 0 days, >=0.084 and <0.209 -> 0.5 days, >=0.209 -> 1 day.
-    Values > 3 are treated as hours and divided by 8.
     """
     raw = float(value or 0)
     if raw <= 0:
         return 0.0
-    if raw > 3:
-        return _round2(raw / 8)
 
     integer = math.floor(raw)
     fraction = round(raw - integer, 5)
@@ -203,7 +201,7 @@ def _leave_rows(employee_id: int, month: str) -> list[LeaveRecord]:
     start_dt, end_dt = datetime_range
     return (
         LeaveRecord.query.filter_by(emp_id=employee_id)
-        .filter(LeaveRecord.start_time >= start_dt, LeaveRecord.start_time < end_dt)
+        .filter(LeaveRecord.start_time < end_dt, LeaveRecord.end_time > start_dt)
         .all()
     )
 
@@ -218,6 +216,14 @@ def _overtime_rows(employee_id: int, month: str) -> list[OvertimeRecord]:
         .filter(OvertimeRecord.start_time >= start_dt, OvertimeRecord.start_time < end_dt)
         .all()
     )
+
+
+def _leave_days_in_month(leave: LeaveRecord, month: str) -> float:
+    datetime_range = _month_datetime_range(month)
+    if not datetime_range:
+        return 0.0
+    start_dt, end_dt = datetime_range
+    return overlap_duration_days(leave.start_time, leave.end_time, start_dt, end_dt)
 
 
 def _manager_month_stat(employee_id: int, month: str, stat_type: str) -> ManagerMonthStat | None:
@@ -447,7 +453,7 @@ def build_manager_rows(
         funeral_days = 0.0
 
         for leave in _leave_rows(employee.id, options.month):
-            days = normalize_days(leave.duration)
+            days = normalize_days(_leave_days_in_month(leave, options.month))
             bucket = _leave_bucket(leave.leave_type)
             if bucket == "injury":
                 injury_days += days

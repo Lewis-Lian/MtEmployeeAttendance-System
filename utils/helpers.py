@@ -81,3 +81,18 @@ def split_time_cells(raw: str) -> list[str]:
     for sep in [";", ",", " ", "\n", "|"]:
         raw = raw.replace(sep, "|")
     return [p.strip() for p in raw.split("|") if p.strip()]
+
+
+def overlap_duration_days(
+    start: Optional[datetime],
+    end: Optional[datetime],
+    window_start: Optional[datetime],
+    window_end: Optional[datetime],
+) -> float:
+    if not start or not end or not window_start or not window_end:
+        return 0.0
+    overlap_start = max(start, window_start)
+    overlap_end = min(end, window_end)
+    if overlap_end <= overlap_start:
+        return 0.0
+    return (overlap_end - overlap_start).total_seconds() / 86400.0

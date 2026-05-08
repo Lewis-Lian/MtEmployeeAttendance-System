@@ -35,6 +35,7 @@ from services.manager_attendance_service import (
     rows_as_table,
 )
 from routes.auth import login_required, page_permission_required
+from utils.helpers import overlap_duration_days
 
 
 employee_bp = Blueprint("employee", __name__, url_prefix="/employee")
@@ -168,6 +169,14 @@ def _normalized_leave_days(duration: float | int | None) -> float:
     if frac > 0.08:
         return float(int_days) + 0.5
     return float(int_days)
+
+
+def _leave_days_in_month(record: LeaveRecord, month: str) -> float:
+    datetime_range = _month_datetime_range(month)
+    if not datetime_range:
+        return 0.0
+    start_dt, end_dt = datetime_range
+    return overlap_duration_days(record.start_time, record.end_time, start_dt, end_dt)
 
 
 def _month_date_range(month: str) -> tuple[date, date] | None:
@@ -694,7 +703,7 @@ def _build_final_rows(month: str, emp_ids: list[int]) -> list[list[object]]:
         start_dt, end_dt = datetime_range
         leave_records = (
             LeaveRecord.query.filter(LeaveRecord.emp_id.in_(emp_ids))
-            .filter(LeaveRecord.start_time >= start_dt, LeaveRecord.start_time < end_dt)
+            .filter(LeaveRecord.start_time < end_dt, LeaveRecord.end_time > start_dt)
             .all()
         )
         for record in leave_records:
@@ -711,7 +720,7 @@ def _build_final_rows(month: str, emp_ids: list[int]) -> list[list[object]]:
             if not leave_type:
                 continue
             leave_count[leave_type] += 1
-            leave_days[leave_type] += _normalized_leave_days(row.duration)
+            leave_days[leave_type] += _normalized_leave_days(_leave_days_in_month(row, month))
 
         day_work_stats = [_calc_record_work_hours(r) for r in daily_rows]
         attendance_days = round(sum(_attendance_day_value(r) for r in daily_rows), 2)

@@ -3,7 +3,6 @@ document.addEventListener("DOMContentLoaded", () => {
   const importRawBtn = document.getElementById("importRawBtn");
   const calculateEmployeeBtn = document.getElementById("calculateEmployeeBtn");
   const calculateManagerBtn = document.getElementById("calculateManagerBtn");
-  const uploadResult = document.getElementById("uploadResult");
   const createAccountSetForm = document.getElementById("createAccountSetForm");
   const accountSetSelect = document.getElementById("accountSetSelect");
   const factoryRestDaysInput = document.getElementById("factoryRestDaysInput");
@@ -18,10 +17,8 @@ document.addEventListener("DOMContentLoaded", () => {
   const accountSetImportsBody = document.getElementById("accountSetImportsBody");
   const accountSetLockNotice = document.getElementById("accountSetLockNotice");
 
-  uploadResult.style.whiteSpace = "pre-line";
   let accountSets = [];
   window.AppFeedback.setResult(accountSetResult, "", "muted");
-  window.AppFeedback.setResult(uploadResult, "", "muted");
 
   function currentAccountSetId() {
     return Number(accountSetSelect.value || 0);
@@ -241,7 +238,7 @@ document.addEventListener("DOMContentLoaded", () => {
     e.preventDefault();
     const accountSetId = currentAccountSetId();
     if (!accountSetId) {
-      window.AppFeedback.setResult(uploadResult, "请先创建并选择账套", "danger");
+      window.AppToast.error("请先创建并选择账套", "上传失败");
       return;
     }
 
@@ -249,7 +246,6 @@ document.addEventListener("DOMContentLoaded", () => {
       .flatMap((input) => Array.from(input.files || []))
       .filter((file) => file.name);
     if (!selectedFiles.length) {
-      window.AppFeedback.setResult(uploadResult, "请至少选择一个要上传的源文件", "danger");
       window.AppToast.error("请至少选择一个要上传的源文件", "上传失败");
       return;
     }
@@ -258,7 +254,6 @@ document.addEventListener("DOMContentLoaded", () => {
     formData.append("account_set_id", String(accountSetId));
     importRawBtn.disabled = true;
     importRawBtn.textContent = "上传中...";
-    window.AppFeedback.setResult(uploadResult, "", "muted");
     try {
       const res = await fetch("/admin/import/raw-files", { method: "POST", body: formData });
       const data = await res.json();
@@ -266,17 +261,14 @@ document.addEventListener("DOMContentLoaded", () => {
       const failedRows = results.filter((x) => x.status !== "ok");
 
       if (res.ok && failedRows.length === 0 && (data.failed || 0) === 0) {
-        window.AppFeedback.setResult(uploadResult, "", "muted");
         window.AppToast.success("上传成功，已归档到账套。", "上传成功");
       } else {
         const details = failedRows.map((x, i) => `${i + 1}. ${x.file || "未知文件"}: ${x.error || "上传失败"}`);
-        window.AppFeedback.setResult(uploadResult, `上传失败，错误明细：\n${details.join("\n")}`, "danger");
-        window.AppToast.error("上传失败，请查看错误明细。", "上传失败");
+        window.AppToast.error(`上传失败，错误明细：\n${details.join("\n")}`, "上传失败");
       }
       await loadAccountSets();
       await loadAccountSetImports();
     } catch (err) {
-      window.AppFeedback.setResult(uploadResult, `上传失败：${err?.message || "网络或服务异常"}`, "danger");
       window.AppToast.error(err?.message || "网络或服务异常", "上传失败");
     } finally {
       importRawBtn.disabled = false;
@@ -287,7 +279,7 @@ document.addEventListener("DOMContentLoaded", () => {
   async function runCalculation(mode, button, label) {
     const accountSetId = currentAccountSetId();
     if (!accountSetId) {
-      window.AppFeedback.setResult(uploadResult, "请先选择账套", "danger");
+      window.AppToast.error("请先选择账套", label);
       return;
     }
     calculateEmployeeBtn.disabled = true;
@@ -315,17 +307,14 @@ document.addEventListener("DOMContentLoaded", () => {
       }
 
       if (res.ok && failedRows.length === 0) {
-        window.AppFeedback.setResult(uploadResult, "", "muted");
         window.AppToast.success(`${label}成功`, label);
       } else {
         const details = failedRows.map((x, i) => `${i + 1}. ${x.file || "未知文件"}: ${x.error || "计算失败"}`);
-        window.AppFeedback.setResult(uploadResult, `${label}失败，错误明细：\n${details.join("\n")}\n\n已处理统计：\n${summaryLines.join("\n")}`, "danger");
-        window.AppToast.error(`${label}失败，请查看错误明细。`, label);
+        window.AppToast.error(`${label}失败，错误明细：\n${details.join("\n")}\n\n已处理统计：\n${summaryLines.join("\n")}`, label);
       }
       await loadAccountSets();
       await loadAccountSetImports();
     } catch (err) {
-      window.AppFeedback.setResult(uploadResult, `${label}失败：${err?.message || "网络或服务异常"}`, "danger");
       window.AppToast.error(err?.message || "网络或服务异常", `${label}失败`);
     } finally {
       calculateEmployeeBtn.disabled = false;
