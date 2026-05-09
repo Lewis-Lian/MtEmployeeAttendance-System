@@ -4,6 +4,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const createResult = document.getElementById("createDeptResult");
   const importResult = document.getElementById("deptImportResult");
   const tableBody = document.getElementById("deptTableBody");
+  const exportBtn = document.getElementById("exportDeptBtn");
   const refreshBtn = document.getElementById("refreshDeptBtn");
   const selectAll = document.getElementById("selectAllDepts");
   const selectedCount = document.getElementById("deptSelectedCount");
@@ -328,6 +329,9 @@ document.addEventListener("DOMContentLoaded", () => {
     await loadDepartments();
   });
 
+  exportBtn.addEventListener("click", () => {
+    window.location.href = "/admin/departments/export";
+  });
   refreshBtn.addEventListener("click", loadDepartments);
   loadDepartments();
 });
