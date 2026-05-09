@@ -227,7 +227,7 @@ def _parse_department_original_id(value: Any) -> int | None:
         return None
     try:
         return int(float(raw_value))
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):
         return None
 
 
@@ -2252,6 +2252,7 @@ def import_departments_xlsx():
     }
     original_identities_by_id = _load_department_identity_metadata(wb)
     staged_rows: list[tuple[Department, str, str, str]] = []
+    staged_departments_by_dept_no = dict(departments_by_dept_no)
     used_temp_dept_nos = set(departments_by_dept_no)
     temp_index = 1
 
@@ -2273,12 +2274,18 @@ def import_departments_xlsx():
 
         department = None
         if original_id is not None:
-            candidate = departments_by_id.get(original_id)
             original_identity = original_identities_by_id.get(original_id)
-            if _department_matches_original_identity(candidate, original_identity):
+            if original_identity:
+                candidate = departments_by_id.get(original_id)
+                if not _department_matches_original_identity(candidate, original_identity):
+                    db.session.rollback()
+                    return (
+                        jsonify({"error": f"第 {row_idx} 行的原始部门元数据与当前数据不匹配，请重新导出后再导入"}),
+                        400,
+                    )
                 department = candidate
         if department is None:
-            department = departments_by_dept_no.get(dept_no)
+            department = staged_departments_by_dept_no.get(dept_no)
         if department is None:
             while True:
                 temp_dept_no = f"{_DEPARTMENT_IMPORT_TEMP_PREFIX}{temp_index:04d}"
@@ -2290,6 +2297,7 @@ def import_departments_xlsx():
             db.session.add(department)
         if department.id is not None:
             departments_by_id[department.id] = department
+        staged_departments_by_dept_no[dept_no] = department
         staged_rows.append((department, dept_no, dept_name, parent_no))
         imported += 1
 

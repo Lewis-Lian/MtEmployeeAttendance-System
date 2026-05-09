@@ -382,32 +382,34 @@ class AttendanceOverrideFeatureTests(unittest.TestCase):
             self.assertEqual(child.parent_id, parent.id)
 
     def test_departments_import_ignores_malformed_hidden_metadata(self) -> None:
-        export_res = self.client.get("/admin/departments/export")
-        self.assertEqual(export_res.status_code, 200)
+        for hidden_id in ("not-a-number", "Infinity", "1e309"):
+            with self.subTest(hidden_id=hidden_id):
+                export_res = self.client.get("/admin/departments/export")
+                self.assertEqual(export_res.status_code, 200)
 
-        wb = openpyxl.load_workbook(io.BytesIO(export_res.data))
-        ws = wb.active
-        ws.cell(row=2, column=4, value="not-a-number")
-        ws.cell(row=2, column=2, value="行政部-安全导入")
+                wb = openpyxl.load_workbook(io.BytesIO(export_res.data))
+                ws = wb.active
+                ws.cell(row=2, column=4, value=hidden_id)
+                ws.cell(row=2, column=2, value=f"行政部-安全导入-{hidden_id}")
 
-        buf = io.BytesIO()
-        wb.save(buf)
-        buf.seek(0)
+                buf = io.BytesIO()
+                wb.save(buf)
+                buf.seek(0)
 
-        import_res = self.client.post(
-            "/admin/departments/import",
-            data={"file": (buf, "departments-malformed-metadata.xlsx")},
-            content_type="multipart/form-data",
-        )
-        self.assertEqual(import_res.status_code, 200)
+                import_res = self.client.post(
+                    "/admin/departments/import",
+                    data={"file": (buf, f"departments-malformed-metadata-{hidden_id}.xlsx")},
+                    content_type="multipart/form-data",
+                )
+                self.assertEqual(import_res.status_code, 200)
 
-        with self.app.app_context():
-            departments = Department.query.order_by(Department.id.asc()).all()
-            self.assertEqual(len(departments), 1)
-            self.assertEqual(departments[0].dept_no, "D001")
-            self.assertEqual(departments[0].dept_name, "行政部-安全导入")
+                with self.app.app_context():
+                    departments = Department.query.order_by(Department.id.asc()).all()
+                    self.assertEqual(len(departments), 1)
+                    self.assertEqual(departments[0].dept_no, "D001")
+                    self.assertEqual(departments[0].dept_name, f"行政部-安全导入-{hidden_id}")
 
-    def test_departments_import_does_not_retarget_unrelated_rows_when_hidden_ids_mismatch(self) -> None:
+    def test_departments_import_rejects_rows_when_hidden_ids_mismatch_current_identity(self) -> None:
         export_res = self.client.get("/admin/departments/export")
         self.assertEqual(export_res.status_code, 200)
 
@@ -443,7 +445,8 @@ class AttendanceOverrideFeatureTests(unittest.TestCase):
             data={"file": (io.BytesIO(export_res.data), "departments-cross-db.xlsx")},
             content_type="multipart/form-data",
         )
-        self.assertEqual(import_res.status_code, 200)
+        self.assertEqual(import_res.status_code, 400)
+        self.assertIn("原始部门", import_res.get_json()["error"])
 
         with other_app.app_context():
             unrelated = Department.query.filter_by(dept_no="X001").first()
@@ -451,9 +454,33 @@ class AttendanceOverrideFeatureTests(unittest.TestCase):
 
             self.assertIsNotNone(unrelated)
             self.assertEqual(unrelated.dept_name, "外部部门")
-            self.assertIsNotNone(imported)
-            self.assertEqual(imported.dept_name, "行政部")
-            self.assertEqual(Department.query.count(), 2)
+            self.assertIsNone(imported)
+            self.assertEqual(Department.query.count(), 1)
+
+    def test_departments_import_handles_duplicate_new_rows_for_same_dept_no(self) -> None:
+        export_res = self.client.get("/admin/departments/export")
+        self.assertEqual(export_res.status_code, 200)
+
+        wb = openpyxl.load_workbook(io.BytesIO(export_res.data))
+        ws = wb.active
+        ws.append(["D020", "新部门一版", "", ""])
+        ws.append(["D020", "新部门二版", "", ""])
+
+        buf = io.BytesIO()
+        wb.save(buf)
+        buf.seek(0)
+
+        import_res = self.client.post(
+            "/admin/departments/import",
+            data={"file": (buf, "departments-duplicate-new-rows.xlsx")},
+            content_type="multipart/form-data",
+        )
+        self.assertEqual(import_res.status_code, 200)
+
+        with self.app.app_context():
+            matches = Department.query.filter_by(dept_no="D020").all()
+            self.assertEqual(len(matches), 1)
+            self.assertEqual(matches[0].dept_name, "新部门二版")
 
     def test_departments_import_allows_swapping_existing_department_numbers(self) -> None:
         with self.app.app_context():
