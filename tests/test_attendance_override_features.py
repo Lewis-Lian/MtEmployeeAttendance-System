@@ -202,6 +202,33 @@ class AttendanceOverrideFeatureTests(unittest.TestCase):
         self.assertIn("出勤天数", headers)
         self.assertIn("备注", headers)
 
+    def test_departments_template_download_uses_importable_headers(self) -> None:
+        res = self.client.get("/admin/departments/template")
+        self.assertEqual(res.status_code, 200)
+
+        wb = openpyxl.load_workbook(io.BytesIO(res.data))
+        ws = wb.active
+        headers = [cell.value for cell in ws[1]]
+        self.assertEqual(headers, ["部门编号", "部门名称", "上级部门编号"])
+
+    def test_departments_export_downloads_importable_rows(self) -> None:
+        with self.app.app_context():
+            parent = Department.query.filter_by(dept_no="D001").first()
+            child = Department(dept_no="D010", dept_name="行政一部", parent_id=parent.id)
+            db.session.add(child)
+            db.session.commit()
+
+        res = self.client.get("/admin/departments/export")
+        self.assertEqual(res.status_code, 200)
+        self.assertIn("部门导出.xlsx", res.headers.get("Content-Disposition", ""))
+
+        wb = openpyxl.load_workbook(io.BytesIO(res.data))
+        ws = wb.active
+        rows = list(ws.iter_rows(values_only=True))
+        self.assertEqual(rows[0], ("部门编号", "部门名称", "上级部门编号"))
+        self.assertIn(("D001", "行政部", ""), rows[1:])
+        self.assertIn(("D010", "行政一部", "D001"), rows[1:])
+
 
 if __name__ == "__main__":
     unittest.main()
