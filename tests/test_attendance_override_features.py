@@ -211,15 +211,11 @@ class AttendanceOverrideFeatureTests(unittest.TestCase):
         wb = openpyxl.load_workbook(io.BytesIO(res.data))
         ws = wb.active
         headers = [cell.value for cell in ws[1]]
-        self.assertEqual(headers, ["部门编号", "部门名称", "上级部门编号"])
-        self.assertEqual(ws.max_column, 3)
-
-        metadata_ws = wb["部门导入元数据"]
-        self.assertEqual(metadata_ws.sheet_state, "hidden")
-        self.assertEqual(
-            [cell.value for cell in metadata_ws[1]],
-            ["数据行号", "原始部门ID"],
-        )
+        self.assertEqual(headers[:3], ["部门编号", "部门名称", "上级部门编号"])
+        self.assertEqual(headers[3], "原始部门ID")
+        self.assertEqual(ws.max_column, 4)
+        self.assertTrue(ws.column_dimensions["D"].hidden)
+        self.assertNotIn("部门导入元数据", wb.sheetnames)
 
     def test_departments_page_renders_with_export_link(self) -> None:
         project_root = os.path.dirname(os.path.dirname(__file__))
@@ -273,16 +269,18 @@ class AttendanceOverrideFeatureTests(unittest.TestCase):
             for row in rows[1:]
             if row[0] and row[1]
         ]
-        self.assertEqual(rows[0], ("部门编号", "部门名称", "上级部门编号"))
-        self.assertEqual(ws.max_column, 3)
+        self.assertEqual(rows[0][:3], ("部门编号", "部门名称", "上级部门编号"))
+        self.assertEqual(rows[0][3], "原始部门ID")
+        self.assertEqual(ws.max_column, 4)
+        self.assertTrue(ws.column_dimensions["D"].hidden)
         self.assertIn(("D001", "行政部", ""), normalized_rows)
         self.assertIn(("D010", "行政一部", "D001"), normalized_rows)
-
-        metadata_ws = wb["部门导入元数据"]
-        self.assertEqual(metadata_ws.sheet_state, "hidden")
-        metadata_rows = list(metadata_ws.iter_rows(values_only=True))
-        self.assertEqual(metadata_rows[0], ("数据行号", "原始部门ID"))
-        self.assertEqual(len(metadata_rows), 3)
+        exported_ids = {
+            str(row[3])
+            for row in rows[1:]
+            if row[0] and row[1] and row[3] is not None
+        }
+        self.assertEqual(len(exported_ids), 2)
 
     def test_departments_import_updates_existing_department_when_exported_dept_no_changes(self) -> None:
         with self.app.app_context():
@@ -333,6 +331,80 @@ class AttendanceOverrideFeatureTests(unittest.TestCase):
             child = Department.query.filter_by(dept_no="D010").first()
             self.assertIsNotNone(child)
             self.assertEqual(child.parent_id, renamed_parent.id)
+
+    def test_departments_import_keeps_identity_when_rows_are_reordered(self) -> None:
+        with self.app.app_context():
+            parent = Department.query.filter_by(dept_no="D001").first()
+            child = Department(dept_no="D010", dept_name="行政一部", parent_id=parent.id)
+            db.session.add(child)
+            db.session.commit()
+
+        export_res = self.client.get("/admin/departments/export")
+        self.assertEqual(export_res.status_code, 200)
+
+        wb = openpyxl.load_workbook(io.BytesIO(export_res.data))
+        ws = wb.active
+        row_two = [ws.cell(row=2, column=col_idx).value for col_idx in range(1, ws.max_column + 1)]
+        row_three = [ws.cell(row=3, column=col_idx).value for col_idx in range(1, ws.max_column + 1)]
+        for col_idx, value in enumerate(row_three, start=1):
+            ws.cell(row=2, column=col_idx, value=value)
+        for col_idx, value in enumerate(row_two, start=1):
+            ws.cell(row=3, column=col_idx, value=value)
+
+        ws.cell(row=2, column=2, value="行政一部-已排序")
+        ws.cell(row=3, column=2, value="行政部-已排序")
+        ws.cell(row=2, column=3, value="D001")
+        ws.cell(row=3, column=3, value="")
+
+        buf = io.BytesIO()
+        wb.save(buf)
+        buf.seek(0)
+
+        import_res = self.client.post(
+            "/admin/departments/import",
+            data={"file": (buf, "departments-reordered.xlsx")},
+            content_type="multipart/form-data",
+        )
+        self.assertEqual(import_res.status_code, 200)
+
+        with self.app.app_context():
+            departments = Department.query.order_by(Department.dept_no.asc()).all()
+            self.assertEqual(len(departments), 2)
+
+            parent = Department.query.filter_by(dept_no="D001").first()
+            self.assertIsNotNone(parent)
+            self.assertEqual(parent.dept_name, "行政部-已排序")
+
+            child = Department.query.filter_by(dept_no="D010").first()
+            self.assertIsNotNone(child)
+            self.assertEqual(child.dept_name, "行政一部-已排序")
+            self.assertEqual(child.parent_id, parent.id)
+
+    def test_departments_import_ignores_malformed_hidden_metadata(self) -> None:
+        export_res = self.client.get("/admin/departments/export")
+        self.assertEqual(export_res.status_code, 200)
+
+        wb = openpyxl.load_workbook(io.BytesIO(export_res.data))
+        ws = wb.active
+        ws.cell(row=2, column=4, value="not-a-number")
+        ws.cell(row=2, column=2, value="行政部-安全导入")
+
+        buf = io.BytesIO()
+        wb.save(buf)
+        buf.seek(0)
+
+        import_res = self.client.post(
+            "/admin/departments/import",
+            data={"file": (buf, "departments-malformed-metadata.xlsx")},
+            content_type="multipart/form-data",
+        )
+        self.assertEqual(import_res.status_code, 200)
+
+        with self.app.app_context():
+            departments = Department.query.order_by(Department.id.asc()).all()
+            self.assertEqual(len(departments), 1)
+            self.assertEqual(departments[0].dept_no, "D001")
+            self.assertEqual(departments[0].dept_name, "行政部-安全导入")
 
 
 if __name__ == "__main__":

@@ -218,6 +218,16 @@ def _parse_attendance_source(value: Any, default: str) -> str:
     return source
 
 
+def _parse_department_original_id(value: Any) -> int | None:
+    raw_value = str(value or "").strip()
+    if not raw_value:
+        return None
+    try:
+        return int(float(raw_value))
+    except (TypeError, ValueError):
+        return None
+
+
 def _serialize_account_set(row: AccountSet) -> dict:
     success_count = 0
     error_count = 0
@@ -2159,16 +2169,19 @@ def import_departments_xlsx():
     if not raw_rows:
         return jsonify({"error": "empty file"}), 400
 
-    original_ids_by_row: dict[int, str] = {}
+    original_ids_by_row: dict[int, int] = {}
     if _DEPARTMENT_METADATA_SHEET in wb.sheetnames:
         metadata_ws = wb[_DEPARTMENT_METADATA_SHEET]
         for data_row_no, original_id in metadata_ws.iter_rows(min_row=2, values_only=True):
             if data_row_no is None or original_id is None:
                 continue
             try:
-                original_ids_by_row[int(float(data_row_no))] = str(original_id).strip()
+                row_no = int(float(data_row_no))
             except (TypeError, ValueError):
                 continue
+            parsed_original_id = _parse_department_original_id(original_id)
+            if parsed_original_id is not None:
+                original_ids_by_row[row_no] = parsed_original_id
 
     header_idx, header_map = _parse_header_row(raw_rows, ["部门编号", "部门名称", "上级部门编号"])
     dept_no_idx = header_map.get("部门编号", -1)
@@ -2180,6 +2193,11 @@ def import_departments_xlsx():
 
     imported = 0
     pending_parent_links: list[tuple[Department, str]] = []
+    existing_departments = Department.query.order_by(Department.id.asc()).all()
+    departments_by_id = {department.id: department for department in existing_departments}
+    departments_by_dept_no = {
+        department.dept_no: department for department in existing_departments if department.dept_no
+    }
     for row_idx, row in enumerate(raw_rows[header_idx + 1 :], start=header_idx + 2):
         dept_no = (str(row[dept_no_idx]).strip() if dept_no_idx < len(row) and row[dept_no_idx] is not None else "")
         dept_name = (
@@ -2188,26 +2206,28 @@ def import_departments_xlsx():
         parent_no = (
             str(row[parent_no_idx]).strip() if parent_no_idx >= 0 and parent_no_idx < len(row) and row[parent_no_idx] is not None else ""
         )
-        original_id = original_ids_by_row.get(row_idx, "")
-        if not original_id and original_id_idx >= 0 and original_id_idx < len(row) and row[original_id_idx] is not None:
-            original_id = str(row[original_id_idx]).strip()
+        original_id = original_ids_by_row.get(row_idx)
+        if original_id_idx >= 0 and original_id_idx < len(row):
+            original_id = _parse_department_original_id(row[original_id_idx]) or original_id
         if not dept_no or not dept_name:
             continue
 
-        department = None
-        if original_id:
-            try:
-                department = db.session.get(Department, int(float(original_id)))
-            except (TypeError, ValueError):
-                department = None
+        department = departments_by_id.get(original_id) if original_id is not None else None
         if not department:
-            department = Department.query.filter_by(dept_no=dept_no).first()
+            department = departments_by_dept_no.get(dept_no)
         if not department:
             department = Department(dept_no=dept_no, dept_name=dept_name)
             db.session.add(department)
+            departments_by_dept_no[dept_no] = department
         else:
+            previous_dept_no = department.dept_no
             department.dept_no = dept_no
             department.dept_name = dept_name
+            if previous_dept_no and departments_by_dept_no.get(previous_dept_no) is department:
+                departments_by_dept_no.pop(previous_dept_no, None)
+            departments_by_dept_no[dept_no] = department
+        if department.id is not None:
+            departments_by_id[department.id] = department
         pending_parent_links.append((department, parent_no))
         imported += 1
 
@@ -2230,16 +2250,11 @@ def _build_departments_workbook(rows: list[tuple[str, str, str, str]]) -> openpy
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.title = "部门导入模板"
-    ws.append(["部门编号", "部门名称", "上级部门编号"])
+    ws.append(["部门编号", "部门名称", "上级部门编号", _DEPARTMENT_ORIGINAL_ID_HEADER])
+    ws.column_dimensions["D"].hidden = True
 
-    metadata_ws = wb.create_sheet(_DEPARTMENT_METADATA_SHEET)
-    metadata_ws.sheet_state = "hidden"
-    metadata_ws.append(["数据行号", _DEPARTMENT_ORIGINAL_ID_HEADER])
-
-    for row_idx, row in enumerate(rows, start=2):
-        ws.append(list(row[:3]))
-        if row[3]:
-            metadata_ws.append([row_idx, row[3]])
+    for row in rows:
+        ws.append(list(row[:4]))
     return wb
 
 
