@@ -14,6 +14,7 @@ from models.department import Department
 from models.employee import Employee
 from models.user import User
 from routes import register_routes
+from utils.app_navigation import module_by_slug, nav_context, visible_modules
 
 
 class AttendanceOverrideFeatureTests(unittest.TestCase):
@@ -309,6 +310,42 @@ class AttendanceOverrideFeatureTests(unittest.TestCase):
         self.assertIn("query-workflow", query_html)
         self.assertIn("query-filter-card", query_html)
         self.assertIn("query-result-card", query_html)
+
+    def test_product_navigation_groups_pages_into_modules(self) -> None:
+        admin_user = SimpleNamespace(
+            username="admin",
+            role="admin",
+            has_any_page_access=lambda _keys: True,
+            can_access_page=lambda _key: True,
+        )
+
+        modules = visible_modules(admin_user)
+        slugs = [module["slug"] for module in modules]
+        self.assertEqual(slugs, ["query", "account", "master-data", "corrections", "settings"])
+
+        query = module_by_slug("query")
+        self.assertIsNotNone(query)
+        self.assertEqual(query["label"], "查询中心")
+        self.assertIn("/employee/dashboard", [entry["href"] for entry in query["entries"]])
+
+        context = nav_context(admin_user, "/admin/departments/manage")
+        self.assertEqual(context["current_module"]["slug"], "master-data")
+        self.assertIn("/admin/departments/manage", [entry["href"] for entry in context["current_entries"]])
+
+    def test_product_navigation_filters_readonly_permissions(self) -> None:
+        readonly_user = SimpleNamespace(
+            username="reader",
+            role="readonly",
+            has_any_page_access=lambda keys: "employee_dashboard" in keys,
+            can_access_page=lambda key: key == "employee_dashboard",
+        )
+
+        modules = visible_modules(readonly_user)
+        self.assertEqual([module["slug"] for module in modules], ["query"])
+
+        context = nav_context(readonly_user, "/employee/dashboard")
+        self.assertEqual(context["current_module"]["slug"], "query")
+        self.assertEqual([entry["href"] for entry in context["current_entries"]], ["/employee/dashboard"])
 
     def test_departments_export_downloads_importable_rows(self) -> None:
         with self.app.app_context():
