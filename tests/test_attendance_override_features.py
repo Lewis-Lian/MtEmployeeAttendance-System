@@ -211,10 +211,15 @@ class AttendanceOverrideFeatureTests(unittest.TestCase):
         wb = openpyxl.load_workbook(io.BytesIO(res.data))
         ws = wb.active
         headers = [cell.value for cell in ws[1]]
-        self.assertEqual(headers[:3], ["部门编号", "部门名称", "上级部门编号"])
-        self.assertGreaterEqual(len(headers), 4)
-        self.assertEqual(headers[3], "原始部门ID")
-        self.assertTrue(ws.column_dimensions["D"].hidden)
+        self.assertEqual(headers, ["部门编号", "部门名称", "上级部门编号"])
+        self.assertEqual(ws.max_column, 3)
+
+        metadata_ws = wb["部门导入元数据"]
+        self.assertEqual(metadata_ws.sheet_state, "hidden")
+        self.assertEqual(
+            [cell.value for cell in metadata_ws[1]],
+            ["数据行号", "原始部门ID"],
+        )
 
     def test_departments_page_renders_with_export_link(self) -> None:
         project_root = os.path.dirname(os.path.dirname(__file__))
@@ -268,12 +273,16 @@ class AttendanceOverrideFeatureTests(unittest.TestCase):
             for row in rows[1:]
             if row[0] and row[1]
         ]
-        self.assertEqual(rows[0][:3], ("部门编号", "部门名称", "上级部门编号"))
-        self.assertGreaterEqual(len(rows[0]), 4)
-        self.assertEqual(rows[0][3], "原始部门ID")
-        self.assertTrue(ws.column_dimensions["D"].hidden)
+        self.assertEqual(rows[0], ("部门编号", "部门名称", "上级部门编号"))
+        self.assertEqual(ws.max_column, 3)
         self.assertIn(("D001", "行政部", ""), normalized_rows)
         self.assertIn(("D010", "行政一部", "D001"), normalized_rows)
+
+        metadata_ws = wb["部门导入元数据"]
+        self.assertEqual(metadata_ws.sheet_state, "hidden")
+        metadata_rows = list(metadata_ws.iter_rows(values_only=True))
+        self.assertEqual(metadata_rows[0], ("数据行号", "原始部门ID"))
+        self.assertEqual(len(metadata_rows), 3)
 
     def test_departments_import_updates_existing_department_when_exported_dept_no_changes(self) -> None:
         with self.app.app_context():
