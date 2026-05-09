@@ -2200,16 +2200,26 @@ def import_departments_xlsx():
     return jsonify({"status": "ok", "imported": imported})
 
 
-@admin_bp.route("/departments/template", methods=["GET"])
-@admin_required
-def download_departments_template():
+def _build_departments_workbook(rows: list[tuple[str, str, str]]) -> openpyxl.Workbook:
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.title = "部门导入模板"
     ws.append(["部门编号", "部门名称", "上级部门编号"])
-    ws.append(["D001", "行政部", ""])
-    ws.append(["D002", "生产中心", ""])
-    ws.append(["D003", "生产一部", "D002"])
+    for row in rows:
+        ws.append(list(row))
+    return wb
+
+
+@admin_bp.route("/departments/template", methods=["GET"])
+@admin_required
+def download_departments_template():
+    wb = _build_departments_workbook(
+        [
+            ("D001", "行政部", ""),
+            ("D002", "生产中心", ""),
+            ("D003", "生产一部", "D002"),
+        ]
+    )
 
     output = BytesIO()
     wb.save(output)
@@ -2220,6 +2230,33 @@ def download_departments_template():
         download_name="部门导入模板.xlsx",
         mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     )
+
+
+@admin_bp.route("/departments/export", methods=["GET"])
+@admin_required
+def export_departments_xlsx():
+    departments = Department.query.order_by(Department.dept_no.asc(), Department.dept_name.asc()).all()
+    rows = [
+        (
+            department.dept_no or "",
+            department.dept_name or "",
+            department.parent.dept_no if department.parent else "",
+        )
+        for department in departments
+    ]
+    wb = _build_departments_workbook(rows)
+
+    output = BytesIO()
+    wb.save(output)
+    output.seek(0)
+    response = send_file(
+        output,
+        as_attachment=True,
+        download_name="部门导出.xlsx",
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+    response.headers["Content-Disposition"] = 'attachment; filename="部门导出.xlsx"'
+    return response
 
 
 @admin_bp.route("/employees", methods=["POST"])
