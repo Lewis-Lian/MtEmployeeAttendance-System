@@ -3,9 +3,10 @@ import os
 import tempfile
 import unittest
 import urllib.parse
+from types import SimpleNamespace
 
 import openpyxl
-from flask import Flask
+from flask import Flask, g, render_template
 
 from models import db
 from models.account_set import AccountSet
@@ -211,6 +212,27 @@ class AttendanceOverrideFeatureTests(unittest.TestCase):
         ws = wb.active
         headers = [cell.value for cell in ws[1]]
         self.assertEqual(headers, ["部门编号", "部门名称", "上级部门编号"])
+
+    def test_departments_page_renders_with_export_link(self) -> None:
+        project_root = os.path.dirname(os.path.dirname(__file__))
+        app = Flask(
+            "departments_template_render_test",
+            template_folder=os.path.join(project_root, "templates"),
+            static_folder=os.path.join(project_root, "static"),
+        )
+        register_routes(app)
+
+        admin_user = SimpleNamespace(
+            username="admin",
+            role="admin",
+            has_any_page_access=lambda _keys: True,
+            can_access_page=lambda _key: True,
+        )
+        with app.test_request_context("/admin/departments/manage"):
+            g.current_user = admin_user
+            html = render_template("admin/departments.html")
+
+        self.assertIn("/admin/departments/export", html)
 
     def test_departments_export_downloads_importable_rows(self) -> None:
         with self.app.app_context():
