@@ -2249,14 +2249,12 @@ def export_departments_xlsx():
     output = BytesIO()
     wb.save(output)
     output.seek(0)
-    response = send_file(
+    return send_file(
         output,
         as_attachment=True,
         download_name="部门导出.xlsx",
         mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     )
-    response.headers["Content-Disposition"] = 'attachment; filename="部门导出.xlsx"'
-    return response
 
 
 @admin_bp.route("/employees", methods=["POST"])

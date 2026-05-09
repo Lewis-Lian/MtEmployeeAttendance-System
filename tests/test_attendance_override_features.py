@@ -2,6 +2,7 @@ import io
 import os
 import tempfile
 import unittest
+import urllib.parse
 
 import openpyxl
 from flask import Flask
@@ -220,7 +221,19 @@ class AttendanceOverrideFeatureTests(unittest.TestCase):
 
         res = self.client.get("/admin/departments/export")
         self.assertEqual(res.status_code, 200)
-        self.assertIn("部门导出.xlsx", res.headers.get("Content-Disposition", ""))
+        content_disposition = res.headers.get("Content-Disposition", "")
+        self.assertIn("attachment", content_disposition)
+        filename = ""
+        for part in [segment.strip() for segment in content_disposition.split(";")]:
+            if part.startswith("filename*="):
+                value = part.split("=", 1)[1].strip().strip('"')
+                if value.lower().startswith("utf-8''"):
+                    value = value[7:]
+                filename = urllib.parse.unquote(value)
+                break
+            if part.startswith("filename="):
+                filename = part.split("=", 1)[1].strip().strip('"')
+        self.assertEqual(filename, "部门导出.xlsx")
 
         wb = openpyxl.load_workbook(io.BytesIO(res.data))
         ws = wb.active
