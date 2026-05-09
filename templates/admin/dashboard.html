@@ -2,10 +2,10 @@
 {% block title %}账套管理{% endblock %}
 {% block page_intro %}按月维护账套，上传原始表并在确认后执行计算入库。{% endblock %}
 {% block content %}
-<div class="row g-4">
+<div class="row g-4 account-workflow">
   <div class="col-xl-4">
     <div class="sticky-side">
-      <div class="card">
+      <div class="card account-status-card">
         <div class="card-header d-flex justify-content-between align-items-center">
           <span>月度账套</span>
           <span class="page-tag">月度结算模式</span>
@@ -46,7 +46,7 @@
         </div>
       </div>
 
-      <div class="card">
+      <div class="card account-import-card">
         <div class="card-header">导入考勤原始表</div>
         <div class="card-body">
           <div class="panel-note">可一次上传全部源文件，也可只上传需要更新的部分文件；同一类型的新文件会替换该账套里已有的归档文件。点击“开始计算”后才会生成并持久化考勤数据。</div>
@@ -78,7 +78,7 @@
   </div>
 
   <div class="col-xl-8">
-    <div class="card table-wrap-tight">
+    <div class="card table-wrap-tight account-audit-card">
       <div class="card-header d-flex justify-content-between align-items-center">
         <span>账套导入记录</span>
         <span class="small text-muted">按当前选中账套展示</span>

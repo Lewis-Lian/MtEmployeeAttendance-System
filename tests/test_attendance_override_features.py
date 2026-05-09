@@ -280,6 +280,36 @@ class AttendanceOverrideFeatureTests(unittest.TestCase):
         self.assertIn("login-brand-panel", html)
         self.assertIn("login-capability-grid", html)
 
+    def test_representative_pages_render_workflow_classes(self) -> None:
+        project_root = os.path.dirname(os.path.dirname(__file__))
+        app = Flask(
+            "enterprise_workflow_render_test",
+            template_folder=os.path.join(project_root, "templates"),
+            static_folder=os.path.join(project_root, "static"),
+        )
+        register_routes(app)
+
+        admin_user = SimpleNamespace(
+            username="admin",
+            role="admin",
+            has_any_page_access=lambda _keys: True,
+            can_access_page=lambda _key: True,
+        )
+        with app.test_request_context("/admin/dashboard"):
+            g.current_user = admin_user
+            admin_html = render_template("admin/dashboard.html")
+
+        with app.test_request_context("/employee/dashboard"):
+            g.current_user = admin_user
+            query_html = render_template("dashboard.html", employees=[])
+
+        self.assertIn("account-workflow", admin_html)
+        self.assertIn("account-status-card", admin_html)
+        self.assertIn("account-audit-card", admin_html)
+        self.assertIn("query-workflow", query_html)
+        self.assertIn("query-filter-card", query_html)
+        self.assertIn("query-result-card", query_html)
+
     def test_departments_export_downloads_importable_rows(self) -> None:
         with self.app.app_context():
             parent = Department.query.filter_by(dept_no="D001").first()

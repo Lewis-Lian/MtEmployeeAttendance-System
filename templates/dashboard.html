@@ -2,6 +2,7 @@
 {% block title %}考勤数据查询{% endblock %}
 {% block page_intro %}按账套与员工范围查询最终考勤汇总数据。{% endblock %}
 {% block content %}
+<div class="query-workflow">
 <div class="row g-3 mb-3">
   <div class="col-md-6 col-xl-3">
     <div class="summary-card dashboard-metric-card">
@@ -33,7 +34,7 @@
   </div>
 </div>
 
-<div class="card mb-4">
+<div class="card mb-4 query-filter-card">
   <div class="card-header d-flex justify-content-between align-items-center">
     <span>查询条件</span>
     <span class="small text-muted">支持按员工范围、账套和显示列模式组合查询</span>
@@ -144,7 +145,7 @@
   </div>
 </div>
 
-<div class="card">
+<div class="card query-result-card">
   <div class="card-header d-flex justify-content-between align-items-center">
     <span>最终数据工作表</span>
     <div class="small text-muted" id="finalDataMeta">等待查询</div>
@@ -155,6 +156,7 @@
       <tbody id="finalDataBody"></tbody>
     </table>
   </div>
+</div>
 </div>
 {% endblock %}
 {% block scripts %}
