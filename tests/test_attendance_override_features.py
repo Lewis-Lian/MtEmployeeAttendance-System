@@ -264,6 +264,22 @@ class AttendanceOverrideFeatureTests(unittest.TestCase):
         self.assertIn("app-sidebar", html)
         self.assertIn("top-nav", html)
 
+    def test_login_page_renders_enterprise_entry_copy(self) -> None:
+        project_root = os.path.dirname(os.path.dirname(__file__))
+        app = Flask(
+            "enterprise_login_render_test",
+            template_folder=os.path.join(project_root, "templates"),
+            static_folder=os.path.join(project_root, "static"),
+        )
+
+        with app.test_request_context("/login"):
+            html = render_template("login.html", error=None)
+
+        self.assertIn("企业考勤处理中心", html)
+        self.assertIn("统一处理账套、考勤、人员与部门数据", html)
+        self.assertIn("login-brand-panel", html)
+        self.assertIn("login-capability-grid", html)
+
     def test_departments_export_downloads_importable_rows(self) -> None:
         with self.app.app_context():
             parent = Department.query.filter_by(dept_no="D001").first()

@@ -897,26 +897,46 @@ h5,
 .login-page {
   min-height: 100vh;
   background:
-    radial-gradient(520px 360px at 12% 16%, rgba(53, 95, 152, 0.14), transparent 60%),
-    radial-gradient(600px 420px at 88% 18%, rgba(31, 58, 95, 0.12), transparent 62%),
-    linear-gradient(180deg, #f7f9fc, #edf2f7);
+    radial-gradient(560px 380px at 14% 14%, rgba(36, 59, 99, 0.16), transparent 60%),
+    radial-gradient(620px 420px at 90% 12%, rgba(23, 35, 61, 0.12), transparent 62%),
+    linear-gradient(180deg, #f6f8fb, #edf2f7);
 }
 
 .login-shell {
   position: relative;
   min-height: 100vh;
   display: grid;
-  grid-template-columns: minmax(0, 1.08fr) minmax(420px, 520px);
-  gap: 28px;
+  grid-template-columns: minmax(0, 1.04fr) minmax(420px, 500px);
+  gap: 30px;
   align-items: center;
   padding: 48px 64px;
   overflow: hidden;
 }
 
 .login-hero,
+.login-brand-panel,
 .login-panel-wrap {
   position: relative;
   z-index: 1;
+}
+
+.login-brand-panel {
+  max-width: 640px;
+  padding: 34px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 28px;
+  color: #fff;
+  background: linear-gradient(145deg, #17233d, #243b63);
+  box-shadow: var(--shadow-md);
+}
+
+.login-brand-panel .login-brand,
+.login-brand-panel .login-hero-title {
+  color: #fff;
+}
+
+.login-brand-panel .login-hero-subtitle {
+  color: rgba(226, 232, 240, 0.82);
 }
 
 .login-hero {
@@ -947,6 +967,13 @@ h5,
   margin-top: 24px;
 }
 
+.login-capability-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 26px;
+}
+
 .login-hero-point {
   display: flex;
   align-items: center;
@@ -957,6 +984,12 @@ h5,
   background: rgba(255, 255, 255, 0.72);
   color: #334155;
   font-size: 13.5px;
+}
+
+.login-brand-panel .login-hero-point {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: rgba(255, 255, 255, 0.9);
 }
 
 .login-hero-point-icon {
@@ -1092,6 +1125,14 @@ h5,
   .login-hero {
     max-width: none;
     padding-left: 0;
+  }
+
+  .login-brand-panel {
+    padding: 24px;
+  }
+
+  .login-capability-grid {
+    grid-template-columns: 1fr;
   }
 
   .login-hero-title {
