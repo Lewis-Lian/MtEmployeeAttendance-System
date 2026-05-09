@@ -33,6 +33,15 @@
     if (toggle) toggle.setAttribute("aria-expanded", collapsed ? "false" : "true");
   }
 
+  function setMobileSidebarOpen(open) {
+    document.body.classList.toggle("sidebar-mobile-open", open);
+    const btn = document.getElementById("mobileSidebarBtn");
+    if (btn) {
+      btn.setAttribute("aria-expanded", open ? "true" : "false");
+      btn.setAttribute("aria-label", open ? "关闭菜单" : "打开菜单");
+    }
+  }
+
   function normalizeEmptyStates() {
     document.querySelectorAll("tbody td.text-muted").forEach((cell) => {
       if (cell.classList.contains("empty-cell")) return;
@@ -71,6 +80,23 @@
         setSidebarCollapsed(next);
       });
     }
+
+    const mobileSidebarBtn = document.getElementById("mobileSidebarBtn");
+    const sidebarBackdrop = document.getElementById("sidebarBackdrop");
+    if (mobileSidebarBtn) {
+      mobileSidebarBtn.addEventListener("click", () => {
+        setMobileSidebarOpen(!document.body.classList.contains("sidebar-mobile-open"));
+      });
+    }
+    if (sidebarBackdrop) {
+      sidebarBackdrop.addEventListener("click", () => setMobileSidebarOpen(false));
+    }
+    document.querySelectorAll(".app-side-link").forEach((link) => {
+      link.addEventListener("click", () => setMobileSidebarOpen(false));
+    });
+    window.addEventListener("resize", () => {
+      if (window.innerWidth > 992) setMobileSidebarOpen(false);
+    });
 
     document.querySelectorAll("[data-sidebar-toggle]").forEach((toggleBtn) => {
       toggleBtn.addEventListener("click", () => {

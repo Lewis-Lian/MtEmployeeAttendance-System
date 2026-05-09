@@ -238,6 +238,32 @@ class AttendanceOverrideFeatureTests(unittest.TestCase):
 
         self.assertIn("/admin/departments/export", html)
 
+    def test_authenticated_shell_renders_enterprise_navigation(self) -> None:
+        project_root = os.path.dirname(os.path.dirname(__file__))
+        app = Flask(
+            "enterprise_shell_render_test",
+            template_folder=os.path.join(project_root, "templates"),
+            static_folder=os.path.join(project_root, "static"),
+        )
+        register_routes(app)
+
+        admin_user = SimpleNamespace(
+            username="admin",
+            role="admin",
+            has_any_page_access=lambda _keys: True,
+            can_access_page=lambda _key: True,
+        )
+        with app.test_request_context("/admin/dashboard"):
+            g.current_user = admin_user
+            html = render_template("admin/dashboard.html")
+
+        self.assertIn("企业考勤处理中心", html)
+        self.assertIn("mobileSidebarBtn", html)
+        self.assertIn("sidebarBackdrop", html)
+        self.assertIn("app-shell-badge", html)
+        self.assertIn("app-sidebar", html)
+        self.assertIn("top-nav", html)
+
     def test_departments_export_downloads_importable_rows(self) -> None:
         with self.app.app_context():
             parent = Department.query.filter_by(dept_no="D001").first()

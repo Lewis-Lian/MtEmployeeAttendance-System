@@ -9,13 +9,14 @@
 </head>
 <body>
 <div class="app-layout">
-  <aside class="app-sidebar">
+  <aside class="app-sidebar" id="appSidebar">
     <div class="app-sidebar-brand">
       <a class="app-brand" href="/employee/dashboard">
         <span class="brand-dot"></span>
         <span class="app-brand-text">考勤数据处理系统</span>
       </a>
-      <div class="app-brand-subtitle">Attendance Admin</div>
+      <div class="app-brand-subtitle">企业考勤处理中心</div>
+      <div class="app-shell-badge">Finance / HR Console</div>
     </div>
     {% set can_view_manager_group = g.current_user and (g.current_user.role == "admin" or g.current_user.has_any_page_access(['manager_query', 'manager_overtime_query', 'manager_annual_leave_query', 'manager_department_hours_query'])) %}
     {% set can_view_employee_group = g.current_user and (g.current_user.role == "admin" or g.current_user.has_any_page_access(['employee_dashboard', 'abnormal_query', 'punch_records', 'department_hours_query', 'summary_download'])) %}
@@ -130,6 +131,11 @@
   <div class="app-main">
     <header class="top-nav">
       <div class="top-nav-inner">
+        <button class="mobile-sidebar-btn" id="mobileSidebarBtn" type="button" aria-label="打开菜单" aria-controls="appSidebar" aria-expanded="false">
+          <span></span>
+          <span></span>
+          <span></span>
+        </button>
         <div>
           <div class="top-nav-title">{{ self.title() }}</div>
           <div class="top-nav-subtitle">{% block page_intro %}统一考勤、人员、部门与账套数据管理{% endblock %}</div>
@@ -148,6 +154,7 @@
     </main>
   </div>
 </div>
+<div class="sidebar-backdrop" id="sidebarBackdrop" aria-hidden="true"></div>
 <div class="modal fade" id="appDialogModal" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog modal-dialog-centered">
     <div class="modal-content">
