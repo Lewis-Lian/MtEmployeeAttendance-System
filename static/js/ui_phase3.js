@@ -97,6 +97,9 @@
     window.addEventListener("resize", () => {
       if (window.innerWidth > 992) setMobileSidebarOpen(false);
     });
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") setMobileSidebarOpen(false);
+    });
 
     document.querySelectorAll("[data-sidebar-toggle]").forEach((toggleBtn) => {
       toggleBtn.addEventListener("click", () => {

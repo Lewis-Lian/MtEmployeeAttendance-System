@@ -1548,6 +1548,62 @@ h5,
   }
 }
 
+@media (max-width: 640px) {
+  .top-nav {
+    padding: 10px 10px 0;
+  }
+
+  .top-nav-inner {
+    gap: 12px;
+    min-height: auto;
+    padding: 12px;
+    border-radius: 14px;
+  }
+
+  .top-nav-title {
+    font-size: 16px;
+  }
+
+  .top-nav-subtitle {
+    font-size: 12px;
+  }
+
+  .top-nav-actions {
+    gap: 8px;
+  }
+
+  .app-content {
+    padding: 12px 10px;
+  }
+
+  .card-header {
+    align-items: flex-start !important;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .toolbar {
+    width: 100%;
+  }
+
+  .toolbar .btn,
+  .toolbar .form-select {
+    flex: 1 1 auto;
+  }
+
+  .dashboard-action-group {
+    width: 100%;
+  }
+
+  .dashboard-action-group .btn {
+    width: 100%;
+  }
+
+  .table-responsive {
+    max-height: calc(100vh - 220px);
+  }
+}
+
 .table-responsive.is-dragging {
   cursor: grabbing;
   user-select: none;
