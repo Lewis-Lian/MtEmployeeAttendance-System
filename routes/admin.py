@@ -80,6 +80,8 @@ _MANAGER_OVERRIDE_LABELS = {
     "remark": "备注",
 }
 
+_DEPARTMENT_ORIGINAL_ID_HEADER = "原始部门ID"
+
 
 def _manager_scope_employees():
     return (
@@ -2160,6 +2162,7 @@ def import_departments_xlsx():
     dept_no_idx = header_map.get("部门编号", -1)
     dept_name_idx = header_map.get("部门名称", -1)
     parent_no_idx = header_map.get("上级部门编号", -1)
+    original_id_idx = header_map.get(_DEPARTMENT_ORIGINAL_ID_HEADER, -1)
     if dept_no_idx < 0 or dept_name_idx < 0:
         return jsonify({"error": "missing required headers: 部门编号, 部门名称"}), 400
 
@@ -2173,14 +2176,27 @@ def import_departments_xlsx():
         parent_no = (
             str(row[parent_no_idx]).strip() if parent_no_idx >= 0 and parent_no_idx < len(row) and row[parent_no_idx] is not None else ""
         )
+        original_id = (
+            str(row[original_id_idx]).strip()
+            if original_id_idx >= 0 and original_id_idx < len(row) and row[original_id_idx] is not None
+            else ""
+        )
         if not dept_no or not dept_name:
             continue
 
-        department = Department.query.filter_by(dept_no=dept_no).first()
+        department = None
+        if original_id:
+            try:
+                department = db.session.get(Department, int(float(original_id)))
+            except (TypeError, ValueError):
+                department = None
+        if not department:
+            department = Department.query.filter_by(dept_no=dept_no).first()
         if not department:
             department = Department(dept_no=dept_no, dept_name=dept_name)
             db.session.add(department)
         else:
+            department.dept_no = dept_no
             department.dept_name = dept_name
         pending_parent_links.append((department, parent_no))
         imported += 1
@@ -2200,11 +2216,12 @@ def import_departments_xlsx():
     return jsonify({"status": "ok", "imported": imported})
 
 
-def _build_departments_workbook(rows: list[tuple[str, str, str]]) -> openpyxl.Workbook:
+def _build_departments_workbook(rows: list[tuple[str, str, str, str]]) -> openpyxl.Workbook:
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.title = "部门导入模板"
-    ws.append(["部门编号", "部门名称", "上级部门编号"])
+    ws.append(["部门编号", "部门名称", "上级部门编号", _DEPARTMENT_ORIGINAL_ID_HEADER])
+    ws.column_dimensions["D"].hidden = True
     for row in rows:
         ws.append(list(row))
     return wb
@@ -2215,9 +2232,9 @@ def _build_departments_workbook(rows: list[tuple[str, str, str]]) -> openpyxl.Wo
 def download_departments_template():
     wb = _build_departments_workbook(
         [
-            ("D001", "行政部", ""),
-            ("D002", "生产中心", ""),
-            ("D003", "生产一部", "D002"),
+            ("D001", "行政部", "", ""),
+            ("D002", "生产中心", "", ""),
+            ("D003", "生产一部", "D002", ""),
         ]
     )
 
@@ -2241,6 +2258,7 @@ def export_departments_xlsx():
             department.dept_no or "",
             department.dept_name or "",
             department.parent.dept_no if department.parent else "",
+            str(department.id),
         )
         for department in departments
     ]
