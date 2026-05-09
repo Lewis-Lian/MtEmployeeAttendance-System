@@ -273,6 +273,7 @@ class AttendanceOverrideFeatureTests(unittest.TestCase):
         self.assertEqual(rows[0][3], "原始部门ID")
         self.assertEqual(ws.max_column, 4)
         self.assertTrue(ws.column_dimensions["D"].hidden)
+        self.assertIn("部门导入元数据", wb.sheetnames)
         self.assertIn(("D001", "行政部", ""), normalized_rows)
         self.assertIn(("D010", "行政一部", "D001"), normalized_rows)
         exported_ids = {
@@ -405,6 +406,101 @@ class AttendanceOverrideFeatureTests(unittest.TestCase):
             self.assertEqual(len(departments), 1)
             self.assertEqual(departments[0].dept_no, "D001")
             self.assertEqual(departments[0].dept_name, "行政部-安全导入")
+
+    def test_departments_import_does_not_retarget_unrelated_rows_when_hidden_ids_mismatch(self) -> None:
+        export_res = self.client.get("/admin/departments/export")
+        self.assertEqual(export_res.status_code, 200)
+
+        other_db_path = os.path.join(self.tmpdir.name, "other.db")
+        other_upload_dir = os.path.join(self.tmpdir.name, "other_uploads")
+        other_app = Flask("departments_cross_db_test")
+        other_app.config.update(
+            TESTING=True,
+            SECRET_KEY="test-secret",
+            SQLALCHEMY_DATABASE_URI=f"sqlite:///{other_db_path}",
+            SQLALCHEMY_TRACK_MODIFICATIONS=False,
+            JWT_EXPIRES_HOURS=12,
+            JWT_EXPIRES_DELTA=__import__("datetime").timedelta(hours=12),
+            UPLOAD_FOLDER=other_upload_dir,
+        )
+        os.makedirs(other_upload_dir, exist_ok=True)
+        db.init_app(other_app)
+        register_routes(other_app)
+
+        with other_app.app_context():
+            db.create_all()
+            admin = User(username="other-admin", role="admin")
+            admin.set_password("admin123")
+            unrelated = Department(dept_no="X001", dept_name="外部部门")
+            db.session.add_all([admin, unrelated])
+            db.session.commit()
+            self.assertEqual(unrelated.id, 1)
+
+        other_client = other_app.test_client()
+        other_client.post("/login", data={"username": "other-admin", "password": "admin123"})
+        import_res = other_client.post(
+            "/admin/departments/import",
+            data={"file": (io.BytesIO(export_res.data), "departments-cross-db.xlsx")},
+            content_type="multipart/form-data",
+        )
+        self.assertEqual(import_res.status_code, 200)
+
+        with other_app.app_context():
+            unrelated = Department.query.filter_by(dept_no="X001").first()
+            imported = Department.query.filter_by(dept_no="D001").first()
+
+            self.assertIsNotNone(unrelated)
+            self.assertEqual(unrelated.dept_name, "外部部门")
+            self.assertIsNotNone(imported)
+            self.assertEqual(imported.dept_name, "行政部")
+            self.assertEqual(Department.query.count(), 2)
+
+    def test_departments_import_allows_swapping_existing_department_numbers(self) -> None:
+        with self.app.app_context():
+            db.session.add(Department(dept_no="D002", dept_name="生产部"))
+            db.session.commit()
+
+        export_res = self.client.get("/admin/departments/export")
+        self.assertEqual(export_res.status_code, 200)
+
+        wb = openpyxl.load_workbook(io.BytesIO(export_res.data))
+        ws = wb.active
+        headers = [cell.value for cell in ws[1]]
+        dept_no_idx = headers.index("部门编号") + 1
+        dept_name_idx = headers.index("部门名称") + 1
+
+        row_by_name = {}
+        for row_idx in range(2, ws.max_row + 1):
+            dept_name = ws.cell(row=row_idx, column=dept_name_idx).value
+            if dept_name:
+                row_by_name[dept_name] = row_idx
+
+        admin_row = row_by_name["行政部"]
+        prod_row = row_by_name["生产部"]
+        admin_dept_no = ws.cell(row=admin_row, column=dept_no_idx).value
+        prod_dept_no = ws.cell(row=prod_row, column=dept_no_idx).value
+        ws.cell(row=admin_row, column=dept_no_idx, value=prod_dept_no)
+        ws.cell(row=prod_row, column=dept_no_idx, value=admin_dept_no)
+
+        buf = io.BytesIO()
+        wb.save(buf)
+        buf.seek(0)
+
+        import_res = self.client.post(
+            "/admin/departments/import",
+            data={"file": (buf, "departments-swapped.xlsx")},
+            content_type="multipart/form-data",
+        )
+        self.assertEqual(import_res.status_code, 200)
+
+        with self.app.app_context():
+            admin = Department.query.filter_by(dept_name="行政部").first()
+            production = Department.query.filter_by(dept_name="生产部").first()
+
+            self.assertIsNotNone(admin)
+            self.assertIsNotNone(production)
+            self.assertEqual(admin.dept_no, "D002")
+            self.assertEqual(production.dept_no, "D001")
 
 
 if __name__ == "__main__":
