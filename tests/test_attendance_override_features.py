@@ -23,7 +23,12 @@ class AttendanceOverrideFeatureTests(unittest.TestCase):
         self.db_path = os.path.join(self.tmpdir.name, "test.db")
         self.upload_dir = os.path.join(self.tmpdir.name, "uploads")
 
-        app = Flask(__name__)
+        project_root = os.path.dirname(os.path.dirname(__file__))
+        app = Flask(
+            __name__,
+            template_folder=os.path.join(project_root, "templates"),
+            static_folder=os.path.join(project_root, "static"),
+        )
         app.config.update(
             TESTING=True,
             SECRET_KEY="test-secret",
@@ -346,6 +351,37 @@ class AttendanceOverrideFeatureTests(unittest.TestCase):
         context = nav_context(readonly_user, "/employee/dashboard")
         self.assertEqual(context["current_module"]["slug"], "query")
         self.assertEqual([entry["href"] for entry in context["current_entries"]], ["/employee/dashboard"])
+
+    def test_module_home_routes_render_accessible_entries(self) -> None:
+        res = self.client.get("/module/query")
+        self.assertEqual(res.status_code, 200)
+        html = res.get_data(as_text=True)
+        self.assertIn("module-home", html)
+        self.assertIn("查询中心", html)
+        self.assertIn("/employee/dashboard", html)
+
+        account_res = self.client.get("/module/account")
+        self.assertEqual(account_res.status_code, 200)
+        self.assertIn("/admin/dashboard", account_res.get_data(as_text=True))
+
+    def test_module_home_rejects_inaccessible_module(self) -> None:
+        with self.app.app_context():
+            reader = User(username="reader", role="readonly", page_permissions={"employee_dashboard": True})
+            reader.set_password("reader123")
+            db.session.add(reader)
+            db.session.commit()
+
+        reader_client = self.app.test_client()
+        reader_client.post("/login", data={"username": "reader", "password": "reader123"})
+
+        allowed = reader_client.get("/module/query")
+        self.assertEqual(allowed.status_code, 200)
+        allowed_html = allowed.get_data(as_text=True)
+        self.assertIn("/employee/dashboard", allowed_html)
+        self.assertNotIn("/employee/abnormal-query", allowed_html)
+
+        denied = reader_client.get("/module/account")
+        self.assertEqual(denied.status_code, 403)
 
     def test_departments_export_downloads_importable_rows(self) -> None:
         with self.app.app_context():

@@ -1,0 +1,41 @@
+{% extends 'base.html' %}
+{% block title %}{{ module.label }}{% endblock %}
+{% block page_intro %}{{ module.description }}{% endblock %}
+{% block content %}
+<section class="module-home" data-module="{{ module.slug }}">
+  <div class="module-hero">
+    <div>
+      <div class="module-kicker">Product Module</div>
+      <h1 class="module-title">{{ module.label }}</h1>
+      <p class="module-description">{{ module.description }}</p>
+    </div>
+    <div class="module-summary-grid">
+      <div class="module-summary-card">
+        <span class="module-summary-label">可用入口</span>
+        <strong>{{ entries|length }}</strong>
+      </div>
+      <div class="module-summary-card">
+        <span class="module-summary-label">当前模块</span>
+        <strong>{{ module.short_label }}</strong>
+      </div>
+    </div>
+  </div>
+
+  <div class="module-section-header">
+    <div>
+      <h2>功能入口</h2>
+      <p>选择一个入口进入具体业务页面。</p>
+    </div>
+  </div>
+
+  <div class="module-entry-grid">
+    {% for entry in entries %}
+    <a class="module-entry-card" href="{{ entry.href }}">
+      <span class="module-entry-index">{{ "%02d"|format(loop.index) }}</span>
+      <span class="module-entry-title">{{ entry.label }}</span>
+      <span class="module-entry-desc">{{ entry.description }}</span>
+    </a>
+    {% endfor %}
+  </div>
+</section>
+{% endblock %}
