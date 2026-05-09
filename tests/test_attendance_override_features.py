@@ -225,9 +225,10 @@ class AttendanceOverrideFeatureTests(unittest.TestCase):
         wb = openpyxl.load_workbook(io.BytesIO(res.data))
         ws = wb.active
         rows = list(ws.iter_rows(values_only=True))
+        normalized_rows = [(dept_no, dept_name, parent_dept_no or "") for dept_no, dept_name, parent_dept_no in rows[1:]]
         self.assertEqual(rows[0], ("部门编号", "部门名称", "上级部门编号"))
-        self.assertIn(("D001", "行政部", ""), rows[1:])
-        self.assertIn(("D010", "行政一部", "D001"), rows[1:])
+        self.assertIn(("D001", "行政部", ""), normalized_rows)
+        self.assertIn(("D010", "行政一部", "D001"), normalized_rows)
 
 
 if __name__ == "__main__":
