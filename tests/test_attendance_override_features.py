@@ -346,9 +346,112 @@ class AttendanceOverrideFeatureTests(unittest.TestCase):
         self.assertIn("account-workflow", admin_html)
         self.assertIn("account-status-card", admin_html)
         self.assertIn("account-audit-card", admin_html)
-        self.assertIn("query-workflow", query_html)
-        self.assertIn("query-filter-card", query_html)
-        self.assertIn("query-result-card", query_html)
+        self.assertIn("query-page-shell", query_html)
+        self.assertIn("query-filter-rail", query_html)
+        self.assertIn("query-workspace", query_html)
+        self.assertIn("query-metric-grid", query_html)
+        self.assertIn("query-result-panel", query_html)
+        self.assertIn("employeePickerModal", query_html)
+        self.assertIn("static/js/dashboard.js", query_html)
+
+    def render_query_template(self, path: str, template_name: str, **context: object) -> str:
+        project_root = os.path.dirname(os.path.dirname(__file__))
+        app = Flask(
+            f"query_center_render_{template_name.replace('/', '_')}",
+            template_folder=os.path.join(project_root, "templates"),
+            static_folder=os.path.join(project_root, "static"),
+        )
+        register_routes(app)
+
+        admin_user = SimpleNamespace(
+            username="admin",
+            role="admin",
+            has_any_page_access=lambda _keys: True,
+            can_access_page=lambda _key: True,
+        )
+        with app.test_request_context(path):
+            g.current_user = admin_user
+            return render_template(template_name, **context)
+
+    def test_query_center_table_pages_render_query_workspace(self) -> None:
+        pages = [
+            (
+                "/employee/dashboard",
+                "dashboard.html",
+                {"employees": []},
+                ["selectedEmpIds", "accountSetSelect", "refreshBtn", "downloadBtn", "finalDataTable", "static/js/dashboard.js"],
+            ),
+            (
+                "/employee/abnormal-query",
+                "abnormal_query.html",
+                {"employees": []},
+                ["selectedEmpIds", "accountSetSelect", "queryBtn", "downloadBtn", "abnormalTableBody", "static/js/abnormal_query.js"],
+            ),
+            (
+                "/employee/punch-records",
+                "punch_records.html",
+                {"employees": []},
+                ["selectedEmpIds", "accountSetSelect", "queryBtn", "downloadBtn", "punchTableBody", "static/js/punch_records.js"],
+            ),
+            (
+                "/employee/department-hours-query",
+                "department_hours_query.html",
+                {},
+                ["accountSetSelect", "queryBtn", "downloadBtn", "departmentHoursBody", "static/js/department_hours_query.js"],
+            ),
+            (
+                "/employee/manager-query",
+                "manager_query.html",
+                {"employees": []},
+                ["selectedEmpIds", "managerAccountSetSelect", "managerQueryBtn", "managerDownloadBtn", "managerQueryBody", "static/js/manager_query.js"],
+            ),
+            (
+                "/employee/manager-overtime-query",
+                "manager_overtime_query.html",
+                {"employees": []},
+                ["selectedEmpIds", "managerOvertimeQueryYear", "managerOvertimeQueryBtn", "managerOvertimeQueryBody", "static/js/manager_overtime_query.js"],
+            ),
+            (
+                "/employee/manager-annual-leave-query",
+                "manager_annual_leave_query.html",
+                {"employees": []},
+                ["selectedEmpIds", "managerAnnualLeaveQueryYear", "managerAnnualLeaveQueryBtn", "managerAnnualLeaveQueryBody", "static/js/manager_annual_leave_query.js"],
+            ),
+            (
+                "/employee/manager-department-hours-query",
+                "manager_department_hours_query.html",
+                {},
+                ["accountSetSelect", "queryBtn", "downloadBtn", "managerDepartmentHoursBody", "static/js/manager_department_hours_query.js"],
+            ),
+        ]
+
+        for path, template_name, context, expected_fragments in pages:
+            with self.subTest(template=template_name):
+                html = self.render_query_template(path, template_name, **context)
+                self.assertIn("query-page-shell", html)
+                self.assertIn("query-filter-rail", html)
+                self.assertIn("query-workspace", html)
+                self.assertIn("query-result-panel", html)
+                for fragment in expected_fragments:
+                    self.assertIn(fragment, html)
+
+    def test_summary_download_renders_download_task_layout(self) -> None:
+        html = self.render_query_template("/employee/summary-download", "summary_download.html", employees=[])
+
+        self.assertIn("download-page-shell", html)
+        self.assertIn("download-task-panel", html)
+        self.assertIn("download-report-grid", html)
+        self.assertIn("download-header-panel", html)
+        self.assertIn("download-help-panel", html)
+        self.assertIn("employeePickerModal", html)
+        self.assertIn("accountSetSelect", html)
+        self.assertIn("selectedEmpIds", html)
+        self.assertIn("includeFinalData", html)
+        self.assertIn("includePunchRecords", html)
+        self.assertIn("downloadBtn", html)
+        self.assertIn("finalHeaderCheckboxes", html)
+        self.assertIn("punchHeaderCheckboxes", html)
+        self.assertIn("static/js/summary_download.js", html)
 
     def test_product_navigation_groups_pages_into_modules(self) -> None:
         admin_user = SimpleNamespace(
