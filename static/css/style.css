@@ -2575,3 +2575,51 @@ h5,
     grid-template-columns: 1fr;
   }
 }
+
+.query-filter-rail .dashboard-check-option {
+  border-color: rgba(255, 255, 255, 0.16);
+  background: rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.88);
+}
+
+.query-filter-rail .employee-float-list {
+  color: var(--text-main);
+}
+
+.query-metric-card {
+  min-height: 116px;
+}
+
+.query-result-panel .card-header {
+  min-height: 52px;
+}
+
+.query-result-panel .table-responsive {
+  max-height: calc(100vh - 330px);
+}
+
+@media (max-width: 1180px) {
+  .query-filter-rail .dashboard-check-option {
+    border-color: #dbe5ef;
+    background: #f8fbff;
+    color: #334155;
+  }
+
+  .query-result-panel .table-responsive {
+    max-height: calc(100vh - 280px);
+  }
+}
+
+@media (max-width: 640px) {
+  .query-page-heading,
+  .query-filter-rail,
+  .download-task-panel {
+    border-radius: 18px;
+    padding: 16px;
+  }
+
+  .download-task-controls .btn,
+  .query-filter-actions .btn {
+    min-height: 40px;
+  }
+}
