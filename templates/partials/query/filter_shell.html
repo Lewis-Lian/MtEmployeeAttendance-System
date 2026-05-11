@@ -1,0 +1,10 @@
+<aside class="query-filter-rail">
+  <div class="query-filter-heading">
+    <span class="query-filter-kicker">{{ kicker|default("Query Filters") }}</span>
+    <h2>{{ title|default("查询条件") }}</h2>
+    <p>{{ description }}</p>
+  </div>
+  <div class="query-filter-body">
+    {{ body|safe }}
+  </div>
+</aside>

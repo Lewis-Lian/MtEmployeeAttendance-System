@@ -1,0 +1,9 @@
+<div class="card query-result-panel">
+  <div class="card-header d-flex justify-content-between align-items-center">
+    <span>{{ title }}</span>
+    <div class="small text-muted" id="{{ meta_id }}">{{ meta_text|default("等待查询") }}</div>
+  </div>
+  <div class="table-responsive query-result-table">
+    {{ table|safe }}
+  </div>
+</div>

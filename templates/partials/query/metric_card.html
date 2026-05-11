@@ -1,0 +1,5 @@
+<div class="summary-card dashboard-metric-card query-metric-card">
+  <div class="dashboard-metric-label">{{ label }}</div>
+  <div class="dashboard-metric-value {% if value_class is defined %}{{ value_class }}{% endif %}" id="{{ value_id }}">{{ value }}</div>
+  <div class="dashboard-metric-sub" {% if sub_id is defined %}id="{{ sub_id }}"{% endif %}>{{ sub }}</div>
+</div>
