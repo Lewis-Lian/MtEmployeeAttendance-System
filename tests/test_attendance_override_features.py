@@ -265,8 +265,10 @@ class AttendanceOverrideFeatureTests(unittest.TestCase):
 
         self.assertIn("企业考勤处理中心", html)
         self.assertIn("app-top-modules", html)
+        self.assertIn("app-top-module", html)
         self.assertIn("app-module-sidebar", html)
         self.assertIn("module-bottom-nav", html)
+        self.assertIn("module-bottom-link", html)
         self.assertIn("/module/query", html)
         self.assertIn("/module/account", html)
         self.assertIn("查询中心", html)
@@ -389,6 +391,8 @@ class AttendanceOverrideFeatureTests(unittest.TestCase):
         self.assertEqual(res.status_code, 200)
         html = res.get_data(as_text=True)
         self.assertIn("module-home", html)
+        self.assertIn("module-entry-grid", html)
+        self.assertIn("module-summary-grid", html)
         self.assertIn("查询中心", html)
         self.assertIn("/employee/dashboard", html)
 
