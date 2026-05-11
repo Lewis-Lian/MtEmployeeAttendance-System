@@ -30,12 +30,6 @@
   {% endwith %}
 
   <section class="query-workspace">
-    <div class="query-page-heading">
-      <span class="query-page-kicker">Query Center</span>
-      <h1>查询加班</h1>
-      <p>按年度只读查询管理人员加班调休统计。</p>
-    </div>
-
     <div class="query-metric-grid">
       {% with label="统计年度", value_id="managerOvertimeQueryMetricYear", value="-", value_class="dashboard-metric-text", sub="按年度查看管理人员调休" %}{% include "partials/query/metric_card.html" %}{% endwith %}
       {% with label="人员记录", value_id="managerOvertimeQueryMetricRows", value="0", sub_id="managerOvertimeQueryMetricRowsSub", sub="点击查询后更新" %}{% include "partials/query/metric_card.html" %}{% endwith %}

@@ -44,12 +44,6 @@
   {% endwith %}
 
   <section class="query-workspace">
-    <div class="query-page-heading">
-      <span class="query-page-kicker">Query Center</span>
-      <h1>考勤数据查询</h1>
-      <p>按账套与员工范围查询最终考勤汇总数据。</p>
-    </div>
-
     <div class="query-metric-grid">
       {% with label="已选员工", value_id="metricSelectedEmployees", value="0", sub_id="metricSelectedEmployeesSub", sub="当前未选择员工" %}{% include "partials/query/metric_card.html" %}{% endwith %}
       {% with label="当前账套", value_id="metricAccountSet", value="未选择", value_class="dashboard-metric-text", sub="查询时按所选月度账套取数" %}{% include "partials/query/metric_card.html" %}{% endwith %}

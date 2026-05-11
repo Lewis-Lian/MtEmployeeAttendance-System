@@ -40,12 +40,6 @@
   {% endwith %}
 
   <section class="query-workspace">
-    <div class="query-page-heading">
-      <span class="query-page-kicker">Query Center</span>
-      <h1>管理人员查询</h1>
-      <p>按账套查询管理人员考勤汇总，并按管理人员模板导出。</p>
-    </div>
-
     <div class="query-metric-grid">
       {% with label="当前账套", value_id="managerMetricAccountSet", value="未选择", value_class="dashboard-metric-text", sub="查询时按所选月度账套取数" %}{% include "partials/query/metric_card.html" %}{% endwith %}
       {% with label="厂休天数", value_id="managerMetricFactoryRest", value="0", sub="本月厂休天数" %}{% include "partials/query/metric_card.html" %}{% endwith %}

@@ -2303,50 +2303,64 @@ h5,
 
 .query-page-shell {
   display: grid;
-  grid-template-columns: minmax(260px, 292px) minmax(0, 1fr);
-  gap: 18px;
+  gap: 16px;
   align-items: start;
 }
 
 .query-filter-rail {
-  position: sticky;
-  top: 116px;
+  position: static;
   display: grid;
-  gap: 16px;
+  gap: 14px;
   padding: 18px;
-  border-radius: 22px;
-  color: #ffffff;
+  border: 1px solid var(--panel-border);
+  border-radius: 20px;
+  color: var(--text-main);
   background:
-    radial-gradient(180px 140px at 90% 0%, rgba(247, 200, 115, 0.2), transparent 62%),
-    linear-gradient(180deg, #17233d, #1d2f4d);
-  box-shadow: 0 18px 42px rgba(23, 35, 61, 0.18);
+    radial-gradient(260px 140px at 96% 0%, rgba(247, 200, 115, 0.12), transparent 64%),
+    linear-gradient(180deg, #ffffff, #f9fbfe);
+  box-shadow: var(--shadow-sm);
 }
 
 .query-filter-kicker,
 .query-page-kicker {
-  color: rgba(226, 232, 240, 0.7);
   font-size: 11px;
   font-weight: 800;
   letter-spacing: 1.4px;
   text-transform: uppercase;
 }
 
+.query-filter-kicker {
+  color: #657895;
+}
+
+.query-filter-heading {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 14px;
+}
+
 .query-filter-heading h2 {
-  margin: 6px 0 6px;
-  font-size: 22px;
+  margin: 4px 0 0;
+  color: var(--brand-ink);
+  font-size: 18px;
   font-weight: 850;
 }
 
 .query-filter-heading p {
+  max-width: 520px;
   margin: 0;
-  color: rgba(226, 232, 240, 0.68);
+  color: #64748b;
   font-size: 12.5px;
   line-height: 1.6;
+  text-align: right;
 }
 
 .query-filter-body {
   display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 14px;
+  align-items: end;
 }
 
 .query-filter-field {
@@ -2355,19 +2369,19 @@ h5,
 }
 
 .query-filter-rail .form-label {
-  color: rgba(226, 232, 240, 0.84);
+  color: #334155;
 }
 
 .query-filter-rail .form-control,
 .query-filter-rail .form-select {
-  border-color: rgba(255, 255, 255, 0.18);
-  background-color: rgba(255, 255, 255, 0.96);
+  border-color: #d7e3ef;
+  background-color: #ffffff;
 }
 
 .query-filter-actions {
   display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 9px;
-  margin-top: 4px;
 }
 
 .query-filter-actions .btn {
@@ -2378,33 +2392,6 @@ h5,
   display: grid;
   gap: 16px;
   min-width: 0;
-}
-
-.query-page-heading {
-  padding: 20px 22px;
-  border: 1px solid var(--panel-border);
-  border-radius: 22px;
-  background:
-    radial-gradient(280px 160px at 94% 0%, rgba(247, 200, 115, 0.16), transparent 64%),
-    linear-gradient(135deg, #ffffff, #f7faff);
-  box-shadow: var(--shadow-sm);
-}
-
-.query-page-heading .query-page-kicker {
-  color: #657895;
-}
-
-.query-page-heading h1 {
-  margin: 6px 0 6px;
-  color: var(--brand-ink);
-  font-size: clamp(24px, 3vw, 34px);
-  font-weight: 860;
-}
-
-.query-page-heading p {
-  margin: 0;
-  color: #64748b;
-  font-size: 14px;
 }
 
 .query-metric-grid {
@@ -2526,36 +2513,7 @@ h5,
 }
 
 @media (max-width: 1180px) {
-  .query-page-shell {
-    grid-template-columns: 1fr;
-  }
-
-  .query-filter-rail {
-    position: static;
-    color: var(--text-main);
-    background: #ffffff;
-    border: 1px solid var(--panel-border);
-    box-shadow: var(--shadow-sm);
-  }
-
-  .query-filter-kicker {
-    color: #657895;
-  }
-
-  .query-filter-heading p {
-    color: #64748b;
-  }
-
-  .query-filter-rail .form-label {
-    color: #334155;
-  }
-
   .query-filter-body {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    align-items: end;
-  }
-
-  .query-filter-actions {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
@@ -2574,12 +2532,20 @@ h5,
   .query-filter-actions {
     grid-template-columns: 1fr;
   }
+
+  .query-filter-heading {
+    display: grid;
+  }
+
+  .query-filter-heading p {
+    text-align: left;
+  }
 }
 
 .query-filter-rail .dashboard-check-option {
-  border-color: rgba(255, 255, 255, 0.16);
-  background: rgba(255, 255, 255, 0.1);
-  color: rgba(255, 255, 255, 0.88);
+  border-color: #dbe5ef;
+  background: #f8fbff;
+  color: #334155;
 }
 
 .query-filter-rail .employee-float-list {
@@ -2599,19 +2565,12 @@ h5,
 }
 
 @media (max-width: 1180px) {
-  .query-filter-rail .dashboard-check-option {
-    border-color: #dbe5ef;
-    background: #f8fbff;
-    color: #334155;
-  }
-
   .query-result-panel .table-responsive {
     max-height: calc(100vh - 280px);
   }
 }
 
 @media (max-width: 640px) {
-  .query-page-heading,
   .query-filter-rail,
   .download-task-panel {
     border-radius: 18px;

@@ -44,12 +44,6 @@
   {% endwith %}
 
   <section class="query-workspace">
-    <div class="query-page-heading">
-      <span class="query-page-kicker">Query Center</span>
-      <h1>打卡数据查询</h1>
-      <p>按账套和员工查询打卡明细，支持原始刷卡与上下班视图。</p>
-    </div>
-
     <div class="query-metric-grid">
       {% with label="已选员工", value_id="metricSelectedEmployees", value="0", sub_id="metricSelectedEmployeesSub", sub="当前未选择员工" %}{% include "partials/query/metric_card.html" %}{% endwith %}
       {% with label="当前账套", value_id="metricAccountSet", value="未选择", value_class="dashboard-metric-text", sub="按账套维度查看员工逐日打卡明细" %}{% include "partials/query/metric_card.html" %}{% endwith %}
