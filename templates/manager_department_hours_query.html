@@ -2,20 +2,29 @@
 {% block title %}管理人员部门工时查询{% endblock %}
 {% block page_intro %}汇总当前账套内各部门管理人员月度总工时，支持按账套导出结果。{% endblock %}
 {% block content %}
-<div class="row g-3">
-  <div class="col-md-4">
+<div class="query-page-shell">
+  {% set filter_body %}
+  <div class="query-filter-field">
     <label class="form-label">账套</label>
     <select class="form-select" id="accountSetSelect"></select>
   </div>
-  <div class="col-md-3 d-flex align-items-end gap-2">
-    <button class="btn btn-primary w-100" id="queryBtn">查询</button>
-    <button class="btn btn-outline-success w-100" id="downloadBtn">下载XLSX</button>
+  <div class="query-filter-actions">
+    <button class="btn btn-primary" id="queryBtn">查询</button>
+    <button class="btn btn-outline-success" id="downloadBtn">下载XLSX</button>
   </div>
-</div>
+  {% endset %}
+  {% with title="查询条件", description="选择账套后查看各部门管理人员月度总工时。", body=filter_body %}
+    {% include "partials/query/filter_shell.html" %}
+  {% endwith %}
 
-<div class="card mt-4">
-  <div class="card-header">管理人员部门月度总工时</div>
-  <div class="table-responsive">
+  <section class="query-workspace">
+    <div class="query-page-heading">
+      <span class="query-page-kicker">Query Center</span>
+      <h1>管理人员部门工时查询</h1>
+      <p>汇总当前账套内各部门管理人员月度总工时，支持按账套导出结果。</p>
+    </div>
+
+    {% set result_table %}
     <table class="table table-sm table-striped mb-0">
       <thead>
         <tr>
@@ -27,7 +36,11 @@
         <tr><td class="text-muted" colspan="2">请点击查询</td></tr>
       </tbody>
     </table>
-  </div>
+    {% endset %}
+    {% with title="管理人员部门月度总工时", meta_id="managerDepartmentHoursMeta", table=result_table %}
+      {% include "partials/query/result_panel.html" %}
+    {% endwith %}
+  </section>
 </div>
 {% endblock %}
 {% block scripts %}
