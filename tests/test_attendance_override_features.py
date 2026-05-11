@@ -432,6 +432,8 @@ class AttendanceOverrideFeatureTests(unittest.TestCase):
                 self.assertIn("query-filter-rail", html)
                 self.assertIn("query-workspace", html)
                 self.assertIn("query-result-panel", html)
+                self.assertNotIn("query-page-heading", html)
+                self.assertNotIn("Query Center", html)
                 for fragment in expected_fragments:
                     self.assertIn(fragment, html)
 
