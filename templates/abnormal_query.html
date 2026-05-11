@@ -2,150 +2,58 @@
 {% block title %}员工异常查询{% endblock %}
 {% block page_intro %}统计账套内每位员工的异常考勤次数，按日识别异常刷卡。{% endblock %}
 {% block content %}
-<div class="row g-3 mb-3">
-  <div class="col-md-6 col-xl-3">
-    <div class="summary-card dashboard-metric-card">
-      <div class="dashboard-metric-label">已选员工</div>
-      <div class="dashboard-metric-value" id="metricSelectedEmployees">0</div>
-      <div class="dashboard-metric-sub" id="metricSelectedEmployeesSub">当前未选择员工</div>
+<div class="query-page-shell">
+  {% set filter_body %}
+  <div class="query-filter-field">
+    <label class="form-label">员工</label>
+    <div class="employee-lookup" id="employeeLookup">
+      <div class="input-group input-group-sm">
+        <input type="text" class="form-control form-control-sm" id="empSearchInput" placeholder="搜索员工编号/姓名" autocomplete="off">
+        <button class="btn btn-outline-secondary employee-picker-trigger" type="button" id="openEmployeePickerBtn" title="选择员工">
+          <span class="employee-picker-icon" aria-hidden="true">👤</span>
+        </button>
+      </div>
+      <input type="hidden" id="selectedEmpIds">
+      <div class="employee-float-list" id="employeeQuickList"></div>
     </div>
   </div>
-  <div class="col-md-6 col-xl-3">
-    <div class="summary-card dashboard-metric-card">
-      <div class="dashboard-metric-label">当前账套</div>
-      <div class="dashboard-metric-value dashboard-metric-text" id="metricAccountSet">未选择</div>
-      <div class="dashboard-metric-sub">异常按当前月度账套内日记录统计</div>
+  <div class="query-filter-field">
+    <label class="form-label">账套</label>
+    <select class="form-select" id="accountSetSelect"></select>
+  </div>
+  <div class="query-filter-field">
+    <label class="form-label">显示选项</label>
+    <div class="dashboard-check-stack">
+      <label class="dashboard-check-option">
+        <input class="form-check-input m-0" type="checkbox" id="toggleEmpNo" checked>
+        <span>人员编号</span>
+      </label>
     </div>
   </div>
-  <div class="col-md-6 col-xl-3">
-    <div class="summary-card dashboard-metric-card">
-      <div class="dashboard-metric-label">异常总次数</div>
-      <div class="dashboard-metric-value" id="metricAbnormalTotal">0</div>
-      <div class="dashboard-metric-sub" id="metricAbnormalTotalSub">点击查询后更新</div>
-    </div>
+  <div class="query-filter-actions">
+    <button class="btn btn-primary" id="queryBtn">查询</button>
+    <button class="btn btn-outline-success" id="downloadBtn">下载XLSX</button>
   </div>
-  <div class="col-md-6 col-xl-3">
-    <div class="summary-card dashboard-metric-card">
-      <div class="dashboard-metric-label">结果记录</div>
-      <div class="dashboard-metric-value" id="metricResultRows">0</div>
-      <div class="dashboard-metric-sub" id="metricResultRowsSub">点击查询后更新</div>
-    </div>
-  </div>
-</div>
+  {% endset %}
+  {% with title="查询条件", description="按员工范围和账套查询异常考勤汇总。", body=filter_body %}
+    {% include "partials/query/filter_shell.html" %}
+  {% endwith %}
 
-<div class="card mb-4">
-  <div class="card-header d-flex justify-content-between align-items-center">
-    <span>查询条件</span>
-    <span class="small text-muted">支持按员工范围和账套查询异常考勤汇总</span>
-  </div>
-  <div class="card-body">
-    <div class="row g-3 align-items-end">
-      <div class="col-lg-5">
-        <label class="form-label">员工</label>
-        <div class="employee-lookup" id="employeeLookup">
-          <div class="input-group input-group-sm">
-            <input type="text" class="form-control form-control-sm" id="empSearchInput" placeholder="搜索员工编号/姓名" autocomplete="off">
-            <button class="btn btn-outline-secondary employee-picker-trigger" type="button" id="openEmployeePickerBtn" title="选择员工">
-              <span class="employee-picker-icon" aria-hidden="true">👤</span>
-            </button>
-          </div>
-          <input type="hidden" id="selectedEmpIds">
-          <div class="employee-float-list" id="employeeQuickList"></div>
-        </div>
-      </div>
-      <div class="col-lg-3">
-        <label class="form-label">账套</label>
-        <select class="form-select" id="accountSetSelect"></select>
-      </div>
-      <div class="col-lg-2">
-        <label class="form-label">显示选项</label>
-        <div class="dashboard-check-stack">
-          <label class="dashboard-check-option">
-            <input class="form-check-input m-0" type="checkbox" id="toggleEmpNo" checked>
-            <span>人员编号</span>
-          </label>
-        </div>
-      </div>
-      <div class="col-lg-2">
-        <div class="dashboard-action-group">
-          <button class="btn btn-primary" id="queryBtn">查询</button>
-          <button class="btn btn-outline-success" id="downloadBtn">下载XLSX</button>
-        </div>
-      </div>
+  <section class="query-workspace">
+    <div class="query-page-heading">
+      <span class="query-page-kicker">Query Center</span>
+      <h1>员工异常查询</h1>
+      <p>统计账套内每位员工的异常考勤次数，按日识别异常刷卡。</p>
     </div>
-  </div>
-</div>
 
-<div class="modal fade employee-picker-modal" id="employeePickerModal" tabindex="-1" aria-hidden="true">
-  <div class="modal-dialog modal-xl modal-dialog-scrollable">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h5 class="modal-title">选择员工</h5>
-        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-      </div>
-      <div class="modal-body">
-        <div class="row g-3 employee-picker-layout">
-          <div class="col-lg-7 d-flex flex-column gap-2">
-            <div class="employee-picker-panel employee-picker-tree">
-              <div class="employee-picker-panel-title">部门树</div>
-              <div class="list-group employee-dept-list" id="employeePickerDeptList"></div>
-            </div>
-            <div class="employee-picker-panel employee-picker-candidates">
-              <div class="d-flex align-items-center gap-2 mb-2">
-                <label class="form-check-label small d-inline-flex align-items-center gap-1 text-nowrap">
-                  <input class="form-check-input m-0" type="checkbox" id="employeePickerSelectVisible">
-                  全选
-                </label>
-                <input type="text" class="form-control form-control-sm" id="employeePickerSearchInput" placeholder="搜索员工编号/姓名">
-              </div>
-              <div class="employee-picker-list" id="employeePickerList">
-                {% for e in employees %}
-                <label
-                  class="employee-picker-row"
-                  data-id="{{ e.id }}"
-                  data-name="{{ e.name }}"
-                  data-key="{{ e.emp_no }} {{ e.name }}"
-                  data-dept-id="{{ e.dept_id if e.dept_id else '' }}"
-                  data-parent-id="{{ e.department.parent_id if e.department and e.department.parent_id else '' }}"
-                  data-dept-name="{{ e.department.dept_name if e.department else '未分配部门' }}"
-                >
-                  <input class="form-check-input employee-picker-item" type="checkbox" value="{{ e.id }}" data-id="{{ e.id }}">
-                  <span class="employee-picker-main">{{ e.emp_no }} - {{ e.name }}</span>
-                </label>
-                {% endfor %}
-              </div>
-            </div>
-          </div>
-          <div class="col-lg-5">
-            <div class="employee-picker-panel employee-picker-selected-wrap">
-              <div class="d-flex align-items-center justify-content-between mb-2">
-                <div class="employee-picker-panel-title mb-0">已选人员</div>
-                <div class="d-flex align-items-center gap-2">
-                  <span class="badge text-bg-light border" id="employeePickerSelectedCount">已选 0 人</span>
-                  <button type="button" class="btn btn-sm btn-outline-secondary" id="employeePickerClearBtn">清空</button>
-                </div>
-              </div>
-              <div class="employee-selected-list" id="employeePickerSelectedList">
-                <div class="employee-selected-empty">暂无已选人员</div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-      <div class="modal-footer">
-        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">取消</button>
-        <button type="button" class="btn btn-primary" id="employeePickerConfirmBtn">确定</button>
-      </div>
+    <div class="query-metric-grid">
+      {% with label="已选员工", value_id="metricSelectedEmployees", value="0", sub_id="metricSelectedEmployeesSub", sub="当前未选择员工" %}{% include "partials/query/metric_card.html" %}{% endwith %}
+      {% with label="当前账套", value_id="metricAccountSet", value="未选择", value_class="dashboard-metric-text", sub="异常按当前月度账套内日记录统计" %}{% include "partials/query/metric_card.html" %}{% endwith %}
+      {% with label="异常总次数", value_id="metricAbnormalTotal", value="0", sub_id="metricAbnormalTotalSub", sub="点击查询后更新" %}{% include "partials/query/metric_card.html" %}{% endwith %}
+      {% with label="结果记录", value_id="metricResultRows", value="0", sub_id="metricResultRowsSub", sub="点击查询后更新" %}{% include "partials/query/metric_card.html" %}{% endwith %}
     </div>
-  </div>
-</div>
 
-<div class="card">
-  <div class="card-header d-flex justify-content-between align-items-center">
-    <span>员工异常考勤汇总</span>
-    <div class="small text-muted" id="abnormalMeta">等待查询</div>
-  </div>
-  <div class="table-responsive">
+    {% set result_table %}
     <table class="table table-sm table-striped mb-0">
       <thead>
         <tr>
@@ -157,8 +65,16 @@
       </thead>
       <tbody id="abnormalTableBody"></tbody>
     </table>
-  </div>
+    {% endset %}
+    {% with title="员工异常考勤汇总", meta_id="abnormalMeta", table=result_table %}
+      {% include "partials/query/result_panel.html" %}
+    {% endwith %}
+  </section>
 </div>
+
+{% with picker_title="选择员工", picker_search_placeholder="搜索员工编号/姓名" %}
+  {% include "partials/query/employee_picker_modal.html" %}
+{% endwith %}
 {% endblock %}
 {% block scripts %}
 <script src="{{ url_for('static', filename='js/abnormal_query.js') }}"></script>
