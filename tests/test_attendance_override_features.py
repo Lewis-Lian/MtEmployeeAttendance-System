@@ -264,11 +264,43 @@ class AttendanceOverrideFeatureTests(unittest.TestCase):
             html = render_template("admin/dashboard.html")
 
         self.assertIn("企业考勤处理中心", html)
-        self.assertIn("mobileSidebarBtn", html)
-        self.assertIn("sidebarBackdrop", html)
-        self.assertIn("app-shell-badge", html)
-        self.assertIn("app-sidebar", html)
-        self.assertIn("top-nav", html)
+        self.assertIn("app-top-modules", html)
+        self.assertIn("app-module-sidebar", html)
+        self.assertIn("module-bottom-nav", html)
+        self.assertIn("/module/query", html)
+        self.assertIn("/module/account", html)
+        self.assertIn("查询中心", html)
+        self.assertIn("账套中心", html)
+        self.assertIn("主数据", html)
+        self.assertIn("修正中心", html)
+        self.assertIn("系统设置", html)
+
+    def test_authenticated_shell_hides_restricted_modules_for_readonly_user(self) -> None:
+        project_root = os.path.dirname(os.path.dirname(__file__))
+        app = Flask(
+            "enterprise_shell_readonly_render_test",
+            template_folder=os.path.join(project_root, "templates"),
+            static_folder=os.path.join(project_root, "static"),
+        )
+        register_routes(app)
+
+        readonly_user = SimpleNamespace(
+            username="reader",
+            role="readonly",
+            has_any_page_access=lambda keys: "employee_dashboard" in keys,
+            can_access_page=lambda key: key == "employee_dashboard",
+        )
+        with app.test_request_context("/employee/dashboard"):
+            g.current_user = readonly_user
+            html = render_template("dashboard.html", employees=[])
+
+        self.assertIn("/module/query", html)
+        self.assertIn("/employee/dashboard", html)
+        self.assertNotIn("/module/account", html)
+        self.assertNotIn("/admin/dashboard", html)
+        self.assertNotIn("/module/master-data", html)
+        self.assertNotIn("/module/corrections", html)
+        self.assertNotIn("/module/settings", html)
 
     def test_login_page_renders_enterprise_entry_copy(self) -> None:
         project_root = os.path.dirname(os.path.dirname(__file__))

@@ -1,0 +1,43 @@
+<nav class="app-top-modules" aria-label="产品模块">
+  {% for module in app_nav.modules %}
+  <a
+    class="app-top-module {% if app_nav.current_module and app_nav.current_module.slug == module.slug %}is-active{% endif %}"
+    href="{{ module.home_href }}"
+  >
+    <span class="app-top-module-label">{{ module.label }}</span>
+  </a>
+  {% endfor %}
+</nav>
+
+<nav class="app-module-sidebar" aria-label="模块页面">
+  {% if app_nav.current_module %}
+  <div class="app-module-heading">
+    <span class="app-sidebar-title">{{ app_nav.current_module.label }}</span>
+    <span class="app-module-subtitle">{{ app_nav.current_module.description }}</span>
+  </div>
+  {% endif %}
+  <div class="app-sidebar-nav">
+    {% for entry in app_nav.current_entries %}
+    <a
+      class="app-side-link {% if request.path == entry.href or request.path.startswith(entry.href ~ '/') %}is-active{% endif %}"
+      href="{{ entry.href }}"
+      title="{{ entry.label }}"
+    >
+      <span class="app-side-icon icon-{{ entry.key|replace('_', '-') }}" aria-hidden="true"></span>
+      <span class="app-side-label">{{ entry.label }}</span>
+    </a>
+    {% endfor %}
+  </div>
+</nav>
+
+<nav class="module-bottom-nav" aria-label="移动端模块导航">
+  {% for module in app_nav.modules %}
+  <a
+    class="module-bottom-link {% if app_nav.current_module and app_nav.current_module.slug == module.slug %}is-active{% endif %}"
+    href="{{ module.home_href }}"
+  >
+    <span class="module-bottom-dot" aria-hidden="true"></span>
+    <span>{{ module.short_label }}</span>
+  </a>
+  {% endfor %}
+</nav>
