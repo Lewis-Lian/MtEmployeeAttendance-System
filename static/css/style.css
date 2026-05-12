@@ -385,7 +385,8 @@ body {
   box-sizing: border-box;
 }
 
-.icon-attendance::before {
+.icon-attendance::before,
+.icon-employee-dashboard::before {
   width: 12px;
   height: 12px;
   top: 5px;
@@ -395,7 +396,8 @@ body {
   background: transparent;
 }
 
-.icon-attendance::after {
+.icon-attendance::after,
+.icon-employee-dashboard::after {
   width: 8px;
   height: 2px;
   top: 8px;
@@ -404,7 +406,8 @@ body {
   box-shadow: 0 4px 0 currentColor;
 }
 
-.icon-abnormal::before {
+.icon-abnormal::before,
+.icon-abnormal-query::before {
   width: 12px;
   height: 12px;
   top: 5px;
@@ -414,7 +417,8 @@ body {
   background: transparent;
 }
 
-.icon-abnormal::after {
+.icon-abnormal::after,
+.icon-abnormal-query::after {
   width: 6px;
   height: 6px;
   top: 8px;
@@ -425,7 +429,8 @@ body {
   background: transparent;
 }
 
-.icon-punch::before {
+.icon-punch::before,
+.icon-punch-records::before {
   width: 12px;
   height: 10px;
   top: 6px;
@@ -435,7 +440,8 @@ body {
   background: transparent;
 }
 
-.icon-punch::after {
+.icon-punch::after,
+.icon-punch-records::after {
   width: 8px;
   height: 2px;
   top: 10px;
@@ -443,7 +449,9 @@ body {
   background: currentColor;
 }
 
-.icon-hours::before {
+.icon-hours::before,
+.icon-department-hours-query::before,
+.icon-manager-department-hours-query::before {
   width: 12px;
   height: 12px;
   top: 5px;
@@ -453,7 +461,9 @@ body {
   background: transparent;
 }
 
-.icon-hours::after {
+.icon-hours::after,
+.icon-department-hours-query::after,
+.icon-manager-department-hours-query::after {
   width: 2px;
   height: 5px;
   top: 8px;
@@ -462,7 +472,8 @@ body {
   box-shadow: 3px 2px 0 currentColor;
 }
 
-.icon-accountset::before {
+.icon-accountset::before,
+.icon-account-dashboard::before {
   width: 12px;
   height: 12px;
   top: 5px;
@@ -472,7 +483,8 @@ body {
   background: transparent;
 }
 
-.icon-accountset::after {
+.icon-accountset::after,
+.icon-account-dashboard::after {
   width: 8px;
   height: 2px;
   top: 9px;
@@ -481,7 +493,8 @@ body {
   box-shadow: 0 4px 0 currentColor;
 }
 
-.icon-employee::before {
+.icon-employee::before,
+.icon-employees::before {
   width: 8px;
   height: 8px;
   top: 4px;
@@ -491,7 +504,8 @@ body {
   background: transparent;
 }
 
-.icon-employee::after {
+.icon-employee::after,
+.icon-employees::after {
   width: 12px;
   height: 6px;
   top: 13px;
@@ -502,7 +516,8 @@ body {
   background: transparent;
 }
 
-.icon-manager::before {
+.icon-manager::before,
+.icon-manager-query::before {
   width: 8px;
   height: 8px;
   top: 4px;
@@ -512,7 +527,8 @@ body {
   background: transparent;
 }
 
-.icon-manager::after {
+.icon-manager::after,
+.icon-manager-query::after {
   width: 14px;
   height: 8px;
   top: 12px;
@@ -523,7 +539,8 @@ body {
   background: transparent;
 }
 
-.icon-department::before {
+.icon-department::before,
+.icon-departments::before {
   width: 4px;
   height: 4px;
   top: 5px;
@@ -534,7 +551,8 @@ body {
   box-shadow: -5px 8px 0 -2px transparent, 5px 8px 0 -2px transparent;
 }
 
-.icon-department::after {
+.icon-department::after,
+.icon-departments::after {
   width: 12px;
   height: 2px;
   top: 7px;
@@ -543,7 +561,8 @@ body {
   box-shadow: -5px 8px 0 currentColor, 5px 8px 0 currentColor, 0 4px 0 currentColor;
 }
 
-.icon-shift::before {
+.icon-shift::before,
+.icon-shifts::before {
   width: 12px;
   height: 12px;
   top: 5px;
@@ -553,7 +572,8 @@ body {
   background: transparent;
 }
 
-.icon-shift::after {
+.icon-shift::after,
+.icon-shifts::after {
   width: 8px;
   height: 2px;
   top: 10px;
@@ -562,7 +582,8 @@ body {
   box-shadow: 0 -4px 0 currentColor, 0 4px 0 currentColor;
 }
 
-.icon-account::before {
+.icon-account::before,
+.icon-accounts::before {
   width: 12px;
   height: 12px;
   top: 5px;
@@ -572,13 +593,103 @@ body {
   background: transparent;
 }
 
-.icon-account::after {
+.icon-account::after,
+.icon-accounts::after {
   width: 6px;
   height: 2px;
   top: 10px;
   left: 8px;
   background: currentColor;
   box-shadow: 0 -4px 0 currentColor, 0 4px 0 currentColor;
+}
+
+.icon-summary-download::before {
+  width: 12px;
+  height: 8px;
+  top: 6px;
+  left: 5px;
+  border: 2px solid currentColor;
+  border-top: 0;
+  border-radius: 0 0 4px 4px;
+  background: transparent;
+}
+
+.icon-summary-download::after {
+  width: 6px;
+  height: 7px;
+  top: 4px;
+  left: 8px;
+  background:
+    linear-gradient(currentColor, currentColor) center top / 2px 5px no-repeat,
+    linear-gradient(45deg, transparent 43%, currentColor 43%, currentColor 57%, transparent 57%) left bottom / 3px 3px no-repeat,
+    linear-gradient(-45deg, transparent 43%, currentColor 43%, currentColor 57%, transparent 57%) right bottom / 3px 3px no-repeat;
+}
+
+.icon-manager-overtime-query::before,
+.icon-manager-overtime::before {
+  width: 12px;
+  height: 12px;
+  top: 5px;
+  left: 5px;
+  border: 2px solid currentColor;
+  border-radius: 999px;
+  background: transparent;
+}
+
+.icon-manager-overtime-query::after,
+.icon-manager-overtime::after {
+  width: 5px;
+  height: 2px;
+  top: 10px;
+  left: 10px;
+  background: currentColor;
+  transform: rotate(35deg);
+  transform-origin: left center;
+  box-shadow: -3px -3px 0 currentColor;
+}
+
+.icon-manager-annual-leave-query::before,
+.icon-manager-annual-leave::before {
+  width: 12px;
+  height: 12px;
+  top: 5px;
+  left: 5px;
+  border: 2px solid currentColor;
+  border-radius: 3px;
+  background: transparent;
+}
+
+.icon-manager-annual-leave-query::after,
+.icon-manager-annual-leave::after {
+  width: 2px;
+  height: 2px;
+  top: 8px;
+  left: 8px;
+  background: currentColor;
+  box-shadow: 4px 0 0 currentColor, 0 4px 0 currentColor, 4px 4px 0 currentColor;
+}
+
+.icon-employee-attendance-overrides::before,
+.icon-manager-attendance-overrides::before {
+  width: 12px;
+  height: 12px;
+  top: 5px;
+  left: 5px;
+  border: 2px solid currentColor;
+  border-radius: 3px;
+  background: transparent;
+}
+
+.icon-employee-attendance-overrides::after,
+.icon-manager-attendance-overrides::after {
+  width: 7px;
+  height: 2px;
+  top: 12px;
+  left: 8px;
+  background: currentColor;
+  transform: rotate(-35deg);
+  transform-origin: left center;
+  box-shadow: -3px -4px 0 currentColor;
 }
 
 .app-side-label {
