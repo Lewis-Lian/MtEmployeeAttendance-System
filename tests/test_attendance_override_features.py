@@ -304,6 +304,59 @@ class AttendanceOverrideFeatureTests(unittest.TestCase):
         self.assertNotIn("/module/corrections", html)
         self.assertNotIn("/module/settings", html)
 
+    def test_authenticated_shell_renders_icon_class_for_every_sidebar_entry(self) -> None:
+        project_root = os.path.dirname(os.path.dirname(__file__))
+        app = Flask(
+            "enterprise_shell_icon_render_test",
+            template_folder=os.path.join(project_root, "templates"),
+            static_folder=os.path.join(project_root, "static"),
+        )
+        register_routes(app)
+
+        admin_user = SimpleNamespace(
+            username="admin",
+            role="admin",
+            has_any_page_access=lambda _keys: True,
+            can_access_page=lambda _key: True,
+        )
+
+        expected_entry_keys = {
+            "employee_dashboard",
+            "abnormal_query",
+            "punch_records",
+            "department_hours_query",
+            "summary_download",
+            "manager_query",
+            "manager_overtime_query",
+            "manager_annual_leave_query",
+            "manager_department_hours_query",
+            "account_dashboard",
+            "employees",
+            "departments",
+            "shifts",
+            "employee_attendance_overrides",
+            "manager_attendance_overrides",
+            "manager_overtime",
+            "manager_annual_leave",
+            "accounts",
+        }
+        seen_keys = set()
+        modules = visible_modules(admin_user)
+
+        for module in modules:
+            request_path = module["entries"][0]["href"]
+            with app.test_request_context(request_path):
+                g.current_user = admin_user
+                html = render_template("partials/app_nav.html", app_nav=nav_context(admin_user, request_path))
+
+            for entry in module["entries"]:
+                seen_keys.add(entry["key"])
+                expected_icon_class = f"icon-{entry['key'].replace('_', '-')}"
+                with self.subTest(module=module["slug"], entry_key=entry["key"]):
+                    self.assertIn(expected_icon_class, html)
+
+        self.assertEqual(seen_keys, expected_entry_keys)
+
     def test_login_page_renders_enterprise_entry_copy(self) -> None:
         project_root = os.path.dirname(os.path.dirname(__file__))
         app = Flask(
