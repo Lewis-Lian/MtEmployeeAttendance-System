@@ -6,8 +6,12 @@ python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 cp .env.example .env
+flask --app manage.py init-db
+flask --app manage.py init-admin
 python3 app.py
 ```
+
+For a fresh setup, run the two init commands once before starting the app. `python3 app.py` is fine for local development after initialization; for production startup use the explicit `waitress` command in the deployment section below.
 
 ## Excel Import
 
@@ -47,7 +51,17 @@ powershell -ExecutionPolicy Bypass -File .\scripts\windows\bootstrap_windows.ps1
 Manual run (for smoke test):
 
 ```powershell
-.\.venv-win-prod\Scripts\python.exe -m waitress --host=0.0.0.0 --port=5000 app:app
+.\.venv-win-prod\Scripts\python.exe -m flask --app manage.py init-db
+.\.venv-win-prod\Scripts\python.exe -m flask --app manage.py init-admin
+.\.venv-win-prod\Scripts\python.exe -m waitress --host=0.0.0.0 --port=5000 wsgi:app
+```
+
+Equivalent production bootstrap/startup commands:
+
+```bash
+flask --app manage.py init-db
+flask --app manage.py init-admin
+python -m waitress --host=0.0.0.0 --port=5000 wsgi:app
 ```
 
 Do not use `python app.py` in production. That runs Flask development server and will show:
