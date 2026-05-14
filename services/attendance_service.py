@@ -10,6 +10,7 @@ from models.leave import LeaveRecord
 from models.annual_leave import AnnualLeave
 from models.employee import Employee
 from services.attendance_source_service import EMPLOYEE_STATS_CONTEXT, attendance_views_by_employee
+from services.attendance_summary_service import batch_monthly_summaries, empty_monthly_summary
 
 
 LEAVE_TYPES = ["病假", "事假", "工伤", "丧假", "婚假", "出差", "补休（调休）"]
@@ -30,28 +31,8 @@ class AttendanceService:
     def monthly_summary(emp_id: int, month: str) -> dict:
         employee = Employee.query.get(emp_id)
         if not employee:
-            totals = [0, 0, 0, 0, 0, 0, 0]
-        else:
-            rows = attendance_views_by_employee(month, [employee], EMPLOYEE_STATS_CONTEXT).get(emp_id, [])
-            totals = [
-                sum(float(row.expected_hours or 0) for row in rows),
-                sum(float(row.actual_hours or 0) for row in rows),
-                sum(float(row.absent_hours or 0) for row in rows),
-                sum(float(row.leave_hours or 0) for row in rows),
-                sum(float(row.overtime_hours or 0) for row in rows),
-                sum(int(row.late_minutes or 0) for row in rows),
-                sum(int(row.early_leave_minutes or 0) for row in rows),
-            ]
-
-        return {
-            "expected_hours": float(totals[0] or 0),
-            "actual_hours": float(totals[1] or 0),
-            "absent_hours": float(totals[2] or 0),
-            "leave_hours": float(totals[3] or 0),
-            "overtime_hours": float(totals[4] or 0),
-            "late_minutes": int(totals[5] or 0),
-            "early_leave_minutes": int(totals[6] or 0),
-        }
+            return empty_monthly_summary()
+        return batch_monthly_summaries(month, [employee], EMPLOYEE_STATS_CONTEXT).get(emp_id, empty_monthly_summary())
 
     @staticmethod
     def yearly_summary(emp_id: int, year: int) -> dict:
