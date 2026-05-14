@@ -6,7 +6,7 @@ from io import BytesIO
 from datetime import datetime
 from typing import Any
 
-from flask import Blueprint, current_app, jsonify, redirect, render_template, request, send_file, g
+from flask import Blueprint, jsonify, redirect, render_template, request, send_file, g
 import openpyxl
 
 from models import db
@@ -721,28 +721,6 @@ def delete_account_set(account_set_id: int):
     return jsonify({"status": "ok"})
 
 
-@admin_bp.route("/account-sets/<int:account_set_id>/imports", methods=["GET"])
-@admin_required
-def list_account_set_imports(account_set_id: int):
-    row = AccountSet.query.get_or_404(account_set_id)
-    records = AccountSetImport.query.filter_by(account_set_id=row.id).order_by(AccountSetImport.id.desc()).all()
-    return jsonify(
-        [
-            {
-                "id": r.id,
-                "source_filename": r.source_filename,
-                "stored_path": r.stored_path,
-                "file_type": r.file_type,
-                "status": r.status,
-                "imported_count": r.imported_count,
-                "error_message": r.error_message,
-                "created_at": r.created_at.isoformat() if r.created_at else None,
-            }
-            for r in records
-        ]
-    )
-
-
 @admin_bp.route("/account-sets/<int:account_set_id>/calculate", methods=["POST"])
 @admin_required
 def calculate_account_set(account_set_id: int):
@@ -838,17 +816,6 @@ def calculate_account_set(account_set_id: int):
     )
 
 
-@admin_bp.route("/accounts")
-@admin_required
-def accounts_page():
-    return render_template(
-        "admin/accounts.html",
-        current_user_id=g.current_user.id,
-        manager_page_permissions=[{"key": key, "label": PAGE_PERMISSION_LABELS[key]} for key in MANAGER_PAGE_PERMISSION_KEYS],
-        employee_page_permissions=[{"key": key, "label": PAGE_PERMISSION_LABELS[key]} for key in EMPLOYEE_PAGE_PERMISSION_KEYS],
-    )
-
-
 @admin_bp.route("/employees/manage")
 @admin_required
 def employees_page():
@@ -878,106 +845,6 @@ def manager_overtime_page():
 @admin_required
 def manager_annual_leave_page():
     return render_template("admin/manager_annual_leave.html")
-
-
-@admin_bp.route("/manager-attendance-overrides")
-@admin_required
-def manager_attendance_overrides_page():
-    employees = _manager_scope_employees()
-    return render_template("admin/manager_attendance_overrides.html", employees=employees)
-
-
-@admin_bp.route("/upload", methods=["POST"])
-@admin_required
-def upload_excel():
-    if "file" not in request.files:
-        return jsonify({"error": "No file uploaded"}), 400
-
-    file = request.files["file"]
-    if not file.filename:
-        return jsonify({"error": "Invalid filename"}), 400
-
-    save_path = os.path.join(current_app.config["UPLOAD_FOLDER"], file.filename)
-    os.makedirs(os.path.dirname(save_path), exist_ok=True)
-    file.save(save_path)
-
-    result = ImportService.import_file(save_path)
-    return jsonify(result)
-
-
-@admin_bp.route("/import/raw-files", methods=["POST"])
-@admin_required
-def import_raw_files():
-    account_set_id = request.form.get("account_set_id", type=int)
-    account_set = AccountSet.query.get(account_set_id) if account_set_id else AccountSet.query.filter_by(is_active=True).first()
-    if not account_set:
-        return jsonify({"status": "error", "message": "请先创建并选择账套"}), 400
-    locked_error = _ensure_account_set_unlocked(account_set, "上传原始文件")
-    if locked_error:
-        return locked_error
-
-    uploaded_files = [file for file in request.files.getlist("files") if (file.filename or "").strip()]
-    if not uploaded_files:
-        return jsonify({"status": "error", "message": "请至少选择一个要上传的源文件"}), 400
-
-    results = []
-    success = 0
-    failed = 0
-    for file in uploaded_files:
-        filename = file.filename.strip()
-
-        file_type = _account_set_file_type(filename)
-        previous_record = AccountSetImport.query.filter_by(account_set_id=account_set.id, file_type=file_type).first()
-        replaced = previous_record is not None
-
-        if previous_record:
-            old_path = (previous_record.stored_path or "").strip()
-            if old_path and os.path.exists(old_path):
-                try:
-                    os.remove(old_path)
-                except Exception:
-                    pass
-            db.session.delete(previous_record)
-            db.session.flush()
-
-        account_set_dir = os.path.join(current_app.config["UPLOAD_FOLDER"], "account_sets", account_set.month)
-        os.makedirs(account_set_dir, exist_ok=True)
-        save_name = f"{int(datetime.now().timestamp())}_{filename}"
-        save_path = os.path.join(account_set_dir, save_name)
-        os.makedirs(os.path.dirname(save_path), exist_ok=True)
-        file.save(save_path)
-
-        import_record = AccountSetImport(
-            account_set_id=account_set.id,
-            source_filename=filename,
-            stored_path=save_path,
-            file_type=file_type,
-            status="uploaded",
-            imported_count=0,
-        )
-        db.session.add(import_record)
-
-        try:
-            success += 1
-            import_record.error_message = None
-            results.append({"file": filename, "status": "ok", "message": "replaced" if replaced else "uploaded"})
-        except Exception as exc:
-            failed += 1
-            import_record.status = "error"
-            import_record.error_message = str(exc)
-            results.append({"file": filename, "status": "error", "error": str(exc)})
-        db.session.commit()
-
-    return jsonify(
-        {
-            "status": "ok" if failed == 0 else "partial",
-            "account_set": _serialize_account_set(account_set),
-            "total": len(uploaded_files),
-            "success": success,
-            "failed": failed,
-            "results": results,
-        }
-    )
 
 
 @admin_bp.route("/shifts", methods=["POST"])
@@ -1103,22 +970,6 @@ def manager_overtime_records():
 def update_manager_overtime_summary():
     payload, status = _save_manager_month_stat("overtime")
     return jsonify(payload), status
-
-
-@admin_bp.route("/manager-overtime/template", methods=["GET"])
-@admin_required
-def download_manager_overtime_template():
-    return _download_manager_stat_template("overtime")
-
-
-@admin_bp.route("/manager-overtime/import", methods=["POST"])
-@admin_required
-def import_manager_overtime():
-    year = request.form.get("year", type=int) or datetime.now().year
-    locked_error = _ensure_year_months_unlocked(year, "导入管理人员加班统计", include_prev_dec=True)
-    if locked_error:
-        return locked_error
-    return _import_manager_stat_file("overtime", year)
 
 
 @admin_bp.route("/manager-overtime/records/<int:record_id>", methods=["PUT"])
@@ -1378,85 +1229,6 @@ def _nullable_int(data: dict[str, object], key: str) -> tuple[int | None, str | 
     return parsed, None
 
 
-@admin_bp.route("/manager-attendance-overrides/record", methods=["GET"])
-@admin_required
-def manager_attendance_override_record():
-    emp_id = request.args.get("emp_id", type=int) or 0
-    month = _validate_month(request.args.get("month"))
-    if not emp_id or not month:
-        return jsonify({"error": "请选择管理人员和有效月份"}), 400
-    payload, status = _manager_attendance_response(emp_id, month)
-    return jsonify(payload), status
-
-
-@admin_bp.route("/manager-attendance-overrides/record", methods=["PUT"])
-@admin_required
-def save_manager_attendance_override_record():
-    data = request.json or {}
-    emp_id = int(data.get("emp_id") or 0)
-    month = _validate_month(data.get("month"))
-    if not emp_id or not month:
-        return jsonify({"error": "请选择管理人员和有效月份"}), 400
-    account_set = _account_set_for_month(month)
-    locked_error = _ensure_account_set_unlocked(account_set, "保存管理人员考勤修正")
-    if locked_error:
-        return locked_error
-    employee = Employee.query.get(emp_id)
-    if not employee or not employee.is_manager:
-        return jsonify({"error": "employee is not manager"}), 400
-
-    values: dict[str, float | int | None] = {}
-    for key in ("attendance_days", "injury_days", "business_trip_days", "marriage_days", "funeral_days"):
-        value, error = _nullable_float(data, key)
-        if error:
-            return jsonify({"error": error}), 400
-        values[key] = value
-    late_value, error = _nullable_int(data, "late_early_minutes")
-    if error:
-        return jsonify({"error": error}), 400
-    values["late_early_minutes"] = late_value
-
-    row = ManagerAttendanceOverride.query.filter_by(emp_id=emp_id, month=month).first()
-    before_values = _override_state_from_row(row, _MANAGER_ATTENDANCE_OVERRIDE_FIELDS)
-    after_values = dict(values)
-    after_values["remark"] = (data.get("remark") or "").strip()
-    if _has_override_state_changes(before_values, after_values):
-        if not row:
-            row = ManagerAttendanceOverride(emp_id=emp_id, month=month)
-            db.session.add(row)
-        for key, value in values.items():
-            setattr(row, key, value)
-        row.remark = after_values["remark"]
-        row.updated_by = g.current_user.id
-        _record_override_history("manager", emp_id, month, "manual_save", before_values, after_values)
-        db.session.commit()
-
-    payload, status = _manager_attendance_response(emp_id, month)
-    return jsonify(payload), status
-
-
-@admin_bp.route("/manager-attendance-overrides/record", methods=["DELETE"])
-@admin_required
-def delete_manager_attendance_override_record():
-    emp_id = request.args.get("emp_id", type=int) or 0
-    month = _validate_month(request.args.get("month"))
-    if not emp_id or not month:
-        return jsonify({"error": "请选择管理人员和有效月份"}), 400
-    account_set = _account_set_for_month(month)
-    locked_error = _ensure_account_set_unlocked(account_set, "清空管理人员考勤修正")
-    if locked_error:
-        return locked_error
-    row = ManagerAttendanceOverride.query.filter_by(emp_id=emp_id, month=month).first()
-    if row:
-        before_values = _override_state_from_row(row, _MANAGER_ATTENDANCE_OVERRIDE_FIELDS)
-        after_values = _override_state_from_row(None, _MANAGER_ATTENDANCE_OVERRIDE_FIELDS)
-        _record_override_history("manager", emp_id, month, "clear", before_values, after_values)
-        db.session.delete(row)
-        db.session.commit()
-    payload, status = _manager_attendance_response(emp_id, month)
-    return jsonify(payload), status
-
-
 def _override_workbook_response(wb: openpyxl.Workbook, filename: str):
     output = BytesIO()
     wb.save(output)
@@ -1632,107 +1404,6 @@ def _apply_manager_override_updates(
     row.updated_by = g.current_user.id
     _record_override_history("manager", emp_id, month, action_type, before_values, after_values, source_file_name)
     return True
-
-
-@admin_bp.route("/manager-attendance-overrides/history", methods=["GET"])
-@admin_required
-def manager_attendance_override_history():
-    month = _validate_month(request.args.get("month"))
-    if not month:
-        return jsonify({"error": "请选择有效月份"}), 400
-    return jsonify({"rows": _history_rows_for_month("manager", month)})
-
-
-@admin_bp.route("/manager-attendance-overrides/template", methods=["GET"])
-@admin_required
-def download_manager_attendance_override_template():
-    month = _validate_month(request.args.get("month")) or datetime.now().strftime("%Y-%m")
-    return _override_workbook_response(_build_manager_override_export_workbook(month, include_real_rows=False), "管理人员考勤修正导入示例.xlsx")
-
-
-@admin_bp.route("/manager-attendance-overrides/export", methods=["GET"])
-@admin_required
-def export_manager_attendance_overrides():
-    month = _validate_month(request.args.get("month"))
-    if not month:
-        return jsonify({"error": "请选择有效月份"}), 400
-    return _override_workbook_response(_build_manager_override_export_workbook(month, include_real_rows=True), f"管理人员考勤修正导出_{month}.xlsx")
-
-
-@admin_bp.route("/manager-attendance-overrides/import", methods=["POST"])
-@admin_required
-def import_manager_attendance_overrides():
-    month = _validate_month(request.form.get("month"))
-    if not month:
-        return jsonify({"error": "请选择有效月份"}), 400
-    account_set = _account_set_for_month(month)
-    locked_error = _ensure_account_set_unlocked(account_set, "导入管理人员考勤修正")
-    if locked_error:
-        return locked_error
-    file = request.files.get("file")
-    if not file or not file.filename:
-        return jsonify({"error": "请选择导入文件"}), 400
-    wb = openpyxl.load_workbook(file, data_only=True, read_only=True)
-    ws = wb[wb.sheetnames[0]]
-    rows = [list(r) for r in ws.iter_rows(values_only=True)]
-    if not rows:
-        return jsonify({"error": "empty file"}), 400
-    header_idx, header_map = _parse_header_row(rows, ["月份", "工号", "姓名", "出勤天数", "备注"])
-    required = ["月份", "工号", "姓名", "出勤天数", "工伤", "出差", "婚假", "丧假", "迟到早退", "备注"]
-    missing = [key for key in required if key not in header_map]
-    if missing:
-        return jsonify({"error": f"缺少列：{', '.join(missing)}"}), 400
-    success_count = skipped_count = failed_count = changed_count = 0
-    errors: list[str] = []
-    for row_index, raw in enumerate(rows[header_idx + 1 :], start=header_idx + 2):
-        row_month = str(raw[header_map["月份"]]).strip() if header_map["月份"] < len(raw) and raw[header_map["月份"]] is not None else ""
-        emp_no = str(raw[header_map["工号"]]).strip() if header_map["工号"] < len(raw) and raw[header_map["工号"]] is not None else ""
-        if not row_month and not emp_no:
-            skipped_count += 1
-            continue
-        if row_month != month:
-            failed_count += 1
-            errors.append(f"第 {row_index} 行：月份 {row_month or '空'} 与当前月份 {month} 不一致")
-            continue
-        employee = Employee.query.filter_by(emp_no=emp_no).first()
-        if not employee or not employee.is_manager:
-            failed_count += 1
-            errors.append(f"第 {row_index} 行：工号 {emp_no or '空'} 未找到管理人员")
-            continue
-        updates: dict[str, object] = {}
-        for key in ("attendance_days", "injury_days", "business_trip_days", "marriage_days", "funeral_days"):
-            label = _MANAGER_OVERRIDE_LABELS[key]
-            value = raw[header_map[label]] if header_map[label] < len(raw) else None
-            parsed, error = _nullable_float({key: value}, key)
-            if error:
-                failed_count += 1
-                errors.append(f"第 {row_index} 行：{error}")
-                updates = {}
-                break
-            if value not in (None, ""):
-                updates[key] = parsed
-        if not updates and failed_count and len(errors) and errors[-1].startswith(f"第 {row_index} 行"):
-            continue
-        late_value = raw[header_map["迟到早退"]] if header_map["迟到早退"] < len(raw) else None
-        parsed_late, error = _nullable_int({"late_early_minutes": late_value}, "late_early_minutes")
-        if error:
-            failed_count += 1
-            errors.append(f"第 {row_index} 行：{error}")
-            continue
-        if late_value not in (None, ""):
-            updates["late_early_minutes"] = parsed_late
-        remark_value = raw[header_map["备注"]] if header_map["备注"] < len(raw) else None
-        if remark_value not in (None, ""):
-            updates["remark"] = str(remark_value).strip()
-        row_obj = ManagerAttendanceOverride.query.filter_by(emp_id=employee.id, month=month).first()
-        changed = _apply_manager_override_updates(row_obj, employee.id, month, updates, "import", file.filename)
-        if changed:
-            success_count += 1
-            changed_count += 1
-        else:
-            skipped_count += 1
-    db.session.commit()
-    return jsonify(_import_summary(success_count, skipped_count, failed_count, changed_count, errors))
 
 
 def _stat_key_for_month(month: str) -> tuple[int, str]:
@@ -1935,10 +1606,7 @@ def _fill_named_month_template(ws, values_by_name: dict[str, dict[str, object]],
         )
 
 
-@admin_bp.route("/manager-overtime/export", methods=["GET"])
-@admin_required
-def export_manager_overtime():
-    year = request.args.get("year", type=int) or datetime.now().year
+def _export_manager_overtime_workbook(year: int):
     values_by_name = _manager_overtime_values(year)
     month_keys = _manager_export_months(year)
     template_path = "/home/lewis/文档/考勤/加班单查询表.xlsx"
@@ -1959,6 +1627,33 @@ def export_manager_overtime():
         output,
         as_attachment=True,
         download_name=f"管理人员加班信息_{year}.xlsx",
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+
+
+def _export_manager_annual_leave_workbook(year: int):
+    values_by_name = _manager_annual_leave_values(year)
+    template_path = "/home/lewis/文档/考勤/加班单查询表.xlsx"
+    if os.path.exists(template_path):
+        wb = openpyxl.load_workbook(template_path)
+        ws = wb.active
+        ws.delete_cols(3)
+    else:
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.append(["部门", "姓名", "1月", "2月", "3月", "4月", "5月", "6月", "7月", "8月", "9月", "10月", "11月", "12月", "剩余年休天数", "备注"])
+    ws.title = "年休统计表"
+    ws.cell(1, 15).value = "剩余年休天数"
+    ws.cell(1, 16).value = "备注"
+    _fill_named_month_template(ws, values_by_name, "remaining", _annual_leave_value_keys())
+
+    output = BytesIO()
+    wb.save(output)
+    output.seek(0)
+    return send_file(
+        output,
+        as_attachment=True,
+        download_name=f"管理人员年休信息_{year}.xlsx",
         mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     )
 
@@ -1995,53 +1690,6 @@ def update_manager_annual_leave_record():
     row.remaining_days = float(data.get("remaining_days") or 0)
     db.session.commit()
     return jsonify({"status": "ok", "id": row.id})
-
-
-@admin_bp.route("/manager-annual-leave/template", methods=["GET"])
-@admin_required
-def download_manager_annual_leave_template():
-    return _download_manager_stat_template("annual_leave")
-
-
-@admin_bp.route("/manager-annual-leave/import", methods=["POST"])
-@admin_required
-def import_manager_annual_leave():
-    year = request.form.get("year", type=int) or datetime.now().year
-    locked_error = _ensure_year_months_unlocked(year, "导入管理人员年休统计")
-    if locked_error:
-        return locked_error
-    return _import_manager_stat_file("annual_leave", year)
-
-
-@admin_bp.route("/manager-annual-leave/export", methods=["GET"])
-@admin_required
-def export_manager_annual_leave():
-    year = request.args.get("year", type=int) or datetime.now().year
-    values_by_name = _manager_annual_leave_values(year)
-
-    template_path = "/home/lewis/文档/考勤/加班单查询表.xlsx"
-    if os.path.exists(template_path):
-        wb = openpyxl.load_workbook(template_path)
-        ws = wb.active
-        ws.delete_cols(3)
-    else:
-        wb = openpyxl.Workbook()
-        ws = wb.active
-        ws.append(["部门", "姓名", "1月", "2月", "3月", "4月", "5月", "6月", "7月", "8月", "9月", "10月", "11月", "12月", "剩余年休天数", "备注"])
-    ws.title = "年休统计表"
-    ws.cell(1, 15).value = "剩余年休天数"
-    ws.cell(1, 16).value = "备注"
-    _fill_named_month_template(ws, values_by_name, "remaining", _annual_leave_value_keys())
-
-    output = BytesIO()
-    wb.save(output)
-    output.seek(0)
-    return send_file(
-        output,
-        as_attachment=True,
-        download_name=f"管理人员年休信息_{year}.xlsx",
-        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    )
 
 
 @admin_bp.route("/departments", methods=["POST"])
@@ -2216,124 +1864,6 @@ def delete_unbound_departments():
     )
 
 
-@admin_bp.route("/departments/import", methods=["POST"])
-@admin_required
-def import_departments_xlsx():
-    file = request.files.get("file")
-    if not file or not file.filename:
-        return jsonify({"error": "file is required"}), 400
-    if not file.filename.lower().endswith(".xlsx"):
-        return jsonify({"error": "only .xlsx is supported"}), 400
-
-    save_path = os.path.join(current_app.config["UPLOAD_FOLDER"], f"departments_{int(datetime.now().timestamp())}.xlsx")
-    os.makedirs(os.path.dirname(save_path), exist_ok=True)
-    file.save(save_path)
-
-    wb = openpyxl.load_workbook(save_path, data_only=True)
-    ws = wb[wb.sheetnames[0]]
-    raw_rows = [list(r) for r in ws.iter_rows(values_only=True)]
-    if not raw_rows:
-        return jsonify({"error": "empty file"}), 400
-
-    header_idx, header_map = _parse_header_row(raw_rows, ["部门编号", "部门名称", "上级部门编号"])
-    dept_no_idx = header_map.get("部门编号", -1)
-    dept_name_idx = header_map.get("部门名称", -1)
-    parent_no_idx = header_map.get("上级部门编号", -1)
-    original_id_idx = header_map.get(_DEPARTMENT_ORIGINAL_ID_HEADER, -1)
-    if dept_no_idx < 0 or dept_name_idx < 0:
-        return jsonify({"error": "missing required headers: 部门编号, 部门名称"}), 400
-
-    imported = 0
-    pending_parent_links: list[tuple[Department, str]] = []
-    existing_departments = Department.query.order_by(Department.id.asc()).all()
-    departments_by_id = {department.id: department for department in existing_departments}
-    departments_by_dept_no = {
-        department.dept_no: department for department in existing_departments if department.dept_no
-    }
-    original_identities_by_id = _load_department_identity_metadata(wb)
-    staged_rows: list[tuple[Department, str, str, str]] = []
-    staged_departments_by_dept_no = dict(departments_by_dept_no)
-    used_temp_dept_nos = set(departments_by_dept_no)
-    temp_index = 1
-
-    for row_idx, row in enumerate(raw_rows[header_idx + 1 :], start=header_idx + 2):
-        dept_no = (str(row[dept_no_idx]).strip() if dept_no_idx < len(row) and row[dept_no_idx] is not None else "")
-        dept_name = (
-            str(row[dept_name_idx]).strip() if dept_name_idx < len(row) and row[dept_name_idx] is not None else ""
-        )
-        parent_no = (
-            str(row[parent_no_idx]).strip() if parent_no_idx >= 0 and parent_no_idx < len(row) and row[parent_no_idx] is not None else ""
-        )
-        original_id = (
-            _parse_department_original_id(row[original_id_idx])
-            if original_id_idx >= 0 and original_id_idx < len(row)
-            else None
-        )
-        if not dept_no or not dept_name:
-            continue
-
-        department = None
-        if original_id is not None:
-            original_identity = original_identities_by_id.get(original_id)
-            if original_identity:
-                candidate = departments_by_id.get(original_id)
-                if not _department_matches_original_identity(candidate, original_identity):
-                    db.session.rollback()
-                    return (
-                        jsonify({"error": f"第 {row_idx} 行的原始部门元数据与当前数据不匹配，请重新导出后再导入"}),
-                        400,
-                    )
-                department = candidate
-        if department is None:
-            department = staged_departments_by_dept_no.get(dept_no)
-        if department is None:
-            while True:
-                temp_dept_no = f"{_DEPARTMENT_IMPORT_TEMP_PREFIX}{temp_index:04d}"
-                temp_index += 1
-                if temp_dept_no not in used_temp_dept_nos:
-                    used_temp_dept_nos.add(temp_dept_no)
-                    break
-            department = Department(dept_no=temp_dept_no, dept_name=dept_name)
-            db.session.add(department)
-        if department.id is not None:
-            departments_by_id[department.id] = department
-        staged_departments_by_dept_no[dept_no] = department
-        staged_rows.append((department, dept_no, dept_name, parent_no))
-        imported += 1
-
-    for department, dept_no, _dept_name, _parent_no in staged_rows:
-        current_dept_no = (department.dept_no or "").strip()
-        if current_dept_no == dept_no or current_dept_no.startswith(_DEPARTMENT_IMPORT_TEMP_PREFIX):
-            continue
-        while True:
-            temp_dept_no = f"{_DEPARTMENT_IMPORT_TEMP_PREFIX}{temp_index:04d}"
-            temp_index += 1
-            if temp_dept_no not in used_temp_dept_nos:
-                used_temp_dept_nos.add(temp_dept_no)
-                break
-        department.dept_no = temp_dept_no
-
-    db.session.flush()
-    for department, dept_no, dept_name, parent_no in staged_rows:
-        department.dept_no = dept_no
-        department.dept_name = dept_name
-        pending_parent_links.append((department, parent_no))
-
-    db.session.flush()
-    for department, parent_no in pending_parent_links:
-        if not parent_no:
-            department.parent_id = None
-            continue
-        parent = Department.query.filter_by(dept_no=parent_no).first()
-        if not parent or parent.id == department.id:
-            department.parent_id = None
-            continue
-        department.parent_id = parent.id
-
-    db.session.commit()
-    return jsonify({"status": "ok", "imported": imported})
-
-
 def _build_departments_workbook(
     rows: list[tuple[str, str, str, str]],
     include_identity_metadata: bool = False,
@@ -2360,54 +1890,6 @@ def _build_departments_workbook(
         for row in rows:
             metadata_ws.append([row[3], row[0], row[1]])
     return wb
-
-
-@admin_bp.route("/departments/template", methods=["GET"])
-@admin_required
-def download_departments_template():
-    wb = _build_departments_workbook(
-        [
-            ("D001", "行政部", "", ""),
-            ("D002", "生产中心", "", ""),
-            ("D003", "生产一部", "D002", ""),
-        ]
-    )
-
-    output = BytesIO()
-    wb.save(output)
-    output.seek(0)
-    return send_file(
-        output,
-        as_attachment=True,
-        download_name="部门导入模板.xlsx",
-        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    )
-
-
-@admin_bp.route("/departments/export", methods=["GET"])
-@admin_required
-def export_departments_xlsx():
-    departments = Department.query.order_by(Department.dept_no.asc(), Department.dept_name.asc()).all()
-    rows = [
-        (
-            department.dept_no or "",
-            department.dept_name or "",
-            department.parent.dept_no if department.parent else "",
-            str(department.id),
-        )
-        for department in departments
-    ]
-    wb = _build_departments_workbook(rows, include_identity_metadata=True)
-
-    output = BytesIO()
-    wb.save(output)
-    output.seek(0)
-    return send_file(
-        output,
-        as_attachment=True,
-        download_name="部门导出.xlsx",
-        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    )
 
 
 @admin_bp.route("/employees", methods=["POST"])
@@ -2594,277 +2076,6 @@ def batch_operate_employees():
     return jsonify({"error": "unsupported action"}), 400
 
 
-@admin_bp.route("/employees/import", methods=["POST"])
-@admin_required
-def import_employees_xlsx():
-    file = request.files.get("file")
-    if not file or not file.filename:
-        return jsonify({"error": "file is required"}), 400
-    if not file.filename.lower().endswith(".xlsx"):
-        return jsonify({"error": "only .xlsx is supported"}), 400
-
-    save_path = os.path.join(current_app.config["UPLOAD_FOLDER"], f"employees_{int(datetime.now().timestamp())}.xlsx")
-    os.makedirs(os.path.dirname(save_path), exist_ok=True)
-    file.save(save_path)
-
-    # Parse lightweight employee template directly.
-    wb = openpyxl.load_workbook(save_path, data_only=True, read_only=True)
-    ws = wb[wb.sheetnames[0]]
-    raw_rows = [list(r) for r in ws.iter_rows(values_only=True)]
-    if not raw_rows:
-        return jsonify({"error": "empty file"}), 400
-
-    header_idx, header_map = _parse_header_row(raw_rows, ["人员编号", "人员姓名", "部门名称", "班次编号"])
-    emp_no_idx = header_map.get("人员编号", -1)
-    name_idx = header_map.get("人员姓名", -1)
-    dept_idx = header_map.get("部门名称", -1)
-    shift_idx = header_map.get("班次编号", -1)
-    manager_idx = header_map.get("是否管理人员", -1)
-    nursing_idx = header_map.get("是否哺乳假", -1)
-    employee_source_idx = header_map.get("员工考勤统计来源", -1)
-    manager_source_idx = header_map.get("管理人员考勤统计来源", -1)
-    if emp_no_idx < 0 or name_idx < 0:
-        return jsonify({"error": "missing required headers: 人员编号, 人员姓名"}), 400
-
-    imported = 0
-    for row in raw_rows[header_idx + 1 :]:
-        emp_no = (str(row[emp_no_idx]).strip() if emp_no_idx < len(row) and row[emp_no_idx] is not None else "")
-        name = (str(row[name_idx]).strip() if name_idx < len(row) and row[name_idx] is not None else "")
-        dept_name = (str(row[dept_idx]).strip() if dept_idx >= 0 and dept_idx < len(row) and row[dept_idx] is not None else "")
-        shift_no = (str(row[shift_idx]).strip() if shift_idx >= 0 and shift_idx < len(row) and row[shift_idx] is not None else "")
-        is_manager = parse_bool_zh(row[manager_idx]) if manager_idx >= 0 and manager_idx < len(row) else False
-        is_nursing = parse_bool_zh(row[nursing_idx]) if nursing_idx >= 0 and nursing_idx < len(row) else False
-        employee_stats_attendance_source = _parse_attendance_source(
-            row[employee_source_idx] if employee_source_idx >= 0 and employee_source_idx < len(row) else None,
-            ATTENDANCE_SOURCE_EMPLOYEE,
-        )
-        manager_stats_attendance_source = _parse_attendance_source(
-            row[manager_source_idx] if manager_source_idx >= 0 and manager_source_idx < len(row) else None,
-            ATTENDANCE_SOURCE_MANAGER,
-        )
-        if not emp_no or not name:
-            continue
-        department = _resolve_department(dept_name) if dept_name else None
-        shift = _resolve_shift(shift_no) if shift_no else None
-        employee = Employee.query.filter_by(emp_no=emp_no).first()
-        if not employee:
-            employee = Employee(
-                emp_no=emp_no,
-                name=name,
-                dept_id=department.id if department else None,
-                is_manager=is_manager,
-                is_nursing=is_nursing,
-                employee_stats_attendance_source=employee_stats_attendance_source,
-                manager_stats_attendance_source=manager_stats_attendance_source,
-            )
-            db.session.add(employee)
-            db.session.flush()
-        else:
-            employee.name = name
-            employee.dept_id = department.id if department else None
-            employee.is_manager = is_manager
-            employee.is_nursing = is_nursing
-            employee.employee_stats_attendance_source = employee_stats_attendance_source
-            employee.manager_stats_attendance_source = manager_stats_attendance_source
-        _assign_employee_shift(employee, shift)
-        imported += 1
-
-    db.session.commit()
-    return jsonify({"status": "ok", "imported": imported})
-
-
-@admin_bp.route("/employees/template", methods=["GET"])
-@admin_required
-def download_employees_template():
-    wb = openpyxl.Workbook()
-    ws = wb.active
-    ws.title = "员工导入模板"
-    ws.append(["人员编号", "人员姓名", "部门名称", "班次编号", "是否管理人员", "是否哺乳假", "员工考勤统计来源", "管理人员考勤统计来源"])
-    ws.append(["1001001", "张三", "生产中心", "A00001", "否", "否", "员工考勤源文件取值", "管理人员考勤源文件取值"])
-    ws.append(["1001002", "李四", "行政部", "A00002", "是", "是", "员工考勤源文件取值", "管理人员考勤源文件取值"])
-
-    output = BytesIO()
-    wb.save(output)
-    output.seek(0)
-    return send_file(
-        output,
-        as_attachment=True,
-        download_name="员工导入模板.xlsx",
-        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    )
-
-
-@admin_bp.route("/employees/export", methods=["GET"])
-@admin_required
-def export_employees_xlsx():
-    wb = openpyxl.Workbook()
-    ws = wb.active
-    ws.title = "员工主数据导出"
-    ws.append(["人员编号", "人员姓名", "部门名称", "班次编号", "是否管理人员", "是否哺乳假", "员工考勤统计来源", "管理人员考勤统计来源"])
-
-    requested_ids: list[int] = []
-    for raw in request.args.getlist("ids"):
-        for part in str(raw).split(","):
-            text = part.strip()
-            if text.isdigit():
-                requested_ids.append(int(text))
-
-    query = Employee.query
-    if requested_ids:
-        query = query.filter(Employee.id.in_(requested_ids))
-
-    employees = query.order_by(Employee.emp_no.asc(), Employee.name.asc()).all()
-    for employee in employees:
-        shift = employee.shift_assignment.shift if employee.shift_assignment else None
-        ws.append([
-            employee.emp_no or "",
-            employee.name or "",
-            employee.department.dept_name if employee.department else "",
-            shift.shift_no if shift else "",
-            "是" if employee.is_manager else "否",
-            "是" if employee.is_nursing else "否",
-            "管理人员考勤源文件取值" if employee.employee_stats_attendance_source == ATTENDANCE_SOURCE_MANAGER else ("自动回退" if employee.employee_stats_attendance_source == ATTENDANCE_SOURCE_AUTO_FALLBACK else "员工考勤源文件取值"),
-            "员工考勤源文件取值" if employee.manager_stats_attendance_source == ATTENDANCE_SOURCE_EMPLOYEE else ("自动回退" if employee.manager_stats_attendance_source == ATTENDANCE_SOURCE_AUTO_FALLBACK else "管理人员考勤源文件取值"),
-        ])
-
-    output = BytesIO()
-    wb.save(output)
-    output.seek(0)
-    return send_file(
-        output,
-        as_attachment=True,
-        download_name="员工主数据导出.xlsx",
-        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    )
-
-
-@admin_bp.route("/users/readonly", methods=["POST"])
-@admin_required
-def create_readonly_user():
-    data = request.json or {}
-    username = (data.get("username") or "").strip()
-    password = (data.get("password") or "").strip()
-    emp_ids = data.get("emp_ids") or []
-    dept_ids = data.get("dept_ids") or []
-
-    if not username or not password:
-        return jsonify({"error": "username and password are required"}), 400
-    if User.query.filter_by(username=username).first():
-        return jsonify({"error": "username already exists"}), 400
-
-    user = User(username=username, role="readonly")
-    user.set_password(password)
-    user.page_permissions = _parse_page_permissions(data, "readonly")
-    db.session.add(user)
-    db.session.flush()
-
-    for emp_id in emp_ids:
-        if Employee.query.get(emp_id):
-            db.session.add(UserEmployeeAssignment(user_id=user.id, emp_id=emp_id))
-    for dept_id in dept_ids:
-        if Department.query.get(dept_id):
-            db.session.add(UserDepartmentAssignment(user_id=user.id, dept_id=dept_id))
-
-    db.session.commit()
-    return jsonify({"status": "ok", "user_id": user.id})
-
-
-@admin_bp.route("/users", methods=["GET"])
-@admin_required
-def users_list():
-    users = User.query.order_by(User.id.desc()).all()
-    return jsonify([_serialize_user(u) for u in users])
-
-
-@admin_bp.route("/users", methods=["POST"])
-@admin_required
-def create_user():
-    data = request.json or {}
-    username = (data.get("username") or "").strip()
-    password = (data.get("password") or "").strip()
-    role = (data.get("role") or "readonly").strip() or "readonly"
-    emp_ids = data.get("emp_ids") or []
-    dept_ids = data.get("dept_ids") or []
-
-    if role not in {"admin", "readonly"}:
-        return jsonify({"error": "invalid role"}), 400
-    if not username or not password:
-        return jsonify({"error": "username and password are required"}), 400
-    if User.query.filter_by(username=username).first():
-        return jsonify({"error": "username already exists"}), 400
-
-    user = User(username=username, role=role)
-    user.set_password(password)
-    user.page_permissions = _parse_page_permissions(data, role)
-    db.session.add(user)
-    db.session.flush()
-    _sync_user_assignments(user, [int(x) for x in emp_ids if str(x).isdigit()])
-    _sync_user_department_assignments(user, [int(x) for x in dept_ids if str(x).isdigit()])
-    db.session.commit()
-    return jsonify({"status": "ok", "user": _serialize_user(user)})
-
-
-@admin_bp.route("/users/<int:user_id>", methods=["PUT"])
-@admin_required
-def update_user(user_id: int):
-    data = request.json or {}
-    role = (data.get("role") or "").strip()
-    emp_ids = data.get("emp_ids")
-    dept_ids = data.get("dept_ids")
-    user = User.query.get_or_404(user_id)
-    next_role = role or user.role
-
-    if user.id == g.current_user.id and role and role != "admin":
-        return jsonify({"error": "cannot downgrade current admin"}), 400
-
-    if role:
-        if role not in {"admin", "readonly"}:
-            return jsonify({"error": "invalid role"}), 400
-        user.role = role
-
-    user.page_permissions = _parse_page_permissions(data, next_role, existing_user=user)
-
-    if emp_ids is not None:
-        parsed_ids = [int(x) for x in emp_ids if str(x).isdigit()]
-        _sync_user_assignments(user, parsed_ids)
-    if dept_ids is not None:
-        parsed_ids = [int(x) for x in dept_ids if str(x).isdigit()]
-        _sync_user_department_assignments(user, parsed_ids)
-
-    db.session.commit()
-    return jsonify({"status": "ok", "user": _serialize_user(user)})
-
-
-@admin_bp.route("/users/<int:user_id>/password", methods=["PUT"])
-@admin_required
-def reset_user_password(user_id: int):
-    data = request.json or {}
-    password = (data.get("password") or "").strip()
-    if not password:
-        return jsonify({"error": "password is required"}), 400
-
-    user = User.query.get_or_404(user_id)
-    user.set_password(password)
-    db.session.commit()
-    return jsonify({"status": "ok"})
-
-
-@admin_bp.route("/users/<int:user_id>", methods=["DELETE"])
-@admin_required
-def delete_user(user_id: int):
-    user = User.query.get_or_404(user_id)
-    if user.id == g.current_user.id:
-        return jsonify({"error": "cannot delete current user"}), 400
-
-    admin_count = User.query.filter_by(role="admin").count()
-    if user.role == "admin" and admin_count <= 1:
-        return jsonify({"error": "cannot delete last admin"}), 400
-
-    db.session.delete(user)
-    db.session.commit()
-    return jsonify({"status": "ok"})
-
-
 @admin_bp.route("/daily-records/<int:record_id>/annotate", methods=["POST"])
 @admin_required
 def annotate_record(record_id: int):
@@ -2875,16 +2086,6 @@ def annotate_record(record_id: int):
     db.session.commit()
     return jsonify({"status": "ok"})
 
-
-@admin_bp.route("/employee-attendance-overrides")
-@admin_required
-def employee_attendance_overrides_page():
-    employees = (
-        Employee.query.filter_by(is_manager=False)
-        .order_by(Employee.dept_id.asc(), Employee.emp_no.asc(), Employee.name.asc())
-        .all()
-    )
-    return render_template("admin/employee_attendance_overrides.html", employees=employees)
 
 def _employee_override_values(override: EmployeeAttendanceOverride | None) -> dict[str, float | int | None]:
     return {field: getattr(override, field) if override else None for field in _EMPLOYEE_OVERRIDE_FIELDS}
@@ -2949,185 +2150,17 @@ def _employee_override_response(emp_id: int, month: str) -> tuple[dict[str, obje
     }, 200
 
 
-@admin_bp.route("/employee-attendance-overrides/record", methods=["GET"])
-@admin_required
-def employee_attendance_override_record():
-    emp_id = request.args.get("emp_id", type=int) or 0
-    month = _validate_month(request.args.get("month"))
-    if not emp_id or not month:
-        return jsonify({"error": "请选择员工和有效月份"}), 400
-    payload, status = _employee_override_response(emp_id, month)
-    return jsonify(payload), status
-
-
-@admin_bp.route("/employee-attendance-overrides/record", methods=["PUT"])
-@admin_required
-def save_employee_attendance_override_record():
-    data = request.json or {}
-    emp_id = int(data.get("emp_id") or 0)
-    month = _validate_month(data.get("month"))
-    if not emp_id or not month:
-        return jsonify({"error": "请选择员工和有效月份"}), 400
-    account_set = _account_set_for_month(month)
-    locked_error = _ensure_account_set_unlocked(account_set, "保存员工考勤修正")
-    if locked_error:
-        return locked_error
-    employee = Employee.query.get(emp_id)
-    if not employee or employee.is_manager:
-        return jsonify({"error": "员工不存在或是管理人员"}), 400
-
-    values: dict[str, float | int | None] = {}
-    for key in ("attendance_days", "work_hours"):
-        value, error = _nullable_float(data, key)
-        if error:
-            return jsonify({"error": error}), 400
-        values[key] = value
-    for key in ("half_days", "late_early_minutes"):
-        value, error = _nullable_int(data, key)
-        if error:
-            return jsonify({"error": error}), 400
-        values[key] = value
-
-    row = EmployeeAttendanceOverride.query.filter_by(emp_id=emp_id, month=month).first()
-    updates = dict(values)
-    updates["remark"] = (data.get("remark") or "").strip()
-    if _apply_employee_override_updates(row, emp_id, month, updates, "manual_save"):
-        db.session.commit()
-
-    payload, status = _employee_override_response(emp_id, month)
-    return jsonify(payload), status
-
-
-@admin_bp.route("/employee-attendance-overrides/record", methods=["DELETE"])
-@admin_required
-def delete_employee_attendance_override_record():
-    emp_id = request.args.get("emp_id", type=int) or 0
-    month = _validate_month(request.args.get("month"))
-    if not emp_id or not month:
-        return jsonify({"error": "请选择员工和有效月份"}), 400
-    account_set = _account_set_for_month(month)
-    locked_error = _ensure_account_set_unlocked(account_set, "清空员工考勤修正")
-    if locked_error:
-        return locked_error
-    row = EmployeeAttendanceOverride.query.filter_by(emp_id=emp_id, month=month).first()
-    if row:
-        before_values = _override_state_from_row(row, _EMPLOYEE_OVERRIDE_FIELDS)
-        after_values = _override_state_from_row(None, _EMPLOYEE_OVERRIDE_FIELDS)
-        _record_override_history("employee", emp_id, month, "clear", before_values, after_values)
-        db.session.delete(row)
-        db.session.commit()
-    payload, status = _employee_override_response(emp_id, month)
-    return jsonify(payload), status
-
-
-@admin_bp.route("/employee-attendance-overrides/history", methods=["GET"])
-@admin_required
-def employee_attendance_override_history():
-    month = _validate_month(request.args.get("month"))
-    if not month:
-        return jsonify({"error": "请选择有效月份"}), 400
-    return jsonify({"rows": _history_rows_for_month("employee", month)})
-
-
-@admin_bp.route("/employee-attendance-overrides/template", methods=["GET"])
-@admin_required
-def download_employee_attendance_override_template():
-    month = _validate_month(request.args.get("month")) or datetime.now().strftime("%Y-%m")
-    return _override_workbook_response(_build_employee_override_export_workbook(month, include_real_rows=False), "员工考勤修正导入示例.xlsx")
-
-
-@admin_bp.route("/employee-attendance-overrides/export", methods=["GET"])
-@admin_required
-def export_employee_attendance_overrides():
-    month = _validate_month(request.args.get("month"))
-    if not month:
-        return jsonify({"error": "请选择有效月份"}), 400
-    return _override_workbook_response(_build_employee_override_export_workbook(month, include_real_rows=True), f"员工考勤修正导出_{month}.xlsx")
-
-
-@admin_bp.route("/employee-attendance-overrides/import", methods=["POST"])
-@admin_required
-def import_employee_attendance_overrides():
-    month = _validate_month(request.form.get("month"))
-    if not month:
-        return jsonify({"error": "请选择有效月份"}), 400
-    account_set = _account_set_for_month(month)
-    locked_error = _ensure_account_set_unlocked(account_set, "导入员工考勤修正")
-    if locked_error:
-        return locked_error
-    file = request.files.get("file")
-    if not file or not file.filename:
-        return jsonify({"error": "请选择导入文件"}), 400
-    wb = openpyxl.load_workbook(file, data_only=True, read_only=True)
-    ws = wb[wb.sheetnames[0]]
-    rows = [list(r) for r in ws.iter_rows(values_only=True)]
-    if not rows:
-        return jsonify({"error": "empty file"}), 400
-    header_idx, header_map = _parse_header_row(rows, ["月份", "工号", "姓名", "考勤天数", "备注"])
-    required = ["月份", "工号", "姓名", "考勤天数", "工时", "半勤天数", "迟到早退", "备注"]
-    missing = [key for key in required if key not in header_map]
-    if missing:
-        return jsonify({"error": f"缺少列：{', '.join(missing)}"}), 400
-    success_count = skipped_count = failed_count = changed_count = 0
-    errors: list[str] = []
-    for row_index, raw in enumerate(rows[header_idx + 1 :], start=header_idx + 2):
-        row_month = str(raw[header_map["月份"]]).strip() if header_map["月份"] < len(raw) and raw[header_map["月份"]] is not None else ""
-        emp_no = str(raw[header_map["工号"]]).strip() if header_map["工号"] < len(raw) and raw[header_map["工号"]] is not None else ""
-        if not row_month and not emp_no:
-            skipped_count += 1
-            continue
-        if row_month != month:
-            failed_count += 1
-            errors.append(f"第 {row_index} 行：月份 {row_month or '空'} 与当前月份 {month} 不一致")
-            continue
-        employee = Employee.query.filter_by(emp_no=emp_no).first()
-        if not employee or employee.is_manager:
-            failed_count += 1
-            errors.append(f"第 {row_index} 行：工号 {emp_no or '空'} 未找到普通员工")
-            continue
-        updates: dict[str, object] = {}
-        numeric_error = False
-        for key in ("attendance_days", "work_hours"):
-            label = _EMPLOYEE_OVERRIDE_LABELS[key]
-            value = raw[header_map[label]] if header_map[label] < len(raw) else None
-            parsed, error = _nullable_float({key: value}, key)
-            if error:
-                failed_count += 1
-                errors.append(f"第 {row_index} 行：{error}")
-                numeric_error = True
-                break
-            if value not in (None, ""):
-                updates[key] = parsed
-        if numeric_error:
-            continue
-        for key in ("half_days", "late_early_minutes"):
-            label = _EMPLOYEE_OVERRIDE_LABELS[key]
-            value = raw[header_map[label]] if header_map[label] < len(raw) else None
-            parsed, error = _nullable_int({key: value}, key)
-            if error:
-                failed_count += 1
-                errors.append(f"第 {row_index} 行：{error}")
-                numeric_error = True
-                break
-            if value not in (None, ""):
-                updates[key] = parsed
-        if numeric_error:
-            continue
-        remark_value = raw[header_map["备注"]] if header_map["备注"] < len(raw) else None
-        if remark_value not in (None, ""):
-            updates["remark"] = str(remark_value).strip()
-        row_obj = EmployeeAttendanceOverride.query.filter_by(emp_id=employee.id, month=month).first()
-        changed = _apply_employee_override_updates(row_obj, employee.id, month, updates, "import", file.filename)
-        if changed:
-            success_count += 1
-            changed_count += 1
-        else:
-            skipped_count += 1
-    db.session.commit()
-    return jsonify(_import_summary(success_count, skipped_count, failed_count, changed_count, errors))
-
-
 @admin_bp.route("/")
 @admin_required
 def admin_root():
     return redirect("/admin/dashboard")
+
+
+from .admin_accounts import register_admin_account_routes
+from .admin_attendance_overrides import register_admin_attendance_override_routes
+from .admin_imports import register_admin_import_routes
+
+
+register_admin_account_routes(admin_bp)
+register_admin_attendance_override_routes(admin_bp)
+register_admin_import_routes(admin_bp)

@@ -198,6 +198,38 @@ class AttendanceOverrideFeatureTests(unittest.TestCase):
         names = {row["employee_name"] for row in rows}
         self.assertEqual(names, {"员工甲", "员工乙"})
 
+    def test_admin_route_extraction_modules_preserve_admin_contract(self) -> None:
+        from routes.admin_accounts import register_admin_account_routes
+        from routes.admin_attendance_overrides import register_admin_attendance_override_routes
+        from routes.admin_imports import register_admin_import_routes
+
+        self.assertTrue(callable(register_admin_account_routes))
+        self.assertTrue(callable(register_admin_attendance_override_routes))
+        self.assertTrue(callable(register_admin_import_routes))
+
+        rules: dict[str, set[str]] = {}
+        for rule in self.app.url_map.iter_rules():
+            if not rule.rule.startswith("/admin/"):
+                continue
+            rules.setdefault(rule.rule, set()).update(rule.methods - {"HEAD", "OPTIONS"})
+
+        self.assertEqual(rules["/admin/users"], {"GET", "POST"})
+        self.assertEqual(rules["/admin/users/<int:user_id>"], {"DELETE", "PUT"})
+        self.assertEqual(rules["/admin/employee-attendance-overrides/record"], {"DELETE", "GET", "PUT"})
+        self.assertEqual(rules["/admin/manager-attendance-overrides/import"], {"POST"})
+        self.assertEqual(rules["/admin/departments/import"], {"POST"})
+        self.assertEqual(rules["/admin/departments/template"], {"GET"})
+        self.assertEqual(rules["/admin/employees/import"], {"POST"})
+
+    def test_admin_module_exports_symbols_needed_by_extracted_routes(self) -> None:
+        from routes import admin as admin_module
+
+        self.assertIsInstance(admin_module.MANAGER_PAGE_PERMISSION_KEYS, (list, tuple))
+        self.assertIsInstance(admin_module.EMPLOYEE_PAGE_PERMISSION_KEYS, (list, tuple))
+        self.assertIsInstance(admin_module.PAGE_PERMISSION_LABELS, dict)
+        self.assertTrue(callable(admin_module.parse_bool_zh))
+        self.assertTrue(admin_module.parse_bool_zh("是"))
+
     def test_manager_example_download_returns_expected_headers(self) -> None:
         res = self.client.get("/admin/manager-attendance-overrides/template?month=2026-05")
         self.assertEqual(res.status_code, 200)
@@ -209,6 +241,104 @@ class AttendanceOverrideFeatureTests(unittest.TestCase):
         self.assertIn("工号", headers)
         self.assertIn("出勤天数", headers)
         self.assertIn("备注", headers)
+
+    def test_manager_overtime_export_download_returns_workbook(self) -> None:
+        res = self.client.get("/admin/manager-overtime/export?year=2026")
+        self.assertEqual(res.status_code, 200)
+
+        wb = openpyxl.load_workbook(io.BytesIO(res.data))
+        ws = wb.active
+        headers = [cell.value for cell in ws[1]]
+        self.assertIn("前年累积天数", headers)
+        self.assertIn("剩余调休天数", headers)
+
+    def test_manager_annual_leave_export_download_returns_workbook(self) -> None:
+        res = self.client.get("/admin/manager-annual-leave/export?year=2026")
+        self.assertEqual(res.status_code, 200)
+
+        wb = openpyxl.load_workbook(io.BytesIO(res.data))
+        ws = wb.active
+        headers = [cell.value for cell in ws[1]]
+        self.assertIn("1月", headers)
+        self.assertIn("剩余年休天数", headers)
+
+    def test_manager_overtime_import_defaults_year_when_omitted(self) -> None:
+        res = self.client.post("/admin/manager-overtime/import")
+        self.assertEqual(res.status_code, 400)
+        self.assertEqual(res.get_json()["error"], "请选择要导入的Excel文件")
+
+    def test_manager_overtime_import_checks_locked_prev_dec_when_year_omitted(self) -> None:
+        current_year = __import__("datetime").datetime.now().year
+        with self.app.app_context():
+            db.session.add(
+                AccountSet(
+                    month=f"{current_year - 1}-12",
+                    name=f"{current_year - 1}-12",
+                    is_active=False,
+                    is_locked=True,
+                )
+            )
+            db.session.commit()
+
+        res = self.client.post("/admin/manager-overtime/import")
+        self.assertEqual(res.status_code, 400)
+        self.assertIn(f"{current_year - 1}-12 账套已锁定，不能导入管理人员加班统计", res.get_json()["error"])
+
+    def test_employee_import_preserves_boolean_parsing_through_admin_import_routes(self) -> None:
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "员工导入模板"
+        ws.append(
+            [
+                "人员编号",
+                "人员姓名",
+                "部门名称",
+                "班次编号",
+                "是否管理人员",
+                "是否哺乳假",
+                "员工考勤统计来源",
+                "管理人员考勤统计来源",
+            ]
+        )
+        ws.append(["E003", "员工丙", "行政部", "", "是", "是", "员工考勤源文件取值", "管理人员考勤源文件取值"])
+        buf = io.BytesIO()
+        wb.save(buf)
+        buf.seek(0)
+
+        res = self.client.post(
+            "/admin/employees/import",
+            data={"file": (buf, "employees-import.xlsx")},
+            content_type="multipart/form-data",
+        )
+        self.assertEqual(res.status_code, 200)
+
+        with self.app.app_context():
+            employee = Employee.query.filter_by(emp_no="E003").first()
+            self.assertIsNotNone(employee)
+            self.assertTrue(employee.is_manager)
+            self.assertTrue(employee.is_nursing)
+
+    def test_manager_annual_leave_import_defaults_year_when_omitted(self) -> None:
+        res = self.client.post("/admin/manager-annual-leave/import")
+        self.assertEqual(res.status_code, 400)
+        self.assertEqual(res.get_json()["error"], "请选择要导入的Excel文件")
+
+    def test_manager_annual_leave_import_checks_locked_months_when_year_omitted(self) -> None:
+        current_year = __import__("datetime").datetime.now().year
+        with self.app.app_context():
+            db.session.add(
+                AccountSet(
+                    month=f"{current_year}-01",
+                    name=f"{current_year}-01",
+                    is_active=False,
+                    is_locked=True,
+                )
+            )
+            db.session.commit()
+
+        res = self.client.post("/admin/manager-annual-leave/import")
+        self.assertEqual(res.status_code, 400)
+        self.assertIn(f"{current_year}-01 账套已锁定，不能导入管理人员年休统计", res.get_json()["error"])
 
     def test_departments_template_download_uses_importable_headers(self) -> None:
         res = self.client.get("/admin/departments/template")
