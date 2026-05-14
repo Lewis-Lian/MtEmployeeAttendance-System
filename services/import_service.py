@@ -1,15 +1,12 @@
 from __future__ import annotations
 
 import os
-import csv
-import glob
 import re
 import shutil
-import subprocess
-import tempfile
 from typing import Any
 
 from models import db
+from services.import_pipeline import classify_import_file, normalize_import_rows
 from models.department import Department
 from models.employee import ATTENDANCE_SOURCE_EMPLOYEE, ATTENDANCE_SOURCE_MANAGER, Employee
 from models.shift import Shift
@@ -18,7 +15,6 @@ from models.monthly_report import MonthlyReport
 from models.overtime import OvertimeRecord
 from models.leave import LeaveRecord
 from models.annual_leave import AnnualLeave
-from utils.excel_parser import ExcelParser
 from utils.helpers import (
     clean_text,
     parse_bool_zh,
@@ -50,137 +46,34 @@ class ImportService:
     @staticmethod
     def import_file(file_path: str) -> dict:
         filename = os.path.basename(file_path)
-        cleanup_dir: str | None = None
-        rows: list[list[Any]] = []
+        file_type = classify_import_file(filename)
+        normalized = normalize_import_rows(file_path, file_type=file_type)
 
         try:
-            try:
-                rows = ExcelParser.read_rows(file_path)
-            except Exception:
-                rows = []
-
-            # Some legacy xls files fail in xlrd; fallback to libreoffice conversion.
-            if (not rows) and file_path.lower().endswith(".xls"):
-                converted_path, tmpdir = ImportService._convert_xls_to_xlsx(file_path)
-                if converted_path:
-                    cleanup_dir = tmpdir
-                    rows = ExcelParser.read_rows(converted_path)
-
+            rows = normalized.rows
             if not rows:
                 return {"status": "error", "message": "Empty file or unsupported xls structure"}
 
-            if "加班" in filename:
+            if file_type == "overtime":
                 stats = ImportService._import_overtime(rows)
                 return {"status": "ok", "file_type": "overtime", **stats}
-            if "请假" in filename:
+            if file_type == "leave":
                 stats = ImportService._import_leave(rows)
                 return {"status": "ok", "file_type": "leave", **stats}
-            if "管理人员" in filename and "月报" in filename:
-                rows = ImportService._ensure_manager_rows(file_path, rows)
+            if file_type == "manager_monthly":
                 stats = ImportService._import_manager_monthly_report(rows, filename)
                 return {"status": "ok", "file_type": "manager_monthly", **stats}
-            if "管理人员" in filename:
-                rows = ImportService._ensure_manager_rows(file_path, rows)
+            if file_type == "manager_daily":
                 stats = ImportService._import_manager_daily_records(rows)
                 return {"status": "ok", "file_type": "manager_daily", **stats}
-            if "月报" in filename:
+            if file_type == "monthly":
                 stats = ImportService._import_monthly_report(rows, filename)
                 return {"status": "ok", "file_type": "monthly", **stats}
             stats = ImportService._import_daily_records(rows)
             return {"status": "ok", "file_type": "daily", **stats}
         finally:
-            if cleanup_dir and os.path.isdir(cleanup_dir):
-                shutil.rmtree(cleanup_dir, ignore_errors=True)
-
-    @staticmethod
-    def _convert_xls_to_xlsx(file_path: str) -> tuple[str | None, str | None]:
-        tmpdir = tempfile.mkdtemp(prefix="attendance_xls_")
-        try:
-            profile_dir = os.path.join(tmpdir, "lo-profile")
-            os.makedirs(profile_dir, exist_ok=True)
-            env = os.environ.copy()
-            env["HOME"] = tmpdir
-            env["XDG_CONFIG_HOME"] = tmpdir
-            subprocess.run(
-                [
-                    "libreoffice",
-                    f"-env:UserInstallation=file://{profile_dir}",
-                    "--headless",
-                    "--convert-to",
-                    "xlsx",
-                    "--outdir",
-                    tmpdir,
-                    file_path,
-                ],
-                check=False,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True,
-                env=env,
-            )
-            basename = os.path.splitext(os.path.basename(file_path))[0]
-            converted_path = os.path.join(tmpdir, f"{basename}.xlsx")
-            if os.path.exists(converted_path):
-                return converted_path, tmpdir
-            shutil.rmtree(tmpdir, ignore_errors=True)
-            return None, None
-        except Exception:
-            shutil.rmtree(tmpdir, ignore_errors=True)
-            return None, None
-
-    @staticmethod
-    def _read_csv_rows(file_path: str) -> list[list[Any]]:
-        with open(file_path, newline="", encoding="utf-8-sig") as f:
-            return [list(row) for row in csv.reader(f)]
-
-    @staticmethod
-    def _convert_to_csv_rows(file_path: str) -> list[list[Any]]:
-        tmpdir = tempfile.mkdtemp(prefix="attendance_csv_")
-        try:
-            profile_dir = os.path.join(tmpdir, "lo-profile")
-            os.makedirs(profile_dir, exist_ok=True)
-            env = os.environ.copy()
-            env["HOME"] = tmpdir
-            env["XDG_CONFIG_HOME"] = tmpdir
-            subprocess.run(
-                [
-                    "libreoffice",
-                    f"-env:UserInstallation=file://{profile_dir}",
-                    "--headless",
-                    "--convert-to",
-                    "csv",
-                    "--outdir",
-                    tmpdir,
-                    file_path,
-                ],
-                check=False,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True,
-                env=env,
-            )
-            basename = os.path.splitext(os.path.basename(file_path))[0]
-            converted_path = os.path.join(tmpdir, f"{basename}.csv")
-            if os.path.exists(converted_path):
-                return ImportService._read_csv_rows(converted_path)
-            candidates = glob.glob(os.path.join(tmpdir, "*.csv"))
-            if candidates:
-                return ImportService._read_csv_rows(candidates[0])
-            return []
-        finally:
-            shutil.rmtree(tmpdir, ignore_errors=True)
-
-    @staticmethod
-    def _ensure_manager_rows(file_path: str, rows: list[list[Any]]) -> list[list[Any]]:
-        has_manager_header = any(
-            "姓名" in {clean_text(value) for value in row if clean_text(value)}
-            and "部门" in {clean_text(value) for value in row if clean_text(value)}
-            for row in rows[:8]
-        )
-        if has_manager_header:
-            return rows
-        converted = ImportService._convert_to_csv_rows(file_path)
-        return converted or rows
+            if normalized.cleanup_dir and os.path.isdir(normalized.cleanup_dir):
+                shutil.rmtree(normalized.cleanup_dir, ignore_errors=True)
 
     @staticmethod
     def _build_header_map(header: list[Any]) -> dict[str, int]:
