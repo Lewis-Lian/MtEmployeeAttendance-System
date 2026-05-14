@@ -1,0 +1,8 @@
+{
+  "enabledPlugins": {
+    "superpowers@claude-plugins-official": true,
+    "superpowers@superpowers-marketplace": true,
+    "andrej-karpathy-skills@karpathy-skills": true,
+    "claude-hud@claude-hud": true
+  }
+}
