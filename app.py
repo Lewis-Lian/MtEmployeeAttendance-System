@@ -1,14 +1,11 @@
 from __future__ import annotations
 
 import os
-import hashlib
 
 from dotenv import load_dotenv
 from flask import Flask
 from flask_migrate import Migrate
-from sqlalchemy import inspect, text
 
-from config import Config
 from models import db
 from models.user import User, UserEmployeeAssignment, UserDepartmentAssignment
 from models.department import Department
@@ -27,13 +24,17 @@ from models.attendance_override_history import AttendanceOverrideHistory
 from models.account_set import AccountSet, AccountSetImport
 from routes import register_routes
 
-
-load_dotenv()
+_compat_app: Flask | None = None
 
 
 def create_app() -> Flask:
+    load_dotenv()
+
+    from config import Config
+
     app = Flask(__name__)
     app.config.from_object(Config)
+    Config.validate()
 
     os.makedirs(app.config["UPLOAD_FOLDER"], exist_ok=True)
 
@@ -41,102 +42,22 @@ def create_app() -> Flask:
     Migrate(app, db)
     register_routes(app)
 
-    with app.app_context():
-        db.create_all()
-        _ensure_schema_compatibility()
-        _ensure_default_admin()
-
     return app
 
 
-def _ensure_default_admin() -> None:
-    admin = User.query.filter_by(username="admin").first()
-    if not admin:
-        admin = User(username="admin", role="admin")
-        admin.set_password("admin123")
-        db.session.add(admin)
-        db.session.commit()
-    elif admin.password_hash.startswith("scrypt:") and not hasattr(hashlib, "scrypt"):
-        admin.set_password("admin123")
-        db.session.commit()
+def _get_compat_app() -> Flask:
+    global _compat_app
+    if _compat_app is None:
+        _compat_app = create_app()
+    return _compat_app
 
 
-def _ensure_schema_compatibility() -> None:
-    inspector = inspect(db.engine)
-    try:
-        columns = {c["name"] for c in inspector.get_columns("departments")}
-    except Exception:
-        return
-    if "parent_id" not in columns:
-        db.session.execute(text("ALTER TABLE departments ADD COLUMN parent_id INTEGER"))
-        db.session.execute(text("CREATE INDEX IF NOT EXISTS ix_departments_parent_id ON departments(parent_id)"))
-        db.session.commit()
-    if "is_locked" not in columns:
-        db.session.execute(text("ALTER TABLE departments ADD COLUMN is_locked BOOLEAN NOT NULL DEFAULT 0"))
-        db.session.commit()
-
-    employee_columns = {c["name"] for c in inspector.get_columns("employees")}
-    if "is_manager" not in employee_columns:
-        db.session.execute(text("ALTER TABLE employees ADD COLUMN is_manager BOOLEAN NOT NULL DEFAULT 0"))
-        db.session.commit()
-    if "is_nursing" not in employee_columns:
-        db.session.execute(text("ALTER TABLE employees ADD COLUMN is_nursing BOOLEAN NOT NULL DEFAULT 0"))
-        db.session.commit()
-    if "include_in_manager_stats" not in employee_columns:
-        db.session.execute(text("ALTER TABLE employees ADD COLUMN include_in_manager_stats BOOLEAN NOT NULL DEFAULT 0"))
-        db.session.commit()
-    if "employee_stats_attendance_source" not in employee_columns:
-        db.session.execute(
-            text("ALTER TABLE employees ADD COLUMN employee_stats_attendance_source VARCHAR(20) NOT NULL DEFAULT 'employee'")
-        )
-        db.session.commit()
-    if "manager_stats_attendance_source" not in employee_columns:
-        db.session.execute(
-            text("ALTER TABLE employees ADD COLUMN manager_stats_attendance_source VARCHAR(20) NOT NULL DEFAULT 'manager'")
-        )
-        db.session.commit()
-
-    account_set_columns = {c["name"] for c in inspector.get_columns("account_sets")}
-    if "factory_rest_days" not in account_set_columns:
-        db.session.execute(text("ALTER TABLE account_sets ADD COLUMN factory_rest_days FLOAT NOT NULL DEFAULT 0"))
-        db.session.commit()
-    if "monthly_benefit_days" not in account_set_columns:
-        db.session.execute(text("ALTER TABLE account_sets ADD COLUMN monthly_benefit_days FLOAT NOT NULL DEFAULT 0"))
-        db.session.commit()
-    if "is_locked" not in account_set_columns:
-        db.session.execute(text("ALTER TABLE account_sets ADD COLUMN is_locked BOOLEAN NOT NULL DEFAULT 0"))
-        db.session.commit()
-    if "locked_at" not in account_set_columns:
-        db.session.execute(text("ALTER TABLE account_sets ADD COLUMN locked_at DATETIME"))
-        db.session.commit()
-    if "locked_by" not in account_set_columns:
-        db.session.execute(text("ALTER TABLE account_sets ADD COLUMN locked_by INTEGER"))
-        db.session.commit()
-
-    user_columns = {c["name"] for c in inspector.get_columns("users")}
-    if "page_permissions" not in user_columns:
-        db.session.execute(text("ALTER TABLE users ADD COLUMN page_permissions JSON"))
-        db.session.commit()
-
-    daily_record_columns = {c["name"] for c in inspector.get_columns("daily_records")}
-    if "employee_payload" not in daily_record_columns:
-        db.session.execute(text("ALTER TABLE daily_records ADD COLUMN employee_payload JSON"))
-        db.session.commit()
-    if "manager_payload" not in daily_record_columns:
-        db.session.execute(text("ALTER TABLE daily_records ADD COLUMN manager_payload JSON"))
-        db.session.commit()
-
-    monthly_report_columns = {c["name"] for c in inspector.get_columns("monthly_reports")}
-    if "employee_raw_data" not in monthly_report_columns:
-        db.session.execute(text("ALTER TABLE monthly_reports ADD COLUMN employee_raw_data JSON"))
-        db.session.commit()
-    if "manager_raw_data" not in monthly_report_columns:
-        db.session.execute(text("ALTER TABLE monthly_reports ADD COLUMN manager_raw_data JSON"))
-        db.session.commit()
-
-
-app = create_app()
+def __getattr__(name: str):
+    if name == "app":
+        return _get_compat_app()
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
 if __name__ == "__main__":
+    app = create_app()
     app.run(host="0.0.0.0", port=5000, debug=True)
