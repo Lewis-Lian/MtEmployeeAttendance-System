@@ -52,7 +52,7 @@ $null = New-Item -ItemType Directory -Force -Path $logDir
 & $NssmPath stop $ServiceName 2>$null | Out-Null
 & $NssmPath remove $ServiceName confirm 2>$null | Out-Null
 
-& $NssmPath install $ServiceName $pythonExe "-m waitress --host=0.0.0.0 --port=$Port app:app"
+& $NssmPath install $ServiceName $pythonExe "-m waitress --host=0.0.0.0 --port=$Port wsgi:app"
 & $NssmPath set $ServiceName AppDirectory $ProjectRoot
 & $NssmPath set $ServiceName AppStdout $stdoutLog
 & $NssmPath set $ServiceName AppStderr $stderrLog

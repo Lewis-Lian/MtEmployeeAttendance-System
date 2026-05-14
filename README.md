@@ -11,7 +11,7 @@ flask --app manage.py init-admin
 python3 app.py
 ```
 
-For a fresh setup, run the two init commands once before starting the app. `python3 app.py` is fine for local development after initialization; for production startup use the explicit `waitress` command in the deployment section below.
+For a fresh setup, run the two init commands once before starting the app. `python3 app.py` is fine for local development after initialization; for production startup use the explicit `waitress` command in the deployment section below and verify `GET /health` returns `{"status":"ok"}`.
 
 ## Excel Import
 
@@ -56,12 +56,24 @@ Manual run (for smoke test):
 .\.venv-win-prod\Scripts\python.exe -m waitress --host=0.0.0.0 --port=5000 wsgi:app
 ```
 
+Health check:
+
+```powershell
+Invoke-RestMethod http://127.0.0.1:5000/health
+```
+
 Equivalent production bootstrap/startup commands:
 
 ```bash
 flask --app manage.py init-db
 flask --app manage.py init-admin
 python -m waitress --host=0.0.0.0 --port=5000 wsgi:app
+```
+
+Health check:
+
+```bash
+curl http://127.0.0.1:5000/health
 ```
 
 Do not use `python app.py` in production. That runs Flask development server and will show:
@@ -72,6 +84,12 @@ Do not use `python app.py` in production. That runs Flask development server and
 ```powershell
 cd D:\attendance_system
 powershell -ExecutionPolicy Bypass -File .\scripts\windows\install_service.ps1 -ProjectRoot "D:\attendance_system" -ServiceName "attendance-system" -Port 5000 -NssmPath "C:\tools\nssm\win64\nssm.exe"
+```
+
+After the service starts, verify the shared entrypoint is healthy:
+
+```powershell
+Invoke-RestMethod http://127.0.0.1:5000/health
 ```
 
 ### 3.1) Use the background tray manager

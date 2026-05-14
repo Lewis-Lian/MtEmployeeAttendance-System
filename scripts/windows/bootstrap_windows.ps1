@@ -42,11 +42,11 @@ $null = New-Item -ItemType Directory -Force -Path (Join-Path $ProjectRoot "stati
 $null = New-Item -ItemType Directory -Force -Path (Join-Path $ProjectRoot "logs")
 
 if ($InitEnv) {
-    Write-Host "[6/6] Initializing app/db context"
-    & $venvPython -c "from app import app; print('App init OK')"
+    Write-Host "[6/6] Validating shared WSGI entrypoint"
+    & $venvPython -c "from wsgi import app; print('WSGI app init OK')"
 } else {
     Write-Host "[6/6] Skipped app init (pass -InitEnv to enable)"
 }
 
 Write-Host "\nDone. Manual run command:"
-Write-Host ".\\$VenvDir\\Scripts\\python.exe -m waitress --host=0.0.0.0 --port=$Port app:app"
+Write-Host ".\\$VenvDir\\Scripts\\python.exe -m waitress --host=0.0.0.0 --port=$Port wsgi:app"

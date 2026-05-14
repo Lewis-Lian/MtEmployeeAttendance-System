@@ -3,7 +3,7 @@ param(
     [string]$ProjectRoot = "",
     [string]$ServiceName = "attendance-system",
     [string]$BindHost = "0.0.0.0",
-    [int]$DefaultPort = 8000,
+    [int]$DefaultPort = 5000,
     [string]$VenvDir = ".venv-win-prod",
     [string]$NssmPath = "",
     [string]$PythonCmd = "python",
@@ -244,7 +244,7 @@ function Ensure-ServiceConfigured([int]$Port) {
         }
     }
 
-    $appParameters = "-m waitress --host=$BindHost --port=$Port --threads=8 --channel-timeout=120 app:app"
+    $appParameters = "-m waitress --host=$BindHost --port=$Port --threads=8 --channel-timeout=120 wsgi:app"
 
     & $NssmPath set $ServiceName Application $pythonExe | Out-Null
     & $NssmPath set $ServiceName AppParameters $appParameters | Out-Null

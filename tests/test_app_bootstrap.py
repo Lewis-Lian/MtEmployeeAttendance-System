@@ -43,6 +43,24 @@ class AppBootstrapTests(unittest.TestCase):
                     db.create_all()
                     self.assertIsNone(User.query.filter_by(username="admin").first())
 
+    def test_health_endpoint_reports_ok_status(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with mock.patch.dict(
+                os.environ,
+                {
+                    "APP_ENV": "test",
+                    "DATABASE_URL": f"sqlite:///{os.path.join(tmpdir, 'health.db')}",
+                    "SECRET_KEY": "test-secret",
+                    "UPLOAD_FOLDER": os.path.join(tmpdir, "uploads"),
+                },
+                clear=False,
+            ):
+                app = self._load_app_module().create_app()
+                response = app.test_client().get("/health")
+
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual(response.get_json(), {"status": "ok"})
+
     def test_production_config_requires_secret_key(self) -> None:
         with mock.patch.dict(
             os.environ,

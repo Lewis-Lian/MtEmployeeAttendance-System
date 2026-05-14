@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 
 from dotenv import load_dotenv
-from flask import Flask
+from flask import Flask, jsonify
 from flask_migrate import Migrate
 
 from models import db
@@ -41,6 +41,10 @@ def create_app() -> Flask:
     db.init_app(app)
     Migrate(app, db)
     register_routes(app)
+
+    @app.get("/health")
+    def health_check():
+        return jsonify({"status": "ok"})
 
     return app
 
