@@ -10,6 +10,7 @@ def register_admin_account_routes(admin_bp) -> None:
 
     def _manager_self_query_permissions() -> dict[str, bool]:
         permissions = {key: False for key in admin_module.ALL_PAGE_PERMISSION_KEYS}
+        permissions["query_home"] = True
         for key in admin_module.MANAGER_PAGE_PERMISSION_KEYS:
             permissions[key] = True
         return permissions
@@ -27,6 +28,10 @@ def register_admin_account_routes(admin_bp) -> None:
         return render_template(
             "admin/accounts.html",
             current_user_id=g.current_user.id,
+            home_page_permissions=[
+                {"key": key, "label": admin_module.PAGE_PERMISSION_LABELS[key]}
+                for key in admin_module.HOME_PAGE_PERMISSION_KEYS
+            ],
             manager_page_permissions=[
                 {"key": key, "label": admin_module.PAGE_PERMISSION_LABELS[key]}
                 for key in admin_module.MANAGER_PAGE_PERMISSION_KEYS
