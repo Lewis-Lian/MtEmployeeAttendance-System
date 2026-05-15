@@ -14,7 +14,7 @@ from models.account_set import AccountSet
 from models.department import Department
 from models.employee import Employee
 from models.manager_month_stat import ManagerMonthStat
-from models.user import EMPLOYEE_PAGE_PERMISSION_KEYS, MANAGER_PAGE_PERMISSION_KEYS, User
+from models.user import EMPLOYEE_PAGE_PERMISSION_KEYS, HOME_PAGE_PERMISSION_KEYS, MANAGER_PAGE_PERMISSION_KEYS, User
 from routes import register_routes
 from utils.app_navigation import module_by_slug, nav_context, visible_modules
 
@@ -312,7 +312,7 @@ class AttendanceOverrideFeatureTests(unittest.TestCase):
                 "role": "readonly",
                 "emp_ids": [self.employee_id],
                 "dept_ids": [],
-                "page_permissions": {key: key in MANAGER_PAGE_PERMISSION_KEYS for key in (*MANAGER_PAGE_PERMISSION_KEYS, *EMPLOYEE_PAGE_PERMISSION_KEYS)},
+                "page_permissions": {key: key in MANAGER_PAGE_PERMISSION_KEYS for key in (*HOME_PAGE_PERMISSION_KEYS, *MANAGER_PAGE_PERMISSION_KEYS, *EMPLOYEE_PAGE_PERMISSION_KEYS)},
             },
         )
         create_b = self.client.post(
@@ -323,7 +323,7 @@ class AttendanceOverrideFeatureTests(unittest.TestCase):
                 "role": "readonly",
                 "emp_ids": [self.employee_b_id],
                 "dept_ids": [],
-                "page_permissions": {key: key in EMPLOYEE_PAGE_PERMISSION_KEYS for key in (*MANAGER_PAGE_PERMISSION_KEYS, *EMPLOYEE_PAGE_PERMISSION_KEYS)},
+                "page_permissions": {key: key in EMPLOYEE_PAGE_PERMISSION_KEYS for key in (*HOME_PAGE_PERMISSION_KEYS, *MANAGER_PAGE_PERMISSION_KEYS, *EMPLOYEE_PAGE_PERMISSION_KEYS)},
             },
         )
         self.assertEqual(create_a.status_code, 200)
@@ -355,7 +355,7 @@ class AttendanceOverrideFeatureTests(unittest.TestCase):
             self.assertEqual(user_a.role, "admin")
             self.assertEqual(user_b.role, "admin")
 
-        next_permissions = {key: key in MANAGER_PAGE_PERMISSION_KEYS for key in (*MANAGER_PAGE_PERMISSION_KEYS, *EMPLOYEE_PAGE_PERMISSION_KEYS)}
+        next_permissions = {key: key in MANAGER_PAGE_PERMISSION_KEYS for key in (*HOME_PAGE_PERMISSION_KEYS, *MANAGER_PAGE_PERMISSION_KEYS, *EMPLOYEE_PAGE_PERMISSION_KEYS)}
         permissions_res = self.client.post(
             "/admin/users/batch",
             json={"action": "update_permissions", "user_ids": [user_a_id, user_b_id], "page_permissions": next_permissions},
@@ -365,8 +365,8 @@ class AttendanceOverrideFeatureTests(unittest.TestCase):
         with self.app.app_context():
             user_a = db.session.get(User, user_a_id)
             user_b = db.session.get(User, user_b_id)
-            self.assertEqual(user_a.effective_page_permissions(), {key: True for key in (*MANAGER_PAGE_PERMISSION_KEYS, *EMPLOYEE_PAGE_PERMISSION_KEYS)})
-            self.assertEqual(user_b.effective_page_permissions(), {key: True for key in (*MANAGER_PAGE_PERMISSION_KEYS, *EMPLOYEE_PAGE_PERMISSION_KEYS)})
+            self.assertEqual(user_a.effective_page_permissions(), {key: True for key in (*HOME_PAGE_PERMISSION_KEYS, *MANAGER_PAGE_PERMISSION_KEYS, *EMPLOYEE_PAGE_PERMISSION_KEYS)})
+            self.assertEqual(user_b.effective_page_permissions(), {key: True for key in (*HOME_PAGE_PERMISSION_KEYS, *MANAGER_PAGE_PERMISSION_KEYS, *EMPLOYEE_PAGE_PERMISSION_KEYS)})
 
         downgrade_res = self.client.post(
             "/admin/users/batch",
@@ -854,7 +854,7 @@ class AttendanceOverrideFeatureTests(unittest.TestCase):
             username="reader",
             role="readonly",
             has_any_page_access=lambda keys: "employee_dashboard" in keys,
-            can_access_page=lambda key: key == "employee_dashboard",
+            can_access_page=lambda key: key in ("employee_dashboard", "query_home"),
         )
         with app.test_request_context("/employee/dashboard"):
             g.current_user = readonly_user
@@ -1162,7 +1162,7 @@ class AttendanceOverrideFeatureTests(unittest.TestCase):
             username="reader",
             role="readonly",
             has_any_page_access=lambda keys: "employee_dashboard" in keys,
-            can_access_page=lambda key: key == "employee_dashboard",
+            can_access_page=lambda key: key in ("employee_dashboard", "query_home"),
         )
 
         modules = visible_modules(readonly_user)
