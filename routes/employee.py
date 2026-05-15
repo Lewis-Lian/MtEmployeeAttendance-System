@@ -12,6 +12,7 @@ from flask import Blueprint, jsonify, render_template, request, g, send_file
 from sqlalchemy.orm import joinedload
 import openpyxl
 
+from models import db
 from models.employee import Employee
 from models.department import Department
 from models.daily_record import DailyRecord
@@ -1133,7 +1134,7 @@ def daily_records_api():
         return jsonify([])
 
     month = request.args.get("month") or datetime.now().strftime("%Y-%m")
-    employee = Employee.query.get(emp_id)
+    employee = db.session.get(Employee, emp_id)
     rows = attendance_views_by_employee(month, [employee], EMPLOYEE_STATS_CONTEXT).get(emp_id, []) if employee else []
     rows.sort(key=lambda row: row.record_date or date.min, reverse=True)
     return jsonify(

@@ -392,7 +392,7 @@ def _has_manager_punch_record(record) -> bool:
 
 
 def _manager_attendance_days(employee_id: int, month: str) -> float:
-    employee = Employee.query.get(employee_id)
+    employee = db.session.get(Employee, employee_id)
     if not employee:
         return 0.0
     rows = attendance_views_by_employee(month, [employee], MANAGER_STATS_CONTEXT).get(employee_id, [])
@@ -403,7 +403,7 @@ def _manager_schedule_late_minutes(employee_id: int, month: str) -> int:
     """Only count 上午 (上班1) late minutes from the daily record raw data.
     哺乳假人员迟到计为0。
     """
-    employee = Employee.query.get(employee_id)
+    employee = db.session.get(Employee, employee_id)
     if employee and employee.is_nursing:
         return 0
     rows = attendance_views_by_employee(month, [employee], MANAGER_STATS_CONTEXT).get(employee_id, [])

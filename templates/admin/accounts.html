@@ -2,105 +2,125 @@
 {% block title %}账号管理{% endblock %}
 {% block page_intro %}维护登录账号、角色权限及员工、部门的数据访问范围。{% endblock %}
 {% block content %}
-<div class="row g-4" id="accountsPage" data-current-user-id="{{ current_user_id }}">
-  <div class="col-xl-5">
-    <div class="sticky-side">
-      <div class="card">
-        <div class="card-header d-flex justify-content-between align-items-center">
-          <span>创建账号</span>
-          <span class="page-tag">权限与数据范围</span>
-        </div>
-        <div class="card-body">
-          <form id="createUserForm">
-            <div class="mb-2">
-              <label class="form-label">用户名</label>
-              <input class="form-control" name="username" required>
-            </div>
-            <div class="mb-2">
-              <label class="form-label">密码</label>
-              <input class="form-control" name="password" type="password" required>
-            </div>
-            <div class="mb-3">
-              <label class="form-label">角色</label>
-              <select class="form-select" name="role" required>
-                <option value="readonly" selected>只读</option>
-                <option value="admin">管理员</option>
-              </select>
-            </div>
-
-            <div class="mb-3">
-              <label class="form-label">关联员工（可搜索、多选）</label>
-              <div class="employee-lookup" id="createEmpLookup">
-                <div class="input-group input-group-sm">
-                  <input class="form-control form-control-sm" id="createEmpSearch" placeholder="搜索姓名/工号">
-                  <button class="btn btn-outline-secondary employee-picker-trigger" id="openCreateEmpPickerBtn" type="button" title="选择员工">
-                    <span class="employee-picker-icon" aria-hidden="true">👤</span>
-                  </button>
-                </div>
-                <div class="employee-float-list" id="createEmpQuickList"></div>
-              </div>
-            </div>
-
-            <div class="mb-3">
-              <label class="form-label">关联部门（可搜索、多选）</label>
-              <div class="employee-lookup" id="createDeptLookup">
-                <div class="input-group input-group-sm">
-                  <input class="form-control form-control-sm" id="createDeptSearch" placeholder="搜索部门名称/编号">
-                  <button class="btn btn-outline-secondary employee-picker-trigger" id="openCreateDeptPickerBtn" type="button" title="选择部门">
-                    <span class="employee-picker-icon" aria-hidden="true">⎇</span>
-                  </button>
-                </div>
-                <div class="employee-float-list" id="createDeptQuickList"></div>
-              </div>
-            </div>
-
-            <div class="section-divider"></div>
-
-            <div class="mb-3">
-              <label class="form-label">查询管理人员菜单权限</label>
-              <div class="d-grid gap-2">
-                {% for item in manager_page_permissions %}
-                <label class="badge text-bg-light border p-2 d-flex align-items-center gap-2 justify-content-start">
-                  <input class="form-check-input m-0 create-page-permission" type="checkbox" value="{{ item.key }}" checked>
-                  <span>{{ item.label }}</span>
-                </label>
-                {% endfor %}
-              </div>
-            </div>
-
-            <div class="mb-3">
-              <label class="form-label">查询员工菜单权限</label>
-              <div class="d-grid gap-2">
-                {% for item in employee_page_permissions %}
-                <label class="badge text-bg-light border p-2 d-flex align-items-center gap-2 justify-content-start">
-                  <input class="form-check-input m-0 create-page-permission" type="checkbox" value="{{ item.key }}" checked>
-                  <span>{{ item.label }}</span>
-                </label>
-                {% endfor %}
-              </div>
-            </div>
-
-            <button class="btn btn-primary w-100" type="submit">创建账号</button>
-          </form>
-          <div id="createResult" class="small text-muted mt-2"></div>
-        </div>
+<div class="query-page-shell" id="accountsPage" data-current-user-id="{{ current_user_id }}">
+  {% set filter_body %}
+  <form id="createUserForm" class="query-filter-form">
+  <div class="query-filter-field">
+    <label class="form-label">用户名</label>
+    <input class="form-control" name="username" required>
+  </div>
+  <div class="query-filter-field">
+    <label class="form-label">密码</label>
+    <input class="form-control" name="password" type="password" required>
+  </div>
+  <div class="query-filter-field">
+    <label class="form-label">角色</label>
+    <select class="form-select" name="role" required>
+      <option value="readonly" selected>只读</option>
+      <option value="admin">管理员</option>
+    </select>
+  </div>
+  <div class="query-filter-actions">
+    <button class="btn btn-primary" type="submit">创建账号</button>
+    <button class="btn btn-outline-primary" id="createManagerAccountsBtn" type="button">一键创建管理人员账号</button>
+  </div>
+  <div class="query-filter-field">
+    <label class="form-label">关联员工（可搜索、多选）</label>
+    <div class="employee-lookup" id="createEmpLookup">
+      <div class="input-group input-group-sm">
+        <input class="form-control form-control-sm" id="createEmpSearch" placeholder="搜索姓名/工号">
+        <button class="btn btn-outline-secondary employee-picker-trigger" id="openCreateEmpPickerBtn" type="button" title="选择员工">
+          <span class="employee-picker-icon" aria-hidden="true">👤</span>
+        </button>
       </div>
+      <div class="employee-float-list" id="createEmpQuickList"></div>
     </div>
   </div>
+  <div class="query-filter-field">
+    <label class="form-label">关联部门（可搜索、多选）</label>
+    <div class="employee-lookup" id="createDeptLookup">
+      <div class="input-group input-group-sm">
+        <input class="form-control form-control-sm" id="createDeptSearch" placeholder="搜索部门名称/编号">
+        <button class="btn btn-outline-secondary employee-picker-trigger" id="openCreateDeptPickerBtn" type="button" title="选择部门">
+          <span class="employee-picker-icon" aria-hidden="true">⎇</span>
+        </button>
+      </div>
+      <div class="employee-float-list" id="createDeptQuickList"></div>
+    </div>
+  </div>
+  <div class="query-filter-field">
+    <label class="form-label">菜单权限</label>
+    <div class="input-group input-group-sm">
+      <input class="form-control" id="createPermissionInput" placeholder="点击选择菜单权限" readonly>
+      <button class="btn btn-outline-secondary" id="openCreatePermissionBtn" type="button">选择</button>
+    </div>
+  </div>
+  </form>
+  {% endset %}
+  {% with title="创建账号", description="维护登录账号、角色权限及员工、部门的数据访问范围。", kicker="Account Setup", body=filter_body %}
+    {% include "partials/query/filter_shell.html" %}
+  {% endwith %}
 
-  <div class="col-xl-7">
-    <div class="card table-wrap-tight">
+  <section class="query-workspace">
+    <div id="createResult" class="d-none"></div>
+
+    <div class="card query-result-panel table-wrap-tight">
       <div class="card-header d-flex justify-content-between align-items-center">
         <span>账号列表</span>
         <button class="btn btn-sm btn-outline-secondary" id="refreshUsersBtn">刷新</button>
+      </div>
+      <div class="card-body border-bottom">
+        <div class="row g-3 align-items-end">
+          <div class="col-lg-6">
+            <label class="form-label">账号筛选</label>
+            <div class="employee-lookup" id="filterEmpLookup">
+              <div class="input-group input-group-sm">
+                <input class="form-control form-control-sm" id="filterEmpSearch" placeholder="搜索姓名/工号">
+                <button class="btn btn-outline-secondary employee-picker-trigger" id="openFilterEmpPickerBtn" type="button" title="选择员工">
+                  <span class="employee-picker-icon" aria-hidden="true">👤</span>
+                </button>
+              </div>
+              <div class="employee-float-list" id="filterEmpQuickList"></div>
+            </div>
+          </div>
+          <div class="col-lg-3">
+            <label class="form-label">是否管理员账号</label>
+            <select class="form-select form-select-sm" id="filterAdminRole">
+              <option value="">全部</option>
+              <option value="admin">是</option>
+              <option value="readonly">否</option>
+            </select>
+          </div>
+          <div class="col-lg-3 d-grid gap-2">
+            <button class="btn btn-sm btn-primary" id="applyUserFiltersBtn" type="button">查询</button>
+            <button class="btn btn-sm btn-outline-secondary" id="resetUserFiltersBtn" type="button">重置</button>
+          </div>
+        </div>
+      </div>
+      <div class="card-body border-bottom">
+        <div class="row g-3 align-items-end">
+          <div class="col-12">
+            <div class="d-flex flex-wrap gap-2 align-items-center justify-content-lg-end">
+              <span class="small text-muted" id="selectedUsersCount">已选 0 个账号</span>
+              <button class="btn btn-sm btn-outline-primary" id="applyBatchRoleBtn" type="button">批量修改角色</button>
+              <button class="btn btn-sm btn-outline-secondary" id="openBatchPermissionBtn" type="button">批量修改菜单权限</button>
+              <button class="btn btn-sm btn-outline-warning" id="batchResetPasswordBtn" type="button">批量重置密码</button>
+              <button class="btn btn-sm btn-outline-danger" id="batchDeleteUsersBtn" type="button">批量删除账号</button>
+            </div>
+          </div>
+        </div>
       </div>
       <div class="table-responsive">
         <table class="table table-striped table-sm mb-0 align-middle">
           <thead>
             <tr>
+              <th><input class="form-check-input" type="checkbox" id="toggleSelectAllUsers"></th>
               <th>ID</th>
               <th>用户名</th>
               <th>角色</th>
+              <th>工号</th>
+              <th>姓名</th>
+              <th>部门信息</th>
               <th>关联员工</th>
               <th>关联部门</th>
               <th>可访问页面</th>
@@ -110,6 +130,29 @@
           </thead>
           <tbody id="usersTableBody"></tbody>
         </table>
+      </div>
+    </div>
+  </section>
+</div>
+
+<div class="modal fade" id="batchRoleModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">批量修改角色</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <label class="form-label" for="batchRoleSelect">选择角色</label>
+        <select class="form-select" id="batchRoleSelect">
+          <option value="">请选择角色</option>
+          <option value="readonly">只读</option>
+          <option value="admin">管理员</option>
+        </select>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-outline-secondary" data-bs-dismiss="modal">取消</button>
+        <button class="btn btn-primary" id="confirmBatchRoleBtn" type="button">确定</button>
       </div>
     </div>
   </div>
@@ -126,6 +169,27 @@
         <form id="editUserForm">
           <input type="hidden" name="user_id">
           <div class="row g-2">
+            <div class="col-md-6">
+              <label class="form-label">工号</label>
+              <input class="form-control" name="profile_emp_no" required>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">姓名</label>
+              <input class="form-control" name="profile_name" required>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label">部门信息</label>
+              <div class="employee-lookup" id="editProfileDeptLookup">
+                <div class="input-group input-group-sm">
+                  <input class="form-control form-control-sm" id="editProfileDeptSearch" placeholder="选择部门信息" readonly>
+                  <button class="btn btn-outline-secondary employee-picker-trigger" id="openEditProfileDeptPickerBtn" type="button" title="选择部门">
+                    <span class="employee-picker-icon" aria-hidden="true">⎇</span>
+                  </button>
+                </div>
+                <div class="employee-float-list" id="editProfileDeptQuickList"></div>
+                <input type="hidden" name="profile_dept_id">
+              </div>
+            </div>
             <div class="col-md-6">
               <label class="form-label">用户名</label>
               <input class="form-control" name="username" readonly>
@@ -170,26 +234,10 @@
           <div class="section-divider"></div>
 
           <div class="mb-3">
-            <label class="form-label">查询管理人员菜单权限</label>
-            <div class="d-grid gap-2">
-              {% for item in manager_page_permissions %}
-              <label class="badge text-bg-light border p-2 d-flex align-items-center gap-2 justify-content-start">
-                <input class="form-check-input m-0 edit-page-permission" type="checkbox" value="{{ item.key }}">
-                <span>{{ item.label }}</span>
-              </label>
-              {% endfor %}
-            </div>
-          </div>
-
-          <div class="mb-0">
-            <label class="form-label">查询员工菜单权限</label>
-            <div class="d-grid gap-2">
-              {% for item in employee_page_permissions %}
-              <label class="badge text-bg-light border p-2 d-flex align-items-center gap-2 justify-content-start">
-                <input class="form-check-input m-0 edit-page-permission" type="checkbox" value="{{ item.key }}">
-                <span>{{ item.label }}</span>
-              </label>
-              {% endfor %}
+            <label class="form-label">菜单权限</label>
+            <div class="input-group input-group-sm">
+              <input class="form-control" id="editPermissionInput" placeholder="点击选择菜单权限" readonly>
+              <button class="btn btn-outline-secondary" id="openEditPermissionBtn" type="button">选择</button>
             </div>
           </div>
         </form>
@@ -201,6 +249,53 @@
     </div>
   </div>
 </div>
+
+<div class="modal fade employee-picker-modal" id="accountSingleDeptPickerModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">选择部门信息</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <div class="row g-3 employee-picker-layout">
+          <div class="col-lg-7">
+            <div class="employee-picker-panel employee-picker-tree">
+              <div class="d-flex align-items-center gap-2 mb-2">
+                <input type="text" class="form-control form-control-sm" id="accountSingleDeptPickerSearch" placeholder="搜索部门名称/编号">
+              </div>
+              <div class="list-group employee-dept-list" id="accountSingleDeptPickerTree"></div>
+            </div>
+          </div>
+          <div class="col-lg-5">
+            <div class="employee-picker-panel employee-picker-selected-wrap">
+              <div class="employee-picker-panel-title mb-2">已选部门</div>
+              <div class="employee-selected-list" id="accountSingleDeptPickerSelectedList">
+                <div class="employee-selected-empty">未选择</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-secondary" id="accountSingleDeptPickerClearBtn">清空</button>
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">取消</button>
+        <button type="button" class="btn btn-primary" id="accountSingleDeptPickerConfirmBtn">确定</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script type="application/json" id="accountPermissionCatalog">
+[
+  {% for item in manager_page_permissions %}
+  {"key": "{{ item.key }}", "label": "{{ item.label }}", "group": "管理人员"}{% if not loop.last or employee_page_permissions|length %},{% endif %}
+  {% endfor %}
+  {% for item in employee_page_permissions %}
+  {"key": "{{ item.key }}", "label": "{{ item.label }}", "group": "员工"}{% if not loop.last %},{% endif %}
+  {% endfor %}
+]
+</script>
 
 <div class="modal fade employee-picker-modal" id="accountEmployeePickerModal" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog modal-xl modal-dialog-scrollable">
@@ -294,6 +389,38 @@
       <div class="modal-footer">
         <button class="btn btn-outline-secondary" data-bs-dismiss="modal">取消</button>
         <button class="btn btn-primary" id="accountDeptPickerConfirmBtn" type="button">确定</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="accountPermissionModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="accountPermissionModalTitle">选择菜单权限</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <div class="row g-3">
+          <div class="col-md-7">
+            <label class="form-label">搜索权限</label>
+            <input class="form-control form-control-sm" id="accountPermissionSearch" placeholder="搜索菜单名称">
+          </div>
+          <div class="col-md-5">
+            <label class="form-label">权限分组</label>
+            <select class="form-select form-select-sm" id="accountPermissionGroupFilter">
+              <option value="">全部</option>
+              <option value="管理人员">管理人员</option>
+              <option value="员工">员工</option>
+            </select>
+          </div>
+        </div>
+        <div class="mt-3" id="accountPermissionChecklist"></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-outline-secondary" data-bs-dismiss="modal">取消</button>
+        <button class="btn btn-primary" id="accountPermissionConfirmBtn" type="button">确定</button>
       </div>
     </div>
   </div>

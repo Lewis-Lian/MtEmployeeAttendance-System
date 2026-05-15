@@ -13,7 +13,7 @@ MODULES: list[dict[str, Any]] = [
         "entries": [
             {
                 "key": "employee_dashboard",
-                "label": "考勤数据查询",
+                "label": "员工考勤数据查询",
                 "href": "/employee/dashboard",
                 "permission_key": "employee_dashboard",
                 "description": "按账套与员工范围查询最终考勤汇总。",
@@ -27,7 +27,7 @@ MODULES: list[dict[str, Any]] = [
             },
             {
                 "key": "punch_records",
-                "label": "打卡数据查询",
+                "label": "员工打卡数据查询",
                 "href": "/employee/punch-records",
                 "permission_key": "punch_records",
                 "description": "查询原始打卡记录和明细。",
@@ -40,15 +40,8 @@ MODULES: list[dict[str, Any]] = [
                 "description": "按部门查看员工工时汇总。",
             },
             {
-                "key": "summary_download",
-                "label": "汇总下载",
-                "href": "/employee/summary-download",
-                "permission_key": "summary_download",
-                "description": "下载月度考勤汇总文件。",
-            },
-            {
                 "key": "manager_query",
-                "label": "管理人员查询",
+                "label": "管理人员考勤数据查询",
                 "href": "/employee/manager-query",
                 "permission_key": "manager_query",
                 "description": "查询管理人员月度考勤结果。",
@@ -73,6 +66,13 @@ MODULES: list[dict[str, Any]] = [
                 "href": "/employee/manager-department-hours-query",
                 "permission_key": "manager_department_hours_query",
                 "description": "按部门查询管理人员工时。",
+            },
+            {
+                "key": "summary_download",
+                "label": "汇总下载",
+                "href": "/employee/summary-download",
+                "permission_key": "summary_download",
+                "description": "下载月度考勤汇总文件。",
             },
         ],
     },

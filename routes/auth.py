@@ -6,10 +6,23 @@ from functools import wraps
 import jwt
 from flask import Blueprint, current_app, jsonify, redirect, render_template, request, url_for, make_response, g
 
+from models import db
 from models.user import User
 
 
 auth_bp = Blueprint("auth", __name__)
+
+_DEFAULT_PAGE_ENDPOINTS = (
+    ("employee_dashboard", "employee.dashboard"),
+    ("abnormal_query", "employee.abnormal_query_page"),
+    ("punch_records", "employee.punch_records_page"),
+    ("department_hours_query", "employee.department_hours_query_page"),
+    ("manager_query", "employee.manager_query_page"),
+    ("manager_overtime_query", "employee.manager_overtime_query_page"),
+    ("manager_annual_leave_query", "employee.manager_annual_leave_query_page"),
+    ("manager_department_hours_query", "employee.manager_department_hours_query_page"),
+    ("summary_download", "employee.summary_download_page"),
+)
 
 
 def _generate_token(user: User) -> str:
@@ -38,6 +51,16 @@ def _extract_token() -> str | None:
     return request.cookies.get("access_token")
 
 
+def _landing_url_for_user(user: User) -> str:
+    if user.role == "admin":
+        return url_for("employee.dashboard")
+
+    for page_key, endpoint in _DEFAULT_PAGE_ENDPOINTS:
+        if user.can_access_page(page_key):
+            return url_for(endpoint)
+    return url_for("auth.login_page")
+
+
 def login_required(fn):
     @wraps(fn)
     def wrapper(*args, **kwargs):
@@ -55,7 +78,7 @@ def login_required(fn):
             resp.delete_cookie("access_token")
             return resp
 
-        user = User.query.get(payload["sub"])
+        user = db.session.get(User, payload["sub"])
         if not user:
             return jsonify({"error": "User not found"}), 401
         g.current_user = user
@@ -96,8 +119,11 @@ def page_permission_required(page_key: str):
 @auth_bp.route("/")
 def root():
     token = _extract_token()
-    if token and _decode_token(token):
-        return redirect(url_for("employee.dashboard"))
+    payload = _decode_token(token) if token else None
+    if payload:
+        user = db.session.get(User, payload["sub"])
+        if user:
+            return redirect(_landing_url_for_user(user))
     return redirect(url_for("auth.login_page"))
 
 
@@ -121,7 +147,7 @@ def login_post():
     if request.is_json:
         return jsonify({"token": token, "role": user.role, "username": user.username})
 
-    resp = make_response(redirect(url_for("employee.dashboard")))
+    resp = make_response(redirect(_landing_url_for_user(user)))
     resp.set_cookie("access_token", token, httponly=True, samesite="Lax")
     return resp
 

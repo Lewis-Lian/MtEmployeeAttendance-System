@@ -15,7 +15,12 @@ def register_admin_attendance_override_routes(admin_bp) -> None:
     @admin_required
     def manager_attendance_overrides_page():
         employees = admin_module._manager_scope_employees()
-        return render_template("admin/manager_attendance_overrides.html", employees=employees)
+        active_account_set = admin_module.AccountSet.query.filter_by(is_active=True).first()
+        return render_template(
+            "admin/manager_attendance_overrides.html",
+            employees=employees,
+            default_month=active_account_set.month if active_account_set else "",
+        )
 
     @admin_bp.route("/manager-attendance-overrides/record", methods=["GET"])
     @admin_required
@@ -39,7 +44,7 @@ def register_admin_attendance_override_routes(admin_bp) -> None:
         locked_error = admin_module._ensure_account_set_unlocked(account_set, "保存管理人员考勤修正")
         if locked_error:
             return locked_error
-        employee = admin_module.Employee.query.get(emp_id)
+        employee = admin_module.db.session.get(admin_module.Employee, emp_id)
         if not employee or not employee.is_manager:
             return jsonify({"error": "employee is not manager"}), 400
 
@@ -246,7 +251,12 @@ def register_admin_attendance_override_routes(admin_bp) -> None:
             )
             .all()
         )
-        return render_template("admin/employee_attendance_overrides.html", employees=employees)
+        active_account_set = admin_module.AccountSet.query.filter_by(is_active=True).first()
+        return render_template(
+            "admin/employee_attendance_overrides.html",
+            employees=employees,
+            default_month=active_account_set.month if active_account_set else "",
+        )
 
     @admin_bp.route("/employee-attendance-overrides/record", methods=["GET"])
     @admin_required
@@ -270,7 +280,7 @@ def register_admin_attendance_override_routes(admin_bp) -> None:
         locked_error = admin_module._ensure_account_set_unlocked(account_set, "保存员工考勤修正")
         if locked_error:
             return locked_error
-        employee = admin_module.Employee.query.get(emp_id)
+        employee = admin_module.db.session.get(admin_module.Employee, emp_id)
         if not employee or employee.is_manager:
             return jsonify({"error": "员工不存在或是管理人员"}), 400
 

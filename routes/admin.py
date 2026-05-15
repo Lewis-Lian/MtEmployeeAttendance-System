@@ -6,7 +6,7 @@ from io import BytesIO
 from datetime import datetime
 from typing import Any
 
-from flask import Blueprint, jsonify, redirect, render_template, request, send_file, g
+from flask import Blueprint, abort, jsonify, redirect, render_template, request, send_file, g
 import openpyxl
 
 from models import db
@@ -87,6 +87,13 @@ _DEPARTMENT_METADATA_SHEET = "部门导入元数据"
 _DEPARTMENT_IMPORT_TEMP_PREFIX = "__IMPORT_TMP__"
 
 
+def _require_model(model, ident):
+    row = db.session.get(model, ident)
+    if row is None:
+        abort(404)
+    return row
+
+
 def _manager_scope_employees():
     return (
         Employee.query.filter(Employee.is_manager.is_(True))
@@ -119,9 +126,18 @@ def _convert_uploaded_xls_to_xlsx(xls_path: str) -> str | None:
 
 
 def _serialize_user(user: User) -> dict:
+    profile_department = db.session.get(Department, user.profile_dept_id) if user.profile_dept_id else None
     return {
         "id": user.id,
         "username": user.username,
+        "profile_emp_no": user.profile_emp_no or "",
+        "profile_name": user.profile_name or "",
+        "profile_dept_id": user.profile_dept_id,
+        "profile_department": {
+            "id": profile_department.id,
+            "dept_no": profile_department.dept_no,
+            "dept_name": profile_department.dept_name,
+        } if profile_department else None,
         "role": user.role,
         "created_at": user.created_at.isoformat() if user.created_at else None,
         "page_permissions": user.effective_page_permissions(),
@@ -132,6 +148,9 @@ def _serialize_user(user: User) -> dict:
                 "id": a.employee.id,
                 "emp_no": a.employee.emp_no,
                 "name": a.employee.name,
+                "dept_id": a.employee.dept_id,
+                "dept_no": a.employee.department.dept_no if a.employee.department else "",
+                "dept_name": a.employee.department.dept_name if a.employee.department else "",
             }
             for a in user.employee_assignments
             if a.employee
@@ -147,6 +166,23 @@ def _serialize_user(user: User) -> dict:
             if a.department
         ],
     }
+
+
+def _bind_user_profile_identity(user: User, emp_ids: list[int]) -> None:
+    if user.profile_emp_no and user.profile_name and user.profile_dept_id:
+        return
+
+    first_emp_id = next((emp_id for emp_id in emp_ids if isinstance(emp_id, int)), None)
+    if first_emp_id is None:
+        return
+
+    employee = db.session.get(Employee, first_emp_id)
+    if not employee:
+        return
+
+    user.profile_emp_no = employee.emp_no or user.profile_emp_no
+    user.profile_name = employee.name or user.profile_name
+    user.profile_dept_id = employee.dept_id or user.profile_dept_id
 
 
 def _default_page_permissions_for_role(role: str) -> dict[str, bool]:
@@ -548,7 +584,7 @@ def _parse_parent_id(raw: Any) -> int | None:
 def _validate_parent_department(parent_id: int | None, current_dept_id: int | None = None) -> tuple[Department | None, str | None]:
     if parent_id is None:
         return None, None
-    parent = Department.query.get(parent_id)
+    parent = db.session.get(Department, parent_id)
     if not parent:
         return None, "上级部门不存在"
     if current_dept_id and parent.id == current_dept_id:
@@ -645,7 +681,7 @@ def create_account_set():
 @admin_bp.route("/account-sets/<int:account_set_id>", methods=["PUT"])
 @admin_required
 def update_account_set(account_set_id: int):
-    row = AccountSet.query.get_or_404(account_set_id)
+    row = _require_model(AccountSet, account_set_id)
     locked_error = _ensure_account_set_unlocked(row, "修改账套参数")
     if locked_error:
         return locked_error
@@ -659,7 +695,7 @@ def update_account_set(account_set_id: int):
 @admin_bp.route("/account-sets/<int:account_set_id>/activate", methods=["POST"])
 @admin_required
 def activate_account_set(account_set_id: int):
-    row = AccountSet.query.get_or_404(account_set_id)
+    row = _require_model(AccountSet, account_set_id)
     AccountSet.query.update({AccountSet.is_active: False})
     row.is_active = True
     db.session.commit()
@@ -669,7 +705,7 @@ def activate_account_set(account_set_id: int):
 @admin_bp.route("/account-sets/<int:account_set_id>/lock", methods=["POST"])
 @admin_required
 def lock_account_set(account_set_id: int):
-    row = AccountSet.query.get_or_404(account_set_id)
+    row = _require_model(AccountSet, account_set_id)
     if not row.is_locked:
         row.is_locked = True
         row.locked_at = datetime.utcnow()
@@ -681,7 +717,7 @@ def lock_account_set(account_set_id: int):
 @admin_bp.route("/account-sets/<int:account_set_id>/unlock", methods=["POST"])
 @admin_required
 def unlock_account_set(account_set_id: int):
-    row = AccountSet.query.get_or_404(account_set_id)
+    row = _require_model(AccountSet, account_set_id)
     if row.is_locked:
         row.is_locked = False
         row.locked_at = None
@@ -693,7 +729,7 @@ def unlock_account_set(account_set_id: int):
 @admin_bp.route("/account-sets/<int:account_set_id>", methods=["DELETE"])
 @admin_required
 def delete_account_set(account_set_id: int):
-    row = AccountSet.query.get_or_404(account_set_id)
+    row = _require_model(AccountSet, account_set_id)
     locked_error = _ensure_account_set_unlocked(row, "删除账套")
     if locked_error:
         return locked_error
@@ -724,7 +760,7 @@ def delete_account_set(account_set_id: int):
 @admin_bp.route("/account-sets/<int:account_set_id>/calculate", methods=["POST"])
 @admin_required
 def calculate_account_set(account_set_id: int):
-    row = AccountSet.query.get_or_404(account_set_id)
+    row = _require_model(AccountSet, account_set_id)
     locked_error = _ensure_account_set_unlocked(row, "重新计算")
     if locked_error:
         return locked_error
@@ -902,7 +938,7 @@ def update_shift(shift_id: int):
     time_slots = data.get("time_slots") or []
     is_cross_day = bool(data.get("is_cross_day", False))
 
-    shift = Shift.query.get_or_404(shift_id)
+    shift = _require_model(Shift, shift_id)
     if not shift_no or not shift_name:
         return jsonify({"error": "shift_no and shift_name are required"}), 400
 
@@ -921,7 +957,7 @@ def update_shift(shift_id: int):
 @admin_bp.route("/shifts/<int:shift_id>", methods=["DELETE"])
 @admin_required
 def delete_shift(shift_id: int):
-    shift = Shift.query.get_or_404(shift_id)
+    shift = _require_model(Shift, shift_id)
     if shift.employee_assignments:
         return jsonify({"error": "该班次已绑定员工，无法删除"}), 400
     if shift.daily_records:
@@ -975,7 +1011,7 @@ def update_manager_overtime_summary():
 @admin_bp.route("/manager-overtime/records/<int:record_id>", methods=["PUT"])
 @admin_required
 def update_manager_overtime_record(record_id: int):
-    row = OvertimeRecord.query.get_or_404(record_id)
+    row = _require_model(OvertimeRecord, record_id)
     if not row.employee or not row.employee.is_manager:
         return jsonify({"error": "record is not a manager overtime record"}), 400
     month = row.date.strftime("%Y-%m") if row.date else None
@@ -1102,7 +1138,7 @@ def _apply_saved_manager_stats(values_by_name: dict[str, dict[str, object]], yea
 
 
 def _upsert_manager_month_stat(stat_type: str, emp_id: int, year: int, values: dict[str, float], remark: str) -> tuple[dict[str, str], int]:
-    employee = Employee.query.get_or_404(emp_id)
+    employee = _require_model(Employee, emp_id)
     if not employee.is_manager:
         return {"error": "employee is not manager"}, 400
     row = ManagerMonthStat.query.filter_by(emp_id=employee.id, year=year, stat_type=stat_type).first()
@@ -1128,7 +1164,7 @@ def _save_manager_month_stat(stat_type: str) -> tuple[dict[str, str], int]:
     year = int(data.get("year") or datetime.now().year)
     keys = _stat_value_keys(stat_type)
     submitted_values = {key: float(_number_or_blank(data.get(key)) or 0) for key in keys}
-    employee = Employee.query.get_or_404(emp_id)
+    employee = _require_model(Employee, emp_id)
     if not employee.is_manager:
         return {"error": "employee is not manager"}, 400
 
@@ -1187,7 +1223,7 @@ def _manager_attendance_row(emp_id: int, month: str, include_overrides: bool) ->
 
 
 def _manager_attendance_response(emp_id: int, month: str) -> tuple[dict[str, object], int]:
-    employee = Employee.query.get(emp_id)
+    employee = db.session.get(Employee, emp_id)
     if not employee or not employee.is_manager:
         return {"error": "employee is not manager"}, 400
     automatic = _manager_attendance_row(emp_id, month, include_overrides=False)
@@ -1678,7 +1714,7 @@ def update_manager_annual_leave_record():
     locked_error = _ensure_year_months_unlocked(year, "修改管理人员年休统计")
     if locked_error:
         return locked_error
-    employee = Employee.query.get_or_404(emp_id)
+    employee = _require_model(Employee, emp_id)
     if not employee.is_manager:
         return jsonify({"error": "employee is not manager"}), 400
     row = AnnualLeave.query.filter_by(emp_id=employee.id, year=year).first()
@@ -1734,7 +1770,7 @@ def update_department(dept_id: int):
     if parent_id == -1:
         return jsonify({"error": "parent_id must be integer"}), 400
 
-    department = Department.query.get_or_404(dept_id)
+    department = _require_model(Department, dept_id)
     duplicate = Department.query.filter(Department.dept_no == dept_no, Department.id != dept_id).first()
     if duplicate:
         return jsonify({"error": "dept_no already exists"}), 400
@@ -1753,7 +1789,7 @@ def update_department(dept_id: int):
 @admin_bp.route("/departments/<int:dept_id>", methods=["DELETE"])
 @admin_required
 def delete_department(dept_id: int):
-    department = Department.query.get_or_404(dept_id)
+    department = _require_model(Department, dept_id)
     if department.children:
         return jsonify({"error": "该部门存在下级部门，无法删除"}), 400
     if department.employees:
@@ -1946,7 +1982,7 @@ def update_employee(employee_id: int):
     if is_nursing is not None:
         is_nursing = bool(is_nursing)
 
-    employee = Employee.query.get_or_404(employee_id)
+    employee = _require_model(Employee, employee_id)
 
     if not emp_no or not name:
         return jsonify({"error": "emp_no and name are required"}), 400
@@ -1980,7 +2016,7 @@ def update_employee(employee_id: int):
 @admin_bp.route("/employees/<int:employee_id>", methods=["DELETE"])
 @admin_required
 def delete_employee(employee_id: int):
-    employee = Employee.query.get_or_404(employee_id)
+    employee = _require_model(Employee, employee_id)
     db.session.delete(employee)
     db.session.commit()
     return jsonify({"status": "ok"})
@@ -2081,7 +2117,7 @@ def batch_operate_employees():
 def annotate_record(record_id: int):
     data = request.json or {}
     reason = (data.get("exception_reason") or "").strip()
-    record = DailyRecord.query.get_or_404(record_id)
+    record = _require_model(DailyRecord, record_id)
     record.exception_reason = reason
     db.session.commit()
     return jsonify({"status": "ok"})
@@ -2130,7 +2166,7 @@ def _employee_override_payload(row: EmployeeAttendanceOverride | None) -> dict[s
 
 
 def _employee_override_response(emp_id: int, month: str) -> tuple[dict[str, object], int]:
-    employee = Employee.query.get(emp_id)
+    employee = db.session.get(Employee, emp_id)
     if not employee or employee.is_manager:
         return {"error": "employee is a manager, not a regular employee"}, 400
     automatic = _employee_automatic_row(emp_id, month)

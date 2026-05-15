@@ -4,6 +4,7 @@ import tempfile
 import unittest
 from unittest import mock
 
+from sqlalchemy import inspect, text
 from sqlalchemy.exc import NoSuchTableError
 
 from models import db
@@ -170,3 +171,41 @@ class AppBootstrapTests(unittest.TestCase):
 
                 self.assertEqual(compat_app.name, "app")
                 self.assertIs(app_module._compat_app, compat_app)
+
+    def test_schema_compatibility_adds_user_profile_columns(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with mock.patch.dict(
+                os.environ,
+                {
+                    "APP_ENV": "test",
+                    "DATABASE_URL": f"sqlite:///{os.path.join(tmpdir, 'compat-users.db')}",
+                    "SECRET_KEY": "test-secret",
+                    "UPLOAD_FOLDER": os.path.join(tmpdir, "uploads"),
+                },
+                clear=False,
+            ):
+                app_module = self._load_app_module()
+                bootstrap_service = importlib.reload(importlib.import_module("services.bootstrap_service"))
+                app = app_module.create_app()
+
+                with app.app_context():
+                    db.drop_all()
+                    db.session.execute(
+                        text(
+                            "CREATE TABLE users ("
+                            "id INTEGER NOT NULL PRIMARY KEY, "
+                            "username VARCHAR(80) NOT NULL, "
+                            "password_hash VARCHAR(255) NOT NULL, "
+                            "role VARCHAR(20) NOT NULL, "
+                            "page_permissions JSON, "
+                            "created_at DATETIME NOT NULL)"
+                        )
+                    )
+                    db.session.commit()
+
+                    bootstrap_service.ensure_schema_compatibility()
+
+                    columns = {column["name"] for column in inspect(db.engine).get_columns("users")}
+                    self.assertIn("profile_emp_no", columns)
+                    self.assertIn("profile_name", columns)
+                    self.assertIn("profile_dept_id", columns)

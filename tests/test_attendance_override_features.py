@@ -1,5 +1,6 @@
 import io
 import os
+from pathlib import Path
 import tempfile
 import unittest
 import urllib.parse
@@ -12,7 +13,7 @@ from models import db
 from models.account_set import AccountSet
 from models.department import Department
 from models.employee import Employee
-from models.user import User
+from models.user import EMPLOYEE_PAGE_PERMISSION_KEYS, MANAGER_PAGE_PERMISSION_KEYS, User
 from routes import register_routes
 from utils.app_navigation import module_by_slug, nav_context, visible_modules
 
@@ -60,6 +61,7 @@ class AttendanceOverrideFeatureTests(unittest.TestCase):
             db.session.add(employee_b)
             db.session.add(AccountSet(month="2026-05", name="2026-05", is_active=True, is_locked=False))
             db.session.commit()
+            self.dept_id = dept.id
             self.employee_id = employee.id
             self.employee_b_id = employee_b.id
             self.manager_id = manager.id
@@ -198,6 +200,17 @@ class AttendanceOverrideFeatureTests(unittest.TestCase):
         names = {row["employee_name"] for row in rows}
         self.assertEqual(names, {"员工甲", "员工乙"})
 
+    def test_attendance_override_pages_default_to_active_account_set_month(self) -> None:
+        employee_res = self.client.get("/admin/employee-attendance-overrides")
+        self.assertEqual(employee_res.status_code, 200)
+        employee_html = employee_res.get_data(as_text=True)
+        self.assertIn('id="employeeAttendanceOverrideMonth" value="2026-05"', employee_html)
+
+        manager_res = self.client.get("/admin/manager-attendance-overrides")
+        self.assertEqual(manager_res.status_code, 200)
+        manager_html = manager_res.get_data(as_text=True)
+        self.assertIn('id="managerAttendanceOverrideMonth" value="2026-05"', manager_html)
+
     def test_admin_route_extraction_modules_preserve_admin_contract(self) -> None:
         from routes.admin_accounts import register_admin_account_routes
         from routes.admin_attendance_overrides import register_admin_attendance_override_routes
@@ -214,12 +227,360 @@ class AttendanceOverrideFeatureTests(unittest.TestCase):
             rules.setdefault(rule.rule, set()).update(rule.methods - {"HEAD", "OPTIONS"})
 
         self.assertEqual(rules["/admin/users"], {"GET", "POST"})
+        self.assertEqual(rules["/admin/users/manager-batch"], {"POST"})
+        self.assertEqual(rules["/admin/users/batch"], {"POST"})
         self.assertEqual(rules["/admin/users/<int:user_id>"], {"DELETE", "PUT"})
         self.assertEqual(rules["/admin/employee-attendance-overrides/record"], {"DELETE", "GET", "PUT"})
         self.assertEqual(rules["/admin/manager-attendance-overrides/import"], {"POST"})
         self.assertEqual(rules["/admin/departments/import"], {"POST"})
         self.assertEqual(rules["/admin/departments/template"], {"GET"})
         self.assertEqual(rules["/admin/employees/import"], {"POST"})
+
+    def test_user_list_includes_employee_department_info(self) -> None:
+        create_res = self.client.post(
+            "/admin/users",
+            json={
+                "username": "M001",
+                "password": "mt@123",
+                "role": "readonly",
+                "emp_ids": [self.manager_id],
+                "dept_ids": [],
+            },
+        )
+        self.assertEqual(create_res.status_code, 200)
+
+        list_res = self.client.get("/admin/users")
+        self.assertEqual(list_res.status_code, 200)
+        users = list_res.get_json()
+        target = next((row for row in users if row["username"] == "M001"), None)
+
+        self.assertIsNotNone(target)
+        self.assertEqual(len(target["employees"]), 1)
+        self.assertEqual(target["profile_emp_no"], "M001")
+        self.assertEqual(target["profile_name"], "经理甲")
+        self.assertEqual(target["profile_department"]["dept_name"], "行政部")
+        self.assertEqual(target["employees"][0]["emp_no"], "M001")
+        self.assertEqual(target["employees"][0]["name"], "经理甲")
+        self.assertEqual(target["employees"][0]["dept_name"], "行政部")
+
+    def test_manager_batch_create_uses_emp_no_and_self_scope(self) -> None:
+        res = self.client.post("/admin/users/manager-batch")
+        self.assertEqual(res.status_code, 200)
+        payload = res.get_json()
+        self.assertEqual(payload["created_count"], 1)
+        self.assertEqual(payload["skipped_count"], 0)
+        self.assertEqual(payload["created_users"][0]["username"], "M001")
+
+        with self.app.app_context():
+            user = User.query.filter_by(username="M001").first()
+            self.assertIsNotNone(user)
+            self.assertEqual(user.role, "readonly")
+            self.assertTrue(user.check_password("mt@123"))
+            self.assertEqual(user.profile_emp_no, "M001")
+            self.assertEqual(user.profile_name, "经理甲")
+            self.assertEqual(user.profile_dept_id, self.dept_id)
+            self.assertEqual([row.emp_id for row in user.employee_assignments], [self.manager_id])
+            self.assertEqual([row.dept_id for row in user.department_assignments], [])
+
+            permissions = user.effective_page_permissions()
+            for key in MANAGER_PAGE_PERMISSION_KEYS:
+                self.assertTrue(permissions[key])
+            for key in EMPLOYEE_PAGE_PERMISSION_KEYS:
+                self.assertFalse(permissions[key])
+
+    def test_manager_batch_create_returns_skipped_employee_reasons(self) -> None:
+        first_res = self.client.post("/admin/users/manager-batch")
+        self.assertEqual(first_res.status_code, 200)
+
+        second_res = self.client.post("/admin/users/manager-batch")
+        self.assertEqual(second_res.status_code, 200)
+        payload = second_res.get_json()
+
+        self.assertEqual(payload["created_count"], 0)
+        self.assertEqual(payload["skipped_count"], 1)
+        self.assertEqual(payload["skipped_users"][0]["emp_no"], "M001")
+        self.assertEqual(payload["skipped_users"][0]["name"], "经理甲")
+        self.assertEqual(payload["skipped_users"][0]["reason"], "账号已存在")
+
+    def test_user_batch_operations_support_reset_role_permissions_and_delete(self) -> None:
+        create_a = self.client.post(
+            "/admin/users",
+            json={
+                "username": "reader-a",
+                "password": "old-a",
+                "role": "readonly",
+                "emp_ids": [self.employee_id],
+                "dept_ids": [],
+                "page_permissions": {key: key in MANAGER_PAGE_PERMISSION_KEYS for key in (*MANAGER_PAGE_PERMISSION_KEYS, *EMPLOYEE_PAGE_PERMISSION_KEYS)},
+            },
+        )
+        create_b = self.client.post(
+            "/admin/users",
+            json={
+                "username": "reader-b",
+                "password": "old-b",
+                "role": "readonly",
+                "emp_ids": [self.employee_b_id],
+                "dept_ids": [],
+                "page_permissions": {key: key in EMPLOYEE_PAGE_PERMISSION_KEYS for key in (*MANAGER_PAGE_PERMISSION_KEYS, *EMPLOYEE_PAGE_PERMISSION_KEYS)},
+            },
+        )
+        self.assertEqual(create_a.status_code, 200)
+        self.assertEqual(create_b.status_code, 200)
+        user_a_id = create_a.get_json()["user"]["id"]
+        user_b_id = create_b.get_json()["user"]["id"]
+
+        reset_res = self.client.post(
+            "/admin/users/batch",
+            json={"action": "reset_password", "user_ids": [user_a_id, user_b_id]},
+        )
+        self.assertEqual(reset_res.status_code, 200)
+
+        with self.app.app_context():
+            user_a = db.session.get(User, user_a_id)
+            user_b = db.session.get(User, user_b_id)
+            self.assertTrue(user_a.check_password("mt@123"))
+            self.assertTrue(user_b.check_password("mt@123"))
+
+        role_res = self.client.post(
+            "/admin/users/batch",
+            json={"action": "update_role", "user_ids": [user_a_id, user_b_id], "role": "admin"},
+        )
+        self.assertEqual(role_res.status_code, 200)
+
+        with self.app.app_context():
+            user_a = db.session.get(User, user_a_id)
+            user_b = db.session.get(User, user_b_id)
+            self.assertEqual(user_a.role, "admin")
+            self.assertEqual(user_b.role, "admin")
+
+        next_permissions = {key: key in MANAGER_PAGE_PERMISSION_KEYS for key in (*MANAGER_PAGE_PERMISSION_KEYS, *EMPLOYEE_PAGE_PERMISSION_KEYS)}
+        permissions_res = self.client.post(
+            "/admin/users/batch",
+            json={"action": "update_permissions", "user_ids": [user_a_id, user_b_id], "page_permissions": next_permissions},
+        )
+        self.assertEqual(permissions_res.status_code, 200)
+
+        with self.app.app_context():
+            user_a = db.session.get(User, user_a_id)
+            user_b = db.session.get(User, user_b_id)
+            self.assertEqual(user_a.effective_page_permissions(), {key: True for key in (*MANAGER_PAGE_PERMISSION_KEYS, *EMPLOYEE_PAGE_PERMISSION_KEYS)})
+            self.assertEqual(user_b.effective_page_permissions(), {key: True for key in (*MANAGER_PAGE_PERMISSION_KEYS, *EMPLOYEE_PAGE_PERMISSION_KEYS)})
+
+        downgrade_res = self.client.post(
+            "/admin/users/batch",
+            json={"action": "update_role", "user_ids": [user_a_id, user_b_id], "role": "readonly"},
+        )
+        self.assertEqual(downgrade_res.status_code, 200)
+
+        permissions_res = self.client.post(
+            "/admin/users/batch",
+            json={"action": "update_permissions", "user_ids": [user_a_id, user_b_id], "page_permissions": next_permissions},
+        )
+        self.assertEqual(permissions_res.status_code, 200)
+
+        with self.app.app_context():
+            user_a = db.session.get(User, user_a_id)
+            user_b = db.session.get(User, user_b_id)
+            self.assertEqual(user_a.effective_page_permissions(), next_permissions)
+            self.assertEqual(user_b.effective_page_permissions(), next_permissions)
+
+        delete_res = self.client.post(
+            "/admin/users/batch",
+            json={"action": "delete", "user_ids": [user_a_id, user_b_id]},
+        )
+        self.assertEqual(delete_res.status_code, 200)
+
+        with self.app.app_context():
+            self.assertIsNone(db.session.get(User, user_a_id))
+            self.assertIsNone(db.session.get(User, user_b_id))
+
+    def test_manager_batch_account_login_redirects_to_accessible_page(self) -> None:
+        create_res = self.client.post("/admin/users/manager-batch")
+        self.assertEqual(create_res.status_code, 200)
+
+        manager_client = self.app.test_client()
+        login_res = manager_client.post(
+            "/login",
+            data={"username": "M001", "password": "mt@123"},
+            follow_redirects=False,
+        )
+        self.assertEqual(login_res.status_code, 302)
+        self.assertTrue(login_res.headers["Location"].endswith("/employee/manager-query"))
+
+        root_res = manager_client.get("/", follow_redirects=False)
+        self.assertEqual(root_res.status_code, 302)
+        self.assertTrue(root_res.headers["Location"].endswith("/employee/manager-query"))
+
+    def test_account_create_and_update_require_employee_assignment(self) -> None:
+        create_res = self.client.post(
+            "/admin/users",
+            json={
+                "username": "no-emp",
+                "password": "123456",
+                "role": "readonly",
+                "emp_ids": [],
+                "dept_ids": [],
+            },
+        )
+        self.assertEqual(create_res.status_code, 400)
+        self.assertIn("员工", create_res.get_json()["error"])
+
+        create_ok = self.client.post(
+            "/admin/users",
+            json={
+                "username": "with-emp",
+                "password": "123456",
+                "role": "readonly",
+                "emp_ids": [self.employee_id],
+                "dept_ids": [],
+            },
+        )
+        self.assertEqual(create_ok.status_code, 200)
+        user_id = create_ok.get_json()["user"]["id"]
+
+        update_res = self.client.put(
+            f"/admin/users/{user_id}",
+            json={
+                "emp_ids": [],
+                "dept_ids": [],
+            },
+        )
+        self.assertEqual(update_res.status_code, 400)
+        self.assertIn("员工", update_res.get_json()["error"])
+
+    def test_top_nav_renders_username_and_employee_name(self) -> None:
+        project_root = os.path.dirname(os.path.dirname(__file__))
+        app = Flask(
+            "top_nav_user_display_test",
+            template_folder=os.path.join(project_root, "templates"),
+            static_folder=os.path.join(project_root, "static"),
+        )
+        register_routes(app)
+
+        nav_user = SimpleNamespace(
+            username="reader",
+            role="readonly",
+            profile_emp_no="E001",
+            profile_name="员工甲",
+            employee_assignments=[SimpleNamespace(employee=SimpleNamespace(emp_no="E999", name="临时关联员工"))],
+            has_any_page_access=lambda _keys: True,
+            can_access_page=lambda _key: True,
+        )
+        with app.test_request_context("/employee/dashboard"):
+            g.current_user = nav_user
+            html = render_template("dashboard.html", employees=[])
+
+        self.assertIn("top-nav-user-code", html)
+        self.assertIn("top-nav-user-person", html)
+        self.assertIn(">E001<", html)
+        self.assertIn(">员工甲<", html)
+
+    def test_account_profile_identity_is_bound_on_create_only(self) -> None:
+        create_res = self.client.post(
+            "/admin/users",
+            json={
+                "username": "fixed-reader",
+                "password": "123456",
+                "role": "readonly",
+                "emp_ids": [self.employee_id],
+                "dept_ids": [],
+            },
+        )
+        self.assertEqual(create_res.status_code, 200)
+        user_id = create_res.get_json()["user"]["id"]
+
+        update_res = self.client.put(
+            f"/admin/users/{user_id}",
+            json={
+                "emp_ids": [self.employee_b_id],
+                "dept_ids": [],
+            },
+        )
+        self.assertEqual(update_res.status_code, 200)
+        payload = update_res.get_json()["user"]
+        self.assertEqual(payload["profile_emp_no"], "E001")
+        self.assertEqual(payload["profile_name"], "员工甲")
+        self.assertEqual(payload["profile_department"]["dept_name"], "行政部")
+        self.assertEqual(payload["employees"][0]["emp_no"], "E002")
+        self.assertEqual(payload["employees"][0]["name"], "员工乙")
+
+        with self.app.app_context():
+            user = db.session.get(User, user_id)
+            self.assertEqual(user.profile_emp_no, "E001")
+            self.assertEqual(user.profile_name, "员工甲")
+            self.assertEqual(user.profile_dept_id, self.dept_id)
+
+    def test_account_profile_identity_can_be_edited_manually(self) -> None:
+        create_res = self.client.post(
+            "/admin/users",
+            json={
+                "username": "editable-reader",
+                "password": "123456",
+                "role": "readonly",
+                "emp_ids": [self.employee_id],
+                "dept_ids": [],
+            },
+        )
+        self.assertEqual(create_res.status_code, 200)
+        user_id = create_res.get_json()["user"]["id"]
+
+        update_res = self.client.put(
+            f"/admin/users/{user_id}",
+            json={
+                "profile_emp_no": "A1001",
+                "profile_name": "测试账号",
+                "profile_dept_id": self.dept_id,
+                "emp_ids": [self.employee_id],
+                "dept_ids": [],
+            },
+        )
+        self.assertEqual(update_res.status_code, 200)
+        payload = update_res.get_json()["user"]
+        self.assertEqual(payload["profile_emp_no"], "A1001")
+        self.assertEqual(payload["profile_name"], "测试账号")
+        self.assertEqual(payload["profile_department"]["dept_name"], "行政部")
+
+        with self.app.app_context():
+            user = db.session.get(User, user_id)
+            self.assertEqual(user.profile_emp_no, "A1001")
+            self.assertEqual(user.profile_name, "测试账号")
+            self.assertEqual(user.profile_dept_id, self.dept_id)
+
+    def test_account_profile_department_can_be_edited_by_single_selector_value(self) -> None:
+        with self.app.app_context():
+            dept_b = Department(dept_no="D002", dept_name="生产部")
+            db.session.add(dept_b)
+            db.session.commit()
+            dept_b_id = dept_b.id
+
+        create_res = self.client.post(
+            "/admin/users",
+            json={
+                "username": "dept-reader",
+                "password": "123456",
+                "role": "readonly",
+                "emp_ids": [self.employee_id],
+                "dept_ids": [],
+            },
+        )
+        self.assertEqual(create_res.status_code, 200)
+        user_id = create_res.get_json()["user"]["id"]
+
+        update_res = self.client.put(
+            f"/admin/users/{user_id}",
+            json={
+                "profile_emp_no": "E001",
+                "profile_name": "员工甲",
+                "profile_dept_id": dept_b_id,
+                "emp_ids": [self.employee_id],
+                "dept_ids": [],
+            },
+        )
+        self.assertEqual(update_res.status_code, 200)
+        payload = update_res.get_json()["user"]
+        self.assertEqual(payload["profile_department"]["id"], dept_b_id)
+        self.assertEqual(payload["profile_department"]["dept_name"], "生产部")
 
     def test_admin_module_exports_symbols_needed_by_extracted_routes(self) -> None:
         from routes import admin as admin_module
@@ -229,6 +590,27 @@ class AttendanceOverrideFeatureTests(unittest.TestCase):
         self.assertIsInstance(admin_module.PAGE_PERMISSION_LABELS, dict)
         self.assertTrue(callable(admin_module.parse_bool_zh))
         self.assertTrue(admin_module.parse_bool_zh("是"))
+
+    def test_runtime_code_no_longer_uses_legacy_query_lookup_helpers(self) -> None:
+        project_root = Path(os.path.dirname(os.path.dirname(__file__)))
+        runtime_files = [
+            project_root / "routes" / "auth.py",
+            project_root / "routes" / "admin.py",
+            project_root / "routes" / "admin_accounts.py",
+            project_root / "routes" / "admin_attendance_overrides.py",
+            project_root / "routes" / "admin_imports.py",
+            project_root / "routes" / "employee.py",
+            project_root / "services" / "attendance_service.py",
+            project_root / "services" / "manager_attendance_service.py",
+        ]
+
+        offenders = []
+        for file_path in runtime_files:
+            content = file_path.read_text(encoding="utf-8")
+            if ".query.get(" in content or ".get_or_404(" in content:
+                offenders.append(str(file_path.relative_to(project_root)))
+
+        self.assertEqual(offenders, [])
 
     def test_manager_example_download_returns_expected_headers(self) -> None:
         res = self.client.get("/admin/manager-attendance-overrides/template?month=2026-05")
@@ -373,6 +755,57 @@ class AttendanceOverrideFeatureTests(unittest.TestCase):
             html = render_template("admin/departments.html")
 
         self.assertIn("/admin/departments/export", html)
+
+    def test_accounts_page_renders_filter_controls(self) -> None:
+        project_root = os.path.dirname(os.path.dirname(__file__))
+        app = Flask(
+            "accounts_filter_render_test",
+            template_folder=os.path.join(project_root, "templates"),
+            static_folder=os.path.join(project_root, "static"),
+        )
+        register_routes(app)
+
+        admin_user = SimpleNamespace(
+            id=1,
+            username="admin",
+            role="admin",
+            has_any_page_access=lambda _keys: True,
+            can_access_page=lambda _key: True,
+        )
+        with app.test_request_context("/admin/accounts"):
+            g.current_user = admin_user
+            html = render_template(
+                "admin/accounts.html",
+                current_user_id=admin_user.id,
+                manager_page_permissions=[],
+                employee_page_permissions=[],
+            )
+
+        self.assertIn('class="query-page-shell"', html)
+        self.assertIn("创建账号", html)
+        self.assertIn("账号列表", html)
+        self.assertIn('id="createPermissionInput"', html)
+        self.assertIn('id="editPermissionInput"', html)
+        self.assertIn('id="accountPermissionModal"', html)
+        self.assertIn('id="filterEmpLookup"', html)
+        self.assertIn("账号筛选", html)
+        self.assertIn("姓名", html)
+        self.assertIn('name="profile_emp_no"', html)
+        self.assertIn('name="profile_name"', html)
+        self.assertIn('id="editProfileDeptLookup"', html)
+        self.assertIn('name="profile_dept_id"', html)
+        self.assertIn('id="accountSingleDeptPickerModal"', html)
+        self.assertIn('id="toggleSelectAllUsers"', html)
+        self.assertIn('id="batchResetPasswordBtn"', html)
+        self.assertIn('id="batchDeleteUsersBtn"', html)
+        self.assertIn('id="applyBatchRoleBtn"', html)
+        self.assertIn('id="batchRoleModal"', html)
+        self.assertIn('id="batchRoleSelect"', html)
+        self.assertIn('id="confirmBatchRoleBtn"', html)
+        self.assertIn('id="openBatchPermissionBtn"', html)
+        self.assertIn('id="filterAdminRole"', html)
+        self.assertIn('id="applyUserFiltersBtn"', html)
+        self.assertIn('id="resetUserFiltersBtn"', html)
 
     def test_authenticated_shell_renders_enterprise_navigation(self) -> None:
         project_root = os.path.dirname(os.path.dirname(__file__))
@@ -654,6 +1087,20 @@ class AttendanceOverrideFeatureTests(unittest.TestCase):
         self.assertIsNotNone(query)
         self.assertEqual(query["label"], "查询中心")
         self.assertIn("/employee/dashboard", [entry["href"] for entry in query["entries"]])
+        self.assertEqual(
+            [entry["label"] for entry in query["entries"]],
+            [
+                "员工考勤数据查询",
+                "员工异常查询",
+                "员工打卡数据查询",
+                "员工部门工时",
+                "管理人员考勤数据查询",
+                "管理人员加班查询",
+                "管理人员年休查询",
+                "管理人员部门工时",
+                "汇总下载",
+            ],
+        )
 
         context = nav_context(admin_user, "/admin/departments/manage")
         self.assertEqual(context["current_module"]["slug"], "master-data")

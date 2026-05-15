@@ -88,6 +88,8 @@ window.AppDialog = (() => {
 })();
 
 window.AppToast = (() => {
+  const AUTO_HIDE_DELAY_MS = 3000;
+
   function show(message, type = "success", title = "") {
     const container = document.getElementById("appToastContainer");
     if (!container) return;
@@ -103,11 +105,25 @@ window.AppToast = (() => {
         <strong class="me-auto">${titleText}</strong>
         <button type="button" class="btn-close" data-bs-dismiss="toast" aria-label="Close"></button>
       </div>
-      <div class="toast-body" style="white-space: pre-line;">${String(message || "")}</div>
+      <div class="toast-body" style="white-space: pre-line; max-height: 240px; overflow-y: auto;">${String(message || "")}</div>
     `;
     container.appendChild(toastEl);
-    const toast = bootstrap.Toast.getOrCreateInstance(toastEl, { delay: 2800 });
+    const toast = bootstrap.Toast.getOrCreateInstance(toastEl, { autohide: false });
+    let timerId = window.setTimeout(() => {
+      timerId = null;
+      toast.hide();
+    }, AUTO_HIDE_DELAY_MS);
+    toastEl.addEventListener("mouseenter", () => {
+      if (timerId) {
+        window.clearTimeout(timerId);
+        timerId = null;
+      }
+    });
     toastEl.addEventListener("hidden.bs.toast", () => {
+      if (timerId) {
+        window.clearTimeout(timerId);
+        timerId = null;
+      }
       toastEl.remove();
     });
     toast.show();

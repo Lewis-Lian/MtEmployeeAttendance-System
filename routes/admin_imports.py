@@ -16,7 +16,7 @@ def register_admin_import_routes(admin_bp) -> None:
     @admin_bp.route("/account-sets/<int:account_set_id>/imports", methods=["GET"])
     @admin_required
     def list_account_set_imports(account_set_id: int):
-        row = admin_module.AccountSet.query.get_or_404(account_set_id)
+        row = admin_module._require_model(admin_module.AccountSet, account_set_id)
         records = (
             admin_module.AccountSetImport.query.filter_by(account_set_id=row.id)
             .order_by(admin_module.AccountSetImport.id.desc())
@@ -60,7 +60,7 @@ def register_admin_import_routes(admin_bp) -> None:
     def import_raw_files():
         account_set_id = request.form.get("account_set_id", type=int)
         account_set = (
-            admin_module.AccountSet.query.get(account_set_id)
+            admin_module.db.session.get(admin_module.AccountSet, account_set_id)
             if account_set_id
             else admin_module.AccountSet.query.filter_by(is_active=True).first()
         )

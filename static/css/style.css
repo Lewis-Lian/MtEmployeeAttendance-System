@@ -800,8 +800,8 @@ body.sidebar-collapsed .app-side-link.is-active::before {
   top: 0;
   z-index: 1030;
   padding: 16px 18px 0;
-  background: linear-gradient(180deg, rgba(245, 247, 251, 0.96), rgba(245, 247, 251, 0.76));
-  backdrop-filter: blur(8px);
+  background: transparent;
+  backdrop-filter: none;
 }
 
 .top-nav-inner {
@@ -842,10 +842,15 @@ body.sidebar-collapsed .app-side-link.is-active::before {
   min-width: 92px;
 }
 
-.top-nav-user-name {
+.top-nav-user-code {
   font-size: 13px;
   font-weight: 700;
   color: #1f2937;
+}
+
+.top-nav-user-person {
+  font-size: 12px;
+  color: #475569;
 }
 
 .top-nav-user-role {
@@ -2472,6 +2477,10 @@ h5,
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 14px;
   align-items: end;
+}
+
+.query-filter-form {
+  display: contents;
 }
 
 .query-filter-field {

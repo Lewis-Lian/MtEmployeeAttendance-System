@@ -29,14 +29,14 @@ def _month_date_range(month: str) -> tuple[date, date] | None:
 class AttendanceService:
     @staticmethod
     def monthly_summary(emp_id: int, month: str) -> dict:
-        employee = Employee.query.get(emp_id)
+        employee = db.session.get(Employee, emp_id)
         if not employee:
             return empty_monthly_summary()
         return batch_monthly_summaries(month, [employee], EMPLOYEE_STATS_CONTEXT).get(emp_id, empty_monthly_summary())
 
     @staticmethod
     def yearly_summary(emp_id: int, year: int) -> dict:
-        employee = Employee.query.get(emp_id)
+        employee = db.session.get(Employee, emp_id)
         actual_hours = 0.0
         absent_hours = 0.0
         overtime_hours = 0.0

@@ -38,8 +38,11 @@
           <div class="top-nav-subtitle">{% block page_intro %}统一考勤、人员、部门与账套数据管理{% endblock %}</div>
         </div>
         <div class="top-nav-actions">
+          {% set current_employee_code = g.current_user.profile_emp_no if g.current_user and g.current_user.profile_emp_no else '未绑定工号' %}
+          {% set current_employee_name = g.current_user.profile_name if g.current_user and g.current_user.profile_name else '未绑定姓名' %}
           <div class="top-nav-user">
-            <span class="top-nav-user-name">{{ g.current_user.username if g.current_user else '访客' }}</span>
+            <span class="top-nav-user-code">{{ current_employee_code }}</span>
+            <span class="top-nav-user-person">{{ current_employee_name }}</span>
             <span class="top-nav-user-role">{{ '管理员' if g.current_user and g.current_user.role == 'admin' else '只读用户' }}</span>
           </div>
           <a class="btn btn-sm nav-link-logout" href="/logout">退出</a>

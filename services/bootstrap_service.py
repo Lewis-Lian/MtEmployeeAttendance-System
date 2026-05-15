@@ -82,9 +82,19 @@ def ensure_schema_compatibility() -> None:
             db.session.commit()
 
     user_columns = _get_column_names(inspector, "users")
-    if user_columns is not None and "page_permissions" not in user_columns:
-        db.session.execute(text("ALTER TABLE users ADD COLUMN page_permissions JSON"))
-        db.session.commit()
+    if user_columns is not None:
+        if "page_permissions" not in user_columns:
+            db.session.execute(text("ALTER TABLE users ADD COLUMN page_permissions JSON"))
+            db.session.commit()
+        if "profile_emp_no" not in user_columns:
+            db.session.execute(text("ALTER TABLE users ADD COLUMN profile_emp_no VARCHAR(80)"))
+            db.session.commit()
+        if "profile_name" not in user_columns:
+            db.session.execute(text("ALTER TABLE users ADD COLUMN profile_name VARCHAR(80)"))
+            db.session.commit()
+        if "profile_dept_id" not in user_columns:
+            db.session.execute(text("ALTER TABLE users ADD COLUMN profile_dept_id INTEGER"))
+            db.session.commit()
 
     daily_record_columns = _get_column_names(inspector, "daily_records")
     if daily_record_columns is not None:

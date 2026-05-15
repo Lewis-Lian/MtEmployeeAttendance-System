@@ -239,7 +239,9 @@ document.addEventListener("DOMContentLoaded", async () => {
   const employeeSelector = window.SelectorComponent.createEmployeeSelector();
   const monthInput = document.getElementById("employeeAttendanceOverrideMonth");
   const fileInput = document.getElementById("employeeAttendanceOverrideFileInput");
-  monthInput.value = currentMonthValue();
+  if (!monthInput.value) {
+    monthInput.value = currentMonthValue();
+  }
   await employeeSelector.init();
   updateEmployeeMetrics("等待查询");
   applyEmployeeOverrideLockState(null);

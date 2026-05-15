@@ -5,13 +5,13 @@ from . import db
 
 
 PAGE_PERMISSION_LABELS = {
-    "manager_query": "管理人员查询",
+    "manager_query": "管理人员考勤数据查询",
     "manager_overtime_query": "查询加班",
     "manager_annual_leave_query": "查询年休",
     "manager_department_hours_query": "管理人员部门工时查询",
-    "employee_dashboard": "考勤数据查询",
+    "employee_dashboard": "员工考勤数据查询",
     "abnormal_query": "员工异常查询",
-    "punch_records": "打卡数据查询",
+    "punch_records": "员工打卡数据查询",
     "department_hours_query": "员工部门工时查询",
     "summary_download": "汇总下载",
 }
@@ -42,6 +42,9 @@ class User(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(80), unique=True, nullable=False, index=True)
+    profile_emp_no = db.Column(db.String(80), nullable=True)
+    profile_name = db.Column(db.String(80), nullable=True)
+    profile_dept_id = db.Column(db.Integer, nullable=True)
     password_hash = db.Column(db.String(255), nullable=False)
     role = db.Column(db.String(20), nullable=False, default="readonly")
     page_permissions = db.Column(db.JSON, nullable=True)
