@@ -22,8 +22,10 @@ function updateAbnormalMetrics(employeeSelector, rows = null) {
   const selectedOption = accountSetSelect.options[accountSetSelect.selectedIndex];
   const showEmpNo = document.getElementById("toggleEmpNo").checked;
 
-  document.getElementById("metricSelectedEmployees").textContent = String(ids.length);
-  document.getElementById("metricSelectedEmployeesSub").textContent = ids.length ? `当前已选 ${ids.length} 人` : "当前未选择员工";
+  document.getElementById("metricSelectedEmployees").textContent = ids.length ? String(ids.length) : "全部";
+  document.getElementById("metricSelectedEmployeesSub").textContent = ids.length
+    ? `当前已选 ${ids.length} 人`
+    : "未手动选择时，默认查询当前账号下全部可见员工";
   document.getElementById("metricAccountSet").textContent = selectedOption ? selectedOption.textContent.trim() : "未选择";
   document.getElementById("metricResultRowsSub").textContent = showEmpNo ? "当前显示人员编号列" : "当前隐藏人员编号列";
 
@@ -80,12 +82,7 @@ async function loadAccountSets() {
 }
 
 async function queryAbnormalData(employeeSelector) {
-  const { query, selectedCount } = buildQuery(employeeSelector);
-  if (!selectedCount) {
-    renderRows([]);
-    updateAbnormalMetrics(employeeSelector, []);
-    return;
-  }
+  const { query } = buildQuery(employeeSelector);
   const res = await fetch(`/employee/api/abnormal-attendance?${query.toString()}`);
   const data = await res.json();
   const rows = Array.isArray(data) ? data : [];
@@ -99,11 +96,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   document.getElementById("queryBtn").addEventListener("click", () => queryAbnormalData(employeeSelector));
   document.getElementById("downloadBtn").addEventListener("click", () => {
-    const { query, selectedCount } = buildQuery(employeeSelector);
-    if (!selectedCount) {
-      window.AppDialog.alert("请先选择员工");
-      return;
-    }
+    const { query } = buildQuery(employeeSelector);
     window.location.href = `/employee/api/abnormal-attendance/export?${query.toString()}`;
   });
 

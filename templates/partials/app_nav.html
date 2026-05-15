@@ -1,21 +1,18 @@
 <nav class="app-top-modules" aria-label="产品模块">
   {% for module in app_nav.modules %}
   <a
-    class="app-top-module {% if app_nav.current_module and app_nav.current_module.slug == module.slug %}is-active{% endif %}"
+    class="app-top-module {% if module.icon_key %}has-icon {% endif %}{% if app_nav.current_module and app_nav.current_module.slug == module.slug %}is-active{% endif %}"
     href="{{ module.home_href }}"
   >
+    {% if module.icon_key %}
+    <span class="app-side-icon app-top-module-icon icon-{{ module.icon_key|replace('_', '-') }}" aria-hidden="true"></span>
+    {% endif %}
     <span class="app-top-module-label">{{ module.label }}</span>
   </a>
   {% endfor %}
 </nav>
 
 <nav class="app-module-sidebar" aria-label="模块页面">
-  {% if app_nav.current_module %}
-  <div class="app-module-heading">
-    <span class="app-sidebar-title">{{ app_nav.current_module.label }}</span>
-    <span class="app-module-subtitle">{{ app_nav.current_module.description }}</span>
-  </div>
-  {% endif %}
   <div class="app-sidebar-nav">
     {% for entry in app_nav.current_entries %}
     <a
@@ -36,7 +33,11 @@
     class="module-bottom-link {% if app_nav.current_module and app_nav.current_module.slug == module.slug %}is-active{% endif %}"
     href="{{ module.home_href }}"
   >
+    {% if module.icon_key %}
+    <span class="app-side-icon module-bottom-icon icon-{{ module.icon_key|replace('_', '-') }}" aria-hidden="true"></span>
+    {% else %}
     <span class="module-bottom-dot" aria-hidden="true"></span>
+    {% endif %}
     <span>{{ module.short_label }}</span>
   </a>
   {% endfor %}

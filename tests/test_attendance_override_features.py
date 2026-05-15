@@ -13,6 +13,7 @@ from models import db
 from models.account_set import AccountSet
 from models.department import Department
 from models.employee import Employee
+from models.manager_month_stat import ManagerMonthStat
 from models.user import EMPLOYEE_PAGE_PERMISSION_KEYS, MANAGER_PAGE_PERMISSION_KEYS, User
 from routes import register_routes
 from utils.app_navigation import module_by_slug, nav_context, visible_modules
@@ -406,11 +407,11 @@ class AttendanceOverrideFeatureTests(unittest.TestCase):
             follow_redirects=False,
         )
         self.assertEqual(login_res.status_code, 302)
-        self.assertTrue(login_res.headers["Location"].endswith("/employee/manager-query"))
+        self.assertTrue(login_res.headers["Location"].endswith("/employee/home"))
 
         root_res = manager_client.get("/", follow_redirects=False)
         self.assertEqual(root_res.status_code, 302)
-        self.assertTrue(root_res.headers["Location"].endswith("/employee/manager-query"))
+        self.assertTrue(root_res.headers["Location"].endswith("/employee/home"))
 
     def test_account_create_and_update_require_employee_assignment(self) -> None:
         create_res = self.client.post(
@@ -884,6 +885,7 @@ class AttendanceOverrideFeatureTests(unittest.TestCase):
         )
 
         expected_entry_keys = {
+            "query_home",
             "employee_dashboard",
             "abnormal_query",
             "punch_records",
@@ -911,6 +913,11 @@ class AttendanceOverrideFeatureTests(unittest.TestCase):
             with app.test_request_context(request_path):
                 g.current_user = admin_user
                 html = render_template("partials/app_nav.html", app_nav=nav_context(admin_user, request_path))
+
+            expected_module_icon_class = f"icon-{module.get('icon_key', '').replace('_', '-')}"
+            if module.get("icon_key"):
+                with self.subTest(module=module["slug"], module_icon=module["icon_key"]):
+                    self.assertIn(expected_module_icon_class, html)
 
             for entry in module["entries"]:
                 seen_keys.add(entry["key"])
@@ -992,6 +999,12 @@ class AttendanceOverrideFeatureTests(unittest.TestCase):
     def test_query_center_table_pages_render_query_workspace(self) -> None:
         pages = [
             (
+                "/employee/home",
+                "employee_home.html",
+                {},
+                ["managerHomeAccountSetSelect", "managerHomeSummary", "managerHomeEmptyState", "static/js/employee_home.js"],
+            ),
+            (
                 "/employee/dashboard",
                 "dashboard.html",
                 {"employees": []},
@@ -1071,6 +1084,39 @@ class AttendanceOverrideFeatureTests(unittest.TestCase):
         self.assertIn("punchHeaderCheckboxes", html)
         self.assertIn("static/js/summary_download.js", html)
 
+    def test_employee_query_pages_default_to_all_accessible_employees_when_selector_empty(self) -> None:
+        project_root = Path(__file__).resolve().parent.parent
+        js_files = [
+            project_root / "static/js/dashboard.js",
+            project_root / "static/js/abnormal_query.js",
+            project_root / "static/js/punch_records.js",
+            project_root / "static/js/summary_download.js",
+        ]
+
+        for path in js_files:
+            with self.subTest(script=path.name):
+                source = path.read_text(encoding="utf-8")
+                self.assertIn("未手动选择时，默认查询当前账号下全部可见员工", source)
+                self.assertNotIn("请先选择员工", source)
+
+    def test_global_metric_sections_are_toggle_ready(self) -> None:
+        project_root = Path(__file__).resolve().parent.parent
+        base_html = (project_root / "templates/base.html").read_text(encoding="utf-8")
+        toggle_js = (project_root / "static/js/metric_section_toggle.js").read_text(encoding="utf-8")
+        style_css = (project_root / "static/css/style.css").read_text(encoding="utf-8")
+
+        self.assertIn("js/metric_section_toggle.js", base_html)
+        self.assertIn('collect(".query-metric-grid")', toggle_js)
+        self.assertNotIn('collect(".manager-home-metric-grid")', toggle_js)
+        self.assertIn('collect(".module-summary-grid")', toggle_js)
+        self.assertIn("summary-card.dashboard-metric-card", toggle_js)
+        self.assertIn('.top-nav-actions', toggle_js)
+        self.assertIn(".top-nav-user", toggle_js)
+        self.assertIn("展开卡片", toggle_js)
+        self.assertIn("收起卡片", toggle_js)
+        self.assertIn(".top-nav-metric-toggle", style_css)
+        self.assertIn(".metric-toggle-target.is-collapsed", style_css)
+
     def test_product_navigation_groups_pages_into_modules(self) -> None:
         admin_user = SimpleNamespace(
             username="admin",
@@ -1081,7 +1127,12 @@ class AttendanceOverrideFeatureTests(unittest.TestCase):
 
         modules = visible_modules(admin_user)
         slugs = [module["slug"] for module in modules]
-        self.assertEqual(slugs, ["query", "account", "master-data", "corrections", "settings"])
+        self.assertEqual(slugs, ["home", "query", "account", "master-data", "corrections", "settings"])
+
+        home = module_by_slug("home")
+        self.assertIsNotNone(home)
+        self.assertEqual(home["label"], "首页")
+        self.assertEqual([entry["label"] for entry in home["entries"]], ["首页"])
 
         query = module_by_slug("query")
         self.assertIsNotNone(query)
@@ -1115,21 +1166,29 @@ class AttendanceOverrideFeatureTests(unittest.TestCase):
         )
 
         modules = visible_modules(readonly_user)
-        self.assertEqual([module["slug"] for module in modules], ["query"])
+        self.assertEqual([module["slug"] for module in modules], ["home", "query"])
 
-        context = nav_context(readonly_user, "/employee/dashboard")
-        self.assertEqual(context["current_module"]["slug"], "query")
-        self.assertEqual([entry["href"] for entry in context["current_entries"]], ["/employee/dashboard"])
+        context = nav_context(readonly_user, "/employee/home")
+        self.assertEqual(context["current_module"]["slug"], "home")
+        self.assertEqual([entry["href"] for entry in context["current_entries"]], ["/employee/home"])
 
     def test_module_home_routes_render_accessible_entries(self) -> None:
+        home_module_res = self.client.get("/module/home", follow_redirects=False)
+        self.assertEqual(home_module_res.status_code, 302)
+        self.assertTrue(home_module_res.headers["Location"].endswith("/employee/home"))
+
         res = self.client.get("/module/query")
         self.assertEqual(res.status_code, 200)
-        html = res.get_data(as_text=True)
-        self.assertIn("module-home", html)
-        self.assertIn("module-entry-grid", html)
-        self.assertIn("module-summary-grid", html)
-        self.assertIn("查询中心", html)
-        self.assertIn("/employee/dashboard", html)
+        query_html = res.get_data(as_text=True)
+        self.assertIn("查询中心", query_html)
+        self.assertIn("/employee/dashboard", query_html)
+        self.assertIn("/employee/manager-query", query_html)
+
+        home_res = self.client.get("/employee/home")
+        self.assertEqual(home_res.status_code, 200)
+        home_html = home_res.get_data(as_text=True)
+        self.assertIn("manager-home-shell", home_html)
+        self.assertIn("managerHomeAccountSetSelect", home_html)
 
         account_res = self.client.get("/module/account")
         self.assertEqual(account_res.status_code, 200)
@@ -1147,12 +1206,77 @@ class AttendanceOverrideFeatureTests(unittest.TestCase):
 
         allowed = reader_client.get("/module/query")
         self.assertEqual(allowed.status_code, 200)
-        allowed_html = allowed.get_data(as_text=True)
-        self.assertIn("/employee/dashboard", allowed_html)
-        self.assertNotIn("/employee/abnormal-query", allowed_html)
+        self.assertIn("/employee/dashboard", allowed.get_data(as_text=True))
+
+        home = reader_client.get("/employee/home")
+        self.assertEqual(home.status_code, 200)
+        home_html = home.get_data(as_text=True)
+        self.assertIn("manager-home-shell", home_html)
+        self.assertNotIn("/employee/abnormal-query", home_html)
 
         denied = reader_client.get("/module/account")
         self.assertEqual(denied.status_code, 403)
+
+    def test_employee_home_api_returns_empty_when_no_account_set(self) -> None:
+        with self.app.app_context():
+            AccountSet.query.delete()
+            db.session.commit()
+
+        res = self.client.get("/employee/api/home-manager-summary")
+        self.assertEqual(res.status_code, 200)
+        payload = res.get_json()
+        self.assertFalse(payload["has_data"])
+        self.assertEqual(payload["empty_state"], "暂无账套，暂无数据")
+
+    def test_employee_home_api_returns_empty_when_profile_emp_no_missing(self) -> None:
+        with self.app.app_context():
+            viewer = User(username="viewer", role="readonly", page_permissions={"employee_dashboard": True})
+            viewer.profile_name = "查看者"
+            viewer.set_password("viewer123")
+            db.session.add(viewer)
+            db.session.commit()
+
+        viewer_client = self.app.test_client()
+        viewer_client.post("/login", data={"username": "viewer", "password": "viewer123"})
+        res = viewer_client.get("/employee/api/home-manager-summary")
+        self.assertEqual(res.status_code, 200)
+        payload = res.get_json()
+        self.assertFalse(payload["has_data"])
+        self.assertEqual(payload["empty_state"], "账号未绑定管理人员工号，暂无数据")
+
+    def test_employee_home_api_returns_manager_summary_by_profile_emp_no(self) -> None:
+        with self.app.app_context():
+            viewer = User(username="viewer", role="readonly", page_permissions={"manager_query": True})
+            viewer.profile_emp_no = "M001"
+            viewer.profile_name = "经理甲账号"
+            viewer.set_password("viewer123")
+            db.session.add(viewer)
+            db.session.add(AccountSet(month="2026-04", name="2026-04", is_active=False, is_locked=False))
+            db.session.add(AccountSet(month="2026-06", name="2026-06", is_active=False, is_locked=False))
+            db.session.add(ManagerMonthStat(emp_id=self.manager_id, year=2026, stat_type="annual_leave", m4=1, m5=2, remaining=9))
+            db.session.add(ManagerMonthStat(emp_id=self.manager_id, year=2026, stat_type="overtime", prev_dec=2, m4=1, m5=-0.5, m6=3, remaining=5.5))
+            db.session.commit()
+
+        viewer_client = self.app.test_client()
+        viewer_client.post("/login", data={"username": "viewer", "password": "viewer123"})
+        april_res = viewer_client.get("/employee/api/home-manager-summary?month=2026-04")
+        self.assertEqual(april_res.status_code, 200)
+        april_payload = april_res.get_json()
+        self.assertTrue(april_payload["has_data"])
+        self.assertEqual(april_payload["month"], "2026-04")
+        self.assertEqual(april_payload["manager"]["emp_no"], "M001")
+        self.assertEqual(april_payload["manager"]["name"], "经理甲")
+        self.assertEqual(april_payload["manager"]["dept_name"], "行政部")
+        self.assertIn("attendance_days", april_payload["summary"])
+        self.assertIn("late_early_minutes", april_payload["summary"])
+        self.assertIn("benefit_days", april_payload["summary"])
+        self.assertEqual(april_payload["summary"]["benefit_days"], 11)
+        self.assertEqual(april_payload["summary"]["overtime_remaining_days"], 3)
+
+        payload = viewer_client.get("/employee/api/home-manager-summary?month=2026-05").get_json()
+        self.assertEqual(payload["summary"]["benefit_days"], 9)
+        self.assertEqual(payload["summary"]["overtime_remaining_days"], 2.5)
+        self.assertIn("overtime_remaining_days", payload["summary"])
 
     def test_departments_export_downloads_importable_rows(self) -> None:
         with self.app.app_context():

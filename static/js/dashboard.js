@@ -18,8 +18,10 @@ function updateDashboardMetrics(employeeSelector, resultRows = null) {
   const showLeaveCounts = document.getElementById("showLeaveCounts").checked;
   const showLeaveDurations = document.getElementById("showLeaveDurations").checked;
 
-  document.getElementById("metricSelectedEmployees").textContent = String(ids.length);
-  document.getElementById("metricSelectedEmployeesSub").textContent = ids.length ? `当前已选 ${ids.length} 人` : "当前未选择员工";
+  document.getElementById("metricSelectedEmployees").textContent = ids.length ? String(ids.length) : "全部";
+  document.getElementById("metricSelectedEmployeesSub").textContent = ids.length
+    ? `当前已选 ${ids.length} 人`
+    : "未手动选择时，默认查询当前账号下全部可见员工";
   document.getElementById("metricAccountSet").textContent = selectedOption ? selectedOption.textContent.trim() : "未选择";
 
   const modeParts = [];
@@ -43,14 +45,7 @@ function updateDashboardMetrics(employeeSelector, resultRows = null) {
 }
 
 async function loadFinalData(employeeSelector) {
-  const { query, selectedCount } = buildFinalDataQuery(employeeSelector);
-  if (!selectedCount) {
-    document.getElementById("finalDataHead").innerHTML = "<tr><th>暂无数据</th></tr>";
-    document.getElementById("finalDataBody").innerHTML = '<tr><td class="text-muted">请先选择员工</td></tr>';
-    updateDashboardMetrics(employeeSelector, 0);
-    return;
-  }
-
+  const { query } = buildFinalDataQuery(employeeSelector);
   const res = await fetch(`/employee/api/final-data?${query.toString()}`);
   const data = await res.json();
   const headers = Array.isArray(data.headers) ? data.headers : [];
@@ -98,11 +93,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   document.getElementById("refreshBtn").addEventListener("click", () => loadFinalData(employeeSelector));
   document.getElementById("downloadBtn").addEventListener("click", () => {
-    const { query, selectedCount } = buildFinalDataQuery(employeeSelector);
-    if (!selectedCount) {
-      window.AppDialog.alert("请先选择员工");
-      return;
-    }
+    const { query } = buildFinalDataQuery(employeeSelector);
     window.location.href = `/employee/api/final-data/export?${query.toString()}`;
   });
 

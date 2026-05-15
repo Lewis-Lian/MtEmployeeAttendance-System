@@ -64,9 +64,9 @@ function updateDownloadMetrics(employeeSelector) {
   const accountSetSelect = document.getElementById("accountSetSelect");
   const selectedOption = accountSetSelect.options[accountSetSelect.selectedIndex];
 
-  document.getElementById("metricSelectedEmployees").textContent = String(ids.length);
+  document.getElementById("metricSelectedEmployees").textContent = ids.length ? String(ids.length) : "全部";
   document.getElementById("metricSelectedEmployeesSub").textContent =
-    ids.length ? `当前已选 ${ids.length} 人` : "当前未选择员工";
+    ids.length ? `当前已选 ${ids.length} 人` : "未手动选择时，默认查询当前账号下全部可见员工";
   document.getElementById("metricAccountSet").textContent = selectedOption
     ? selectedOption.textContent.trim()
     : "-";
@@ -81,11 +81,7 @@ function getSelectedSheets() {
 }
 
 async function doDownload(employeeSelector) {
-  const { query, selectedCount } = buildDownloadQuery(employeeSelector);
-  if (!selectedCount) {
-    window.AppDialog.alert("请先选择员工");
-    return;
-  }
+  const { query } = buildDownloadQuery(employeeSelector);
   const sheets = getSelectedSheets();
   if (!sheets.length) {
     window.AppDialog.alert("请至少选择一种报表");

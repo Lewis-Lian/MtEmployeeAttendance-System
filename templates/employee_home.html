@@ -1,0 +1,99 @@
+{% extends 'base.html' %}
+{% block title %}首页{% endblock %}
+{% block page_intro %}查看与当前账号工号匹配的管理人员考勤概览。{% endblock %}
+{% block content %}
+<div class="query-page-shell manager-home-shell">
+  {% set filter_body %}
+  <div class="query-filter-field">
+    <label class="form-label">账套</label>
+    <select class="form-select" id="managerHomeAccountSetSelect"></select>
+  </div>
+  <div class="query-filter-actions">
+    <button class="btn btn-primary" id="managerHomeRefreshBtn" type="button">刷新首页数据</button>
+  </div>
+  {% endset %}
+  {% with title="首页概览", description="按账套查看当前账号对应管理人员的关键考勤数据。", kicker="Home Overview", body=filter_body %}
+    {% include "partials/query/filter_shell.html" %}
+  {% endwith %}
+
+  <section class="query-workspace manager-home-workspace">
+    <section class="manager-home-hero-card query-result-panel" id="managerHomeSummary">
+      <div class="manager-home-hero-top">
+        <div>
+          <div class="manager-home-kicker">Manager Snapshot</div>
+          <h2 class="manager-home-title" id="managerHomeName">等待加载</h2>
+          <div class="manager-home-meta" id="managerHomeMeta">请选择账套后查看首页数据</div>
+        </div>
+        <div class="manager-home-accountset">
+          <span class="manager-home-accountset-label">当前账套</span>
+          <strong id="managerHomeAccountSetName">未选择</strong>
+        </div>
+      </div>
+
+      <div class="manager-home-metric-grid">
+        <article class="manager-home-metric-card accent-blue">
+          <span class="manager-home-card-label">出勤天数</span>
+          <strong id="managerHomeAttendanceDays">-</strong>
+        </article>
+        <article class="manager-home-metric-card accent-amber">
+          <span class="manager-home-card-label">本月迟到分钟</span>
+          <strong id="managerHomeLateMinutes">-</strong>
+        </article>
+        <article class="manager-home-metric-card accent-green">
+          <span class="manager-home-card-label">剩余福利天数</span>
+          <strong id="managerHomeBenefitDays">-</strong>
+        </article>
+        <article class="manager-home-metric-card accent-rose">
+          <span class="manager-home-card-label">剩余调休天数</span>
+          <strong id="managerHomeOvertimeRemaining">-</strong>
+        </article>
+      </div>
+
+      <div class="manager-home-leave-section">
+        <div class="manager-home-section-heading">
+          <h3>各请假类型时长</h3>
+          <p>以下数据取自管理人员考勤数据页面的当月结果。</p>
+        </div>
+        <div class="manager-home-leave-grid">
+          <article class="manager-home-leave-card">
+            <span class="manager-home-card-label">事/病假时长</span>
+            <strong id="managerHomePersonalSickDays">-</strong>
+          </article>
+          <article class="manager-home-leave-card">
+            <span class="manager-home-card-label">工伤时长</span>
+            <strong id="managerHomeInjuryDays">-</strong>
+          </article>
+          <article class="manager-home-leave-card">
+            <span class="manager-home-card-label">出差时长</span>
+            <strong id="managerHomeBusinessTripDays">-</strong>
+          </article>
+          <article class="manager-home-leave-card">
+            <span class="manager-home-card-label">婚假时长</span>
+            <strong id="managerHomeMarriageDays">-</strong>
+          </article>
+          <article class="manager-home-leave-card">
+            <span class="manager-home-card-label">丧假时长</span>
+            <strong id="managerHomeFuneralDays">-</strong>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="manager-home-empty-state d-none" id="managerHomeEmptyState">
+      <div class="manager-home-empty-panel">
+        <div class="manager-home-empty-kicker">No Data</div>
+        <h3 id="managerHomeEmptyTitle">暂无可展示数据</h3>
+        <p id="managerHomeEmptyMessage">请先选择账套或检查账号绑定信息。</p>
+      </div>
+    </section>
+
+    <section class="manager-home-support-card">
+      <div class="manager-home-support-title">服务提醒</div>
+      <p id="managerHomeSupportMessage">如对考勤数据有疑问，请联系信息中心协助核对处理。</p>
+    </section>
+  </section>
+</div>
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/employee_home.js') }}"></script>
+{% endblock %}

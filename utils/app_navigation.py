@@ -3,13 +3,38 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any
 
+from models.user import EMPLOYEE_PAGE_PERMISSION_KEYS, MANAGER_PAGE_PERMISSION_KEYS
+
+
+QUERY_CENTER_PERMISSION_KEYS = (
+    *EMPLOYEE_PAGE_PERMISSION_KEYS,
+    *MANAGER_PAGE_PERMISSION_KEYS,
+)
+
 
 MODULES: list[dict[str, Any]] = [
+    {
+        "slug": "home",
+        "label": "首页",
+        "short_label": "首页",
+        "description": "查看当前账号对应管理人员的首页概览。",
+        "icon_key": "query-home",
+        "entries": [
+            {
+                "key": "query_home",
+                "label": "首页",
+                "href": "/employee/home",
+                "requires_any_page_access": True,
+                "description": "查看与账号工号匹配的管理人员考勤概览。",
+            },
+        ],
+    },
     {
         "slug": "query",
         "label": "查询中心",
         "short_label": "查询",
         "description": "集中查看员工、管理人员、打卡、异常与汇总下载。",
+        "icon_key": "attendance",
         "entries": [
             {
                 "key": "employee_dashboard",
@@ -81,6 +106,7 @@ MODULES: list[dict[str, Any]] = [
         "label": "账套中心",
         "short_label": "账套",
         "description": "维护月度账套、上传原始表并执行计算入库。",
+        "icon_key": "account-dashboard",
         "entries": [
             {
                 "key": "account_dashboard",
@@ -96,6 +122,7 @@ MODULES: list[dict[str, Any]] = [
         "label": "主数据",
         "short_label": "主数据",
         "description": "维护员工、部门、班次等基础数据。",
+        "icon_key": "departments",
         "entries": [
             {
                 "key": "employees",
@@ -125,6 +152,7 @@ MODULES: list[dict[str, Any]] = [
         "label": "修正中心",
         "short_label": "修正",
         "description": "处理考勤修正、加班、年休等需要审慎操作的数据。",
+        "icon_key": "manager-attendance-overrides",
         "entries": [
             {
                 "key": "employee_attendance_overrides",
@@ -161,6 +189,7 @@ MODULES: list[dict[str, Any]] = [
         "label": "系统设置",
         "short_label": "设置",
         "description": "管理账号、角色和页面访问范围。",
+        "icon_key": "accounts",
         "entries": [
             {
                 "key": "accounts",
@@ -185,6 +214,9 @@ def can_access_entry(user: Any, entry: dict[str, Any]) -> bool:
         return True
     if entry.get("admin_only"):
         return False
+    if entry.get("requires_any_page_access"):
+        has_any_page_access = getattr(user, "has_any_page_access", None)
+        return bool(has_any_page_access and has_any_page_access(QUERY_CENTER_PERMISSION_KEYS))
     permission_key = entry.get("permission_key")
     if permission_key:
         can_access_page = getattr(user, "can_access_page", None)

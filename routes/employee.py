@@ -21,6 +21,7 @@ from models.leave import LeaveRecord
 from models.annual_leave import AnnualLeave
 from models.monthly_report import MonthlyReport
 from models.account_set import AccountSet
+from models.manager_month_stat import ManagerMonthStat
 from models.user import EMPLOYEE_PAGE_PERMISSION_KEYS, MANAGER_PAGE_PERMISSION_KEYS, UserEmployeeAssignment, UserDepartmentAssignment
 from services.attendance_service import AttendanceService
 from services.attendance_source_service import (
@@ -591,6 +592,12 @@ def _accessible_emp_ids() -> list[int]:
     return list(ids)
 
 
+def _can_access_query_center() -> bool:
+    return g.current_user.role == "admin" or g.current_user.has_any_page_access(
+        (*MANAGER_PAGE_PERMISSION_KEYS, *EMPLOYEE_PAGE_PERMISSION_KEYS)
+    )
+
+
 def _non_manager_emp_ids(emp_ids: list[int]) -> list[int]:
     if not emp_ids:
         return []
@@ -859,6 +866,14 @@ def dashboard():
     return render_template("dashboard.html", employees=employees)
 
 
+@employee_bp.route("/home")
+@login_required
+def query_home_page():
+    if not _can_access_query_center():
+        return render_template("login.html", error="暂无权限访问查询中心"), 403
+    return render_template("employee_home.html")
+
+
 @employee_bp.route("/manager-query")
 @page_permission_required("manager_query")
 def manager_query_page():
@@ -922,9 +937,7 @@ def summary_download_page():
 @employee_bp.route("/api/account-sets", methods=["GET"])
 @login_required
 def account_sets_api():
-    if g.current_user.role != "admin" and not g.current_user.has_any_page_access(
-        (*MANAGER_PAGE_PERMISSION_KEYS, *EMPLOYEE_PAGE_PERMISSION_KEYS)
-    ):
+    if not _can_access_query_center():
         return jsonify({"error": "Forbidden"}), 403
     rows = AccountSet.query.order_by(AccountSet.month.desc()).all()
     return jsonify(
@@ -945,9 +958,7 @@ def account_sets_api():
 @employee_bp.route("/api/departments", methods=["GET"])
 @login_required
 def departments_api():
-    if g.current_user.role != "admin" and not g.current_user.has_any_page_access(
-        (*MANAGER_PAGE_PERMISSION_KEYS, *EMPLOYEE_PAGE_PERMISSION_KEYS)
-    ):
+    if not _can_access_query_center():
         return jsonify({"error": "Forbidden"}), 403
 
     emp_ids = _accessible_emp_ids()
@@ -978,6 +989,110 @@ def departments_api():
     depts = Department.query.filter(Department.id.in_(all_ids)).order_by(Department.dept_name.asc()).all()
     return jsonify(
         [{"id": d.id, "dept_no": d.dept_no, "dept_name": d.dept_name, "parent_id": d.parent_id} for d in depts]
+    )
+
+
+@employee_bp.route("/api/home-manager-summary", methods=["GET"])
+@login_required
+def home_manager_summary_api():
+    if not _can_access_query_center():
+        return jsonify({"error": "Forbidden"}), 403
+
+    account_sets = AccountSet.query.order_by(AccountSet.month.desc()).all()
+    if not account_sets:
+        return jsonify({"has_data": False, "empty_state": "暂无账套，暂无数据", "month": "", "account_set_name": ""})
+
+    month = (request.args.get("month") or "").strip()
+    if not month:
+        active_set = next((row for row in account_sets if row.is_active), None)
+        month = active_set.month if active_set else account_sets[0].month
+
+    account_set = next((row for row in account_sets if row.month == month), None)
+    if not account_set:
+        return jsonify({"has_data": False, "empty_state": "所选账套无数据", "month": month, "account_set_name": ""})
+
+    profile_emp_no = (g.current_user.profile_emp_no or "").strip()
+    if not profile_emp_no:
+        return jsonify(
+            {
+                "has_data": False,
+                "empty_state": "账号未绑定管理人员工号，暂无数据",
+                "month": month,
+                "account_set_name": account_set.name,
+            }
+        )
+
+    manager = Employee.query.options(joinedload(Employee.department)).filter_by(emp_no=profile_emp_no).first()
+    if not manager or not manager.is_manager:
+        return jsonify(
+            {
+                "has_data": False,
+                "empty_state": "未找到匹配的管理人员数据",
+                "month": month,
+                "account_set_name": account_set.name,
+            }
+        )
+
+    rows = build_manager_rows(
+        ManagerAttendanceOptions(
+            month=month,
+            factory_rest_days=(account_set.factory_rest_days or 0.0),
+            monthly_benefit_days=(account_set.monthly_benefit_days or 0.0),
+        ),
+        [manager.id],
+    )
+    if not rows:
+        return jsonify(
+            {
+                "has_data": False,
+                "empty_state": "当前账套暂无管理人员考勤数据",
+                "month": month,
+                "account_set_name": account_set.name,
+            }
+        )
+
+    summary = rows[0]
+    year = int(month.split("-", 1)[0])
+    month_no = int(month.split("-", 1)[1])
+    overtime_row = ManagerMonthStat.query.filter_by(emp_id=manager.id, year=year, stat_type="overtime").first()
+    if overtime_row:
+        overtime_remaining = float(overtime_row.prev_dec or 0)
+        overtime_remaining += sum(float(getattr(overtime_row, f"m{index}") or 0) for index in range(1, month_no + 1))
+        overtime_remaining = round(overtime_remaining, 2)
+    else:
+        overtime_remaining = 0.0
+
+    annual_leave_row = ManagerMonthStat.query.filter_by(emp_id=manager.id, year=year, stat_type="annual_leave").first()
+    if annual_leave_row:
+        used_benefit_total = sum(float(getattr(annual_leave_row, f"m{index}") or 0) for index in range(1, month_no + 1))
+        benefit_remaining = round(12.0 - used_benefit_total, 2)
+    else:
+        benefit_remaining = 12.0
+
+    return jsonify(
+        {
+            "has_data": True,
+            "empty_state": "",
+            "month": month,
+            "account_set_name": account_set.name,
+            "manager": {
+                "emp_no": manager.emp_no,
+                "name": manager.name,
+                "dept_name": manager.department.dept_name if manager.department else "",
+            },
+            "summary": {
+                "attendance_days": summary.get("attendance_days", 0),
+                "personal_sick_days": summary.get("personal_sick_days", 0),
+                "injury_days": summary.get("injury_days", 0),
+                "business_trip_days": summary.get("business_trip_days", 0),
+                "marriage_days": summary.get("marriage_days", 0),
+                "funeral_days": summary.get("funeral_days", 0),
+                "late_early_minutes": summary.get("late_early_minutes", 0),
+                "benefit_days": benefit_remaining,
+                "overtime_remaining_days": round(overtime_remaining, 2),
+            },
+            "support_message": "如对考勤数据有疑问，请联系信息中心协助核对处理。",
+        }
     )
 
 
