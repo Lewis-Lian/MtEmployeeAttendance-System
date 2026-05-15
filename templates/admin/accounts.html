@@ -49,9 +49,9 @@
     </div>
   </div>
   <div class="query-filter-field">
-    <label class="form-label">菜单权限</label>
+    <label class="form-label">账号页面权限</label>
     <div class="input-group input-group-sm">
-      <input class="form-control" id="createPermissionInput" placeholder="点击选择菜单权限" readonly>
+      <input class="form-control" id="createPermissionInput" placeholder="点击选择页面权限" readonly>
       <button class="btn btn-outline-secondary" id="openCreatePermissionBtn" type="button">选择</button>
     </div>
   </div>
@@ -103,7 +103,7 @@
             <div class="d-flex flex-wrap gap-2 align-items-center justify-content-lg-end">
               <span class="small text-muted" id="selectedUsersCount">已选 0 个账号</span>
               <button class="btn btn-sm btn-outline-primary" id="applyBatchRoleBtn" type="button">批量修改角色</button>
-              <button class="btn btn-sm btn-outline-secondary" id="openBatchPermissionBtn" type="button">批量修改菜单权限</button>
+              <button class="btn btn-sm btn-outline-secondary" id="openBatchPermissionBtn" type="button">批量修改页面权限</button>
               <button class="btn btn-sm btn-outline-warning" id="batchResetPasswordBtn" type="button">批量重置密码</button>
               <button class="btn btn-sm btn-outline-danger" id="batchDeleteUsersBtn" type="button">批量删除账号</button>
             </div>
@@ -234,9 +234,9 @@
           <div class="section-divider"></div>
 
           <div class="mb-3">
-            <label class="form-label">菜单权限</label>
+            <label class="form-label">编辑页面权限</label>
             <div class="input-group input-group-sm">
-              <input class="form-control" id="editPermissionInput" placeholder="点击选择菜单权限" readonly>
+              <input class="form-control" id="editPermissionInput" placeholder="点击选择页面权限" readonly>
               <button class="btn btn-outline-secondary" id="openEditPermissionBtn" type="button">选择</button>
             </div>
           </div>
@@ -288,6 +288,9 @@
 
 <script type="application/json" id="accountPermissionCatalog">
 [
+  {% for item in home_page_permissions %}
+  {"key": "{{ item.key }}", "label": "{{ item.label }}", "group": "通用"}{% if not loop.last or manager_page_permissions|length or employee_page_permissions|length %},{% endif %}
+  {% endfor %}
   {% for item in manager_page_permissions %}
   {"key": "{{ item.key }}", "label": "{{ item.label }}", "group": "管理人员"}{% if not loop.last or employee_page_permissions|length %},{% endif %}
   {% endfor %}
@@ -398,14 +401,14 @@
   <div class="modal-dialog modal-lg modal-dialog-scrollable">
     <div class="modal-content">
       <div class="modal-header">
-        <h5 class="modal-title" id="accountPermissionModalTitle">选择菜单权限</h5>
+        <h5 class="modal-title" id="accountPermissionModalTitle">选择页面权限</h5>
         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
       </div>
       <div class="modal-body">
         <div class="row g-3">
           <div class="col-md-7">
             <label class="form-label">搜索权限</label>
-            <input class="form-control form-control-sm" id="accountPermissionSearch" placeholder="搜索菜单名称">
+            <input class="form-control form-control-sm" id="accountPermissionSearch" placeholder="搜索页面名称">
           </div>
           <div class="col-md-5">
             <label class="form-label">权限分组</label>

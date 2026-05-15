@@ -1,5 +1,6 @@
 document.addEventListener("DOMContentLoaded", () => {
   const PAGE_LABELS = {
+    query_home: "首页",
     manager_query: "管理人员考勤数据查询",
     manager_overtime_query: "查询加班",
     manager_annual_leave_query: "查询年休",
@@ -55,9 +56,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
   const allPermissionKeys = permissionCatalog.map((item) => item.key);
   const permissionState = {
-    create: { selectedKeys: new Set(allPermissionKeys), inputEl: createPermissionInput, buttonEl: openCreatePermissionBtn, title: "创建账号菜单权限" },
-    edit: { selectedKeys: new Set(), inputEl: editPermissionInput, buttonEl: openEditPermissionBtn, title: "编辑账号菜单权限" },
-    batch: { selectedKeys: new Set(allPermissionKeys), inputEl: null, buttonEl: openBatchPermissionBtn, title: "批量修改菜单权限" },
+    create: { selectedKeys: new Set(allPermissionKeys), inputEl: createPermissionInput, buttonEl: openCreatePermissionBtn, title: "创建账号页面权限" },
+    edit: { selectedKeys: new Set(), inputEl: editPermissionInput, buttonEl: openEditPermissionBtn, title: "编辑页面权限" },
+    batch: { selectedKeys: new Set(allPermissionKeys), inputEl: null, buttonEl: openBatchPermissionBtn, title: "批量修改页面权限" },
   };
 
   const empLookup = {
@@ -299,7 +300,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const selectedLabels = permissionCatalog
       .filter((item) => permissionState[ctxKey].selectedKeys.has(item.key))
       .map((item) => item.label);
-    if (!selectedLabels.length) return "未选择菜单权限";
+    if (!selectedLabels.length) return "未选择页面权限";
     return `已选 ${selectedLabels.length} 项：${selectedLabels.join("、")}`;
   }
 
@@ -639,7 +640,7 @@ document.addEventListener("DOMContentLoaded", () => {
       runBatchAction(
         { action: "update_permissions", page_permissions: pagePermissions },
         "批量修改成功",
-        "已批量更新菜单权限"
+        "已批量更新页面权限"
       ).then((success) => {
         if (!success) return;
         permissionModal.hide();

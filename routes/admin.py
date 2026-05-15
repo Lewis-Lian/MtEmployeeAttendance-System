@@ -31,6 +31,7 @@ from models.attendance_override_history import AttendanceOverrideHistory
 from models.user import (
     ALL_PAGE_PERMISSION_KEYS,
     EMPLOYEE_PAGE_PERMISSION_KEYS,
+    HOME_PAGE_PERMISSION_KEYS,
     MANAGER_PAGE_PERMISSION_KEYS,
     PAGE_PERMISSION_LABELS,
     User,

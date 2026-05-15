@@ -7,7 +7,7 @@ import jwt
 from flask import Blueprint, current_app, jsonify, redirect, render_template, request, url_for, make_response, g
 
 from models import db
-from models.user import EMPLOYEE_PAGE_PERMISSION_KEYS, MANAGER_PAGE_PERMISSION_KEYS, User
+from models.user import EMPLOYEE_PAGE_PERMISSION_KEYS, HOME_PAGE_PERMISSION_KEYS, MANAGER_PAGE_PERMISSION_KEYS, User
 
 
 auth_bp = Blueprint("auth", __name__)
@@ -55,7 +55,7 @@ def _landing_url_for_user(user: User) -> str:
     if user.role == "admin":
         return url_for("employee.query_home_page")
 
-    if user.has_any_page_access((*MANAGER_PAGE_PERMISSION_KEYS, *EMPLOYEE_PAGE_PERMISSION_KEYS)):
+    if user.has_any_page_access((*HOME_PAGE_PERMISSION_KEYS, *MANAGER_PAGE_PERMISSION_KEYS, *EMPLOYEE_PAGE_PERMISSION_KEYS)):
         return url_for("employee.query_home_page")
 
     for page_key, endpoint in _DEFAULT_PAGE_ENDPOINTS:

@@ -869,7 +869,7 @@ def dashboard():
 @employee_bp.route("/home")
 @login_required
 def query_home_page():
-    if not _can_access_query_center():
+    if not g.current_user.can_access_page("query_home"):
         return render_template("login.html", error="暂无权限访问查询中心"), 403
     return render_template("employee_home.html")
 
@@ -937,7 +937,7 @@ def summary_download_page():
 @employee_bp.route("/api/account-sets", methods=["GET"])
 @login_required
 def account_sets_api():
-    if not _can_access_query_center():
+    if not g.current_user.can_access_page("query_home"):
         return jsonify({"error": "Forbidden"}), 403
     rows = AccountSet.query.order_by(AccountSet.month.desc()).all()
     return jsonify(
@@ -995,7 +995,7 @@ def departments_api():
 @employee_bp.route("/api/home-manager-summary", methods=["GET"])
 @login_required
 def home_manager_summary_api():
-    if not _can_access_query_center():
+    if not g.current_user.can_access_page("query_home"):
         return jsonify({"error": "Forbidden"}), 403
 
     account_sets = AccountSet.query.order_by(AccountSet.month.desc()).all()

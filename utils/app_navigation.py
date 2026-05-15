@@ -3,10 +3,11 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any
 
-from models.user import EMPLOYEE_PAGE_PERMISSION_KEYS, MANAGER_PAGE_PERMISSION_KEYS
+from models.user import EMPLOYEE_PAGE_PERMISSION_KEYS, HOME_PAGE_PERMISSION_KEYS, MANAGER_PAGE_PERMISSION_KEYS
 
 
 QUERY_CENTER_PERMISSION_KEYS = (
+    *HOME_PAGE_PERMISSION_KEYS,
     *EMPLOYEE_PAGE_PERMISSION_KEYS,
     *MANAGER_PAGE_PERMISSION_KEYS,
 )
@@ -24,7 +25,7 @@ MODULES: list[dict[str, Any]] = [
                 "key": "query_home",
                 "label": "首页",
                 "href": "/employee/home",
-                "requires_any_page_access": True,
+                "permission_key": "query_home",
                 "description": "查看与账号工号匹配的管理人员考勤概览。",
             },
         ],

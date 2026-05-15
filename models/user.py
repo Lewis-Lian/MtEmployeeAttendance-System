@@ -5,6 +5,7 @@ from . import db
 
 
 PAGE_PERMISSION_LABELS = {
+    "query_home": "首页",
     "manager_query": "管理人员考勤数据查询",
     "manager_overtime_query": "查询加班",
     "manager_annual_leave_query": "查询年休",
@@ -15,6 +16,8 @@ PAGE_PERMISSION_LABELS = {
     "department_hours_query": "员工部门工时查询",
     "summary_download": "汇总下载",
 }
+
+HOME_PAGE_PERMISSION_KEYS = ("query_home",)
 
 MANAGER_PAGE_PERMISSION_KEYS = (
     "manager_query",
@@ -32,6 +35,7 @@ EMPLOYEE_PAGE_PERMISSION_KEYS = (
 )
 
 ALL_PAGE_PERMISSION_KEYS = (
+    *HOME_PAGE_PERMISSION_KEYS,
     *MANAGER_PAGE_PERMISSION_KEYS,
     *EMPLOYEE_PAGE_PERMISSION_KEYS,
 )
@@ -74,7 +78,15 @@ class User(db.Model):
         if raw is None:
             return {key: True for key in ALL_PAGE_PERMISSION_KEYS}
 
-        return {key: bool(raw.get(key, False)) for key in ALL_PAGE_PERMISSION_KEYS}
+        result = {}
+        for key in ALL_PAGE_PERMISSION_KEYS:
+            if key in raw:
+                result[key] = bool(raw[key])
+            elif key in HOME_PAGE_PERMISSION_KEYS:
+                result[key] = True
+            else:
+                result[key] = False
+        return result
 
     def can_access_page(self, page_key: str) -> bool:
         if self.role == "admin":
