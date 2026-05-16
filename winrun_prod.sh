@@ -9,6 +9,7 @@ HOST="${HOST:-0.0.0.0}"
 PORT="${PORT:-8000}"
 VENV_DIR="${VENV_DIR:-.venv-win-prod}"
 
+export APP_ENV="${APP_ENV:-production}"
 export FLASK_ENV="${FLASK_ENV:-production}"
 export PIP_DISABLE_PIP_VERSION_CHECK=1
 export PIP_NO_CACHE_DIR=1

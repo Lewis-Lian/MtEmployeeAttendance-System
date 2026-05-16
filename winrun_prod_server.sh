@@ -17,6 +17,7 @@ LOG_DIR="${LOG_DIR:-logs}"
 INSTALL_DEPS="${INSTALL_DEPS:-1}"
 
 # 生产环境配置
+export APP_ENV="${APP_ENV:-production}"
 export FLASK_ENV="${FLASK_ENV:-production}"
 export PIP_DISABLE_PIP_VERSION_CHECK=1
 export PIP_NO_CACHE_DIR=1
