@@ -27,6 +27,12 @@ document.addEventListener("DOMContentLoaded", () => {
   const applyBatchRoleBtn = document.getElementById("applyBatchRoleBtn");
   const batchRoleModal = new bootstrap.Modal(document.getElementById("batchRoleModal"));
   const confirmBatchRoleBtn = document.getElementById("confirmBatchRoleBtn");
+  const openBatchEmployeeBtn = document.getElementById("openBatchEmployeeBtn");
+  const batchEmployeeModal = new bootstrap.Modal(document.getElementById("batchEmployeeModal"));
+  const confirmBatchEmployeeBtn = document.getElementById("confirmBatchEmployeeBtn");
+  const openBatchDepartmentBtn = document.getElementById("openBatchDepartmentBtn");
+  const batchDepartmentModal = new bootstrap.Modal(document.getElementById("batchDepartmentModal"));
+  const confirmBatchDepartmentBtn = document.getElementById("confirmBatchDepartmentBtn");
   const openBatchPermissionBtn = document.getElementById("openBatchPermissionBtn");
   const batchResetPasswordBtn = document.getElementById("batchResetPasswordBtn");
   const batchDeleteUsersBtn = document.getElementById("batchDeleteUsersBtn");
@@ -83,6 +89,13 @@ document.addEventListener("DOMContentLoaded", () => {
       hiddenEl: document.createElement("input"),
       triggerEl: document.getElementById("openFilterEmpPickerBtn"),
     },
+    batch: {
+      lookupEl: document.getElementById("batchEmpLookup"),
+      inputEl: document.getElementById("batchEmpSearch"),
+      quickEl: document.getElementById("batchEmpQuickList"),
+      hiddenEl: document.createElement("input"),
+      triggerEl: document.getElementById("openBatchEmpPickerBtn"),
+    },
   };
 
   const deptLookup = {
@@ -99,6 +112,13 @@ document.addEventListener("DOMContentLoaded", () => {
       quickEl: document.getElementById("editDeptQuickList"),
       hiddenEl: document.createElement("input"),
       triggerEl: document.getElementById("openEditDeptPickerBtn"),
+    },
+    batch: {
+      lookupEl: document.getElementById("batchDeptLookup"),
+      inputEl: document.getElementById("batchDeptSearch"),
+      quickEl: document.getElementById("batchDeptQuickList"),
+      hiddenEl: document.createElement("input"),
+      triggerEl: document.getElementById("openBatchDeptPickerBtn"),
     },
   };
 
@@ -121,8 +141,10 @@ document.addEventListener("DOMContentLoaded", () => {
   mountHidden(empLookup.create, "create_emp_ids");
   mountHidden(empLookup.edit, "edit_emp_ids");
   mountHidden(empLookup.filter, "filter_emp_ids");
+  mountHidden(empLookup.batch, "batch_emp_ids");
   mountHidden(deptLookup.create, "create_dept_ids");
   mountHidden(deptLookup.edit, "edit_dept_ids");
+  mountHidden(deptLookup.batch, "batch_dept_ids");
 
   function idsFromHidden(hiddenEl) {
     return (hiddenEl.value || "")
@@ -132,7 +154,7 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   const employeePicker = window.SelectorComponent.createMultiContextEmployeeSelector({
-    contexts: [empLookup.create, empLookup.edit, empLookup.filter],
+    contexts: [empLookup.create, empLookup.edit, empLookup.filter, empLookup.batch],
     modalEl: document.getElementById("accountEmployeePickerModal"),
     deptTreeEl: document.getElementById("accountEmpDeptList"),
     searchEl: document.getElementById("accountEmpPickerSearch"),
@@ -155,7 +177,7 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   const deptPicker = window.SelectorComponent.createMultiSelectTreeLookup({
-    contexts: [deptLookup.create, deptLookup.edit],
+    contexts: [deptLookup.create, deptLookup.edit, deptLookup.batch],
     modalEl: document.getElementById("accountDeptPickerModal"),
     treeEl: document.getElementById("accountDeptPickerTree"),
     searchEl: document.getElementById("accountDeptPickerSearch"),
@@ -345,14 +367,19 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function applyUserFilters() {
     const selectedEmpIds = new Set(idsFromHidden(empLookup.filter.hiddenEl));
+    const selectedProfileKeys = new Set(
+      employees
+        .filter((row) => selectedEmpIds.has(Number(row.id)))
+        .map((row) => `${String(row.name || "").trim()}::${Number(row.dept_id || 0)}`)
+    );
     const roleFilter = (filterAdminRole.value || "").trim();
     users = allUsers.filter((user) => {
       if (roleFilter && user.role !== roleFilter) {
         return false;
       }
-      if (selectedEmpIds.size > 0) {
-        const userEmpIds = Array.isArray(user.emp_ids) ? user.emp_ids : [];
-        if (!userEmpIds.some((id) => selectedEmpIds.has(Number(id)))) {
+      if (selectedProfileKeys.size > 0) {
+        const profileKey = `${String(user.profile_name || "").trim()}::${Number(user.profile_dept_id || 0)}`;
+        if (!selectedProfileKeys.has(profileKey)) {
           return false;
         }
       }
@@ -459,11 +486,6 @@ document.addEventListener("DOMContentLoaded", () => {
 
   createUserForm.addEventListener("submit", async (e) => {
     e.preventDefault();
-    if (!idsFromHidden(empLookup.create.hiddenEl).length) {
-      window.AppFeedback.setResult(createResult, "请至少关联一名员工，工号和姓名为必填项", "danger");
-      window.AppToast.error("请至少关联一名员工，工号和姓名为必填项", "创建账号失败");
-      return;
-    }
     const response = await fetch("/admin/users", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -564,10 +586,6 @@ document.addEventListener("DOMContentLoaded", () => {
     }
     if (!Number(editUserForm.querySelector('[name="profile_dept_id"]').value || 0)) {
       window.AppDialog.alert("请选择部门信息", "更新失败");
-      return;
-    }
-    if (!idsFromHidden(empLookup.edit.hiddenEl).length) {
-      window.AppDialog.alert("请至少关联一名员工，工号和姓名为必填项", "更新失败");
       return;
     }
     const response = await fetch(`/admin/users/${userId}`, {
@@ -701,6 +719,36 @@ document.addEventListener("DOMContentLoaded", () => {
       syncBatchSelectionState();
     }
   });
+  openBatchEmployeeBtn.addEventListener("click", () => {
+    if (!selectedBatchUserIds().length) {
+      window.AppDialog.alert("请先选择要批量操作的账号", "未选择账号");
+      return;
+    }
+    batchEmployeeModal.show();
+  });
+  confirmBatchEmployeeBtn.addEventListener("click", async () => {
+    const success = await runBatchAction(
+      { action: "update_employees", emp_ids: idsFromHidden(empLookup.batch.hiddenEl) },
+      "批量修改成功",
+      "已批量更新关联员工"
+    );
+    if (success) batchEmployeeModal.hide();
+  });
+  openBatchDepartmentBtn.addEventListener("click", () => {
+    if (!selectedBatchUserIds().length) {
+      window.AppDialog.alert("请先选择要批量操作的账号", "未选择账号");
+      return;
+    }
+    batchDepartmentModal.show();
+  });
+  confirmBatchDepartmentBtn.addEventListener("click", async () => {
+    const success = await runBatchAction(
+      { action: "update_departments", dept_ids: idsFromHidden(deptLookup.batch.hiddenEl) },
+      "批量修改成功",
+      "已批量更新关联部门"
+    );
+    if (success) batchDepartmentModal.hide();
+  });
 
   (async () => {
     const [usersRes, employeesRes, departmentsRes] = await Promise.all([
@@ -724,7 +772,9 @@ document.addEventListener("DOMContentLoaded", () => {
     syncPermissionInput("edit", false);
     employeePicker.setValue(empLookup.edit, []);
     employeePicker.setValue(empLookup.filter, []);
+    employeePicker.setValue(empLookup.batch, []);
     deptPicker.setValue(deptLookup.edit, []);
+    deptPicker.setValue(deptLookup.batch, []);
     profileDeptPicker.setValue(profileDeptLookup.edit, "");
     syncBatchSelectionState();
   })();

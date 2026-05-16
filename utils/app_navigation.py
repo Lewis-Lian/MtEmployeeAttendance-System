@@ -273,7 +273,11 @@ def nav_context(user: Any, path: str) -> dict[str, Any]:
         current_module = next((module for module in modules if module["slug"] == current_module["slug"]), None)
     if current_module is None and modules:
         current_module = modules[0]
-    current_entries = visible_entries(user, current_module) if current_module else []
+    current_entries = []
+    if current_module and current_module["slug"] != "home":
+        current_entries = visible_entries(user, current_module)
+    elif current_module and current_module["slug"] == "home" and len(modules) > 1:
+        current_entries = visible_entries(user, modules[1])
     return {
         "modules": modules,
         "current_module": current_module,

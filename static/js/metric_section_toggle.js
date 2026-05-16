@@ -12,7 +12,6 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   collect(".query-metric-grid");
-  collect(".module-summary-grid");
   document.querySelectorAll(".row.g-3.mb-3").forEach((row) => {
     if (row.querySelector(".summary-card.dashboard-metric-card") && !seen.has(row)) {
       seen.add(row);

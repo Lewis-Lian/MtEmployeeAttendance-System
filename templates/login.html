@@ -9,49 +9,92 @@
 </head>
 <body class="login-page">
 <div class="login-shell page-wrap">
-  <section class="login-brand-panel">
-    <div class="login-brand">
-      <span class="brand-dot"></span>
-      <span>企业考勤处理中心</span>
-    </div>
-    <h1 class="login-hero-title">统一处理账套、考勤、人员与部门数据</h1>
-    <p class="login-hero-subtitle">面向财务与 HR 场景的内部考勤数据管理平台，支持月度账套、原始表导入、查询下载与权限控制。</p>
-    <div class="login-capability-grid">
-      <div class="login-hero-point">
-        <span class="login-hero-point-icon"></span>
-        <span>月度账套闭环管理</span>
+  <div class="login-surface">
+    <section class="login-brand-panel" aria-label="系统品牌">
+      <div class="login-brand-panel-inner">
+        <div class="login-brand">
+          <span class="login-brand-mark" aria-hidden="true">
+            <span class="login-brand-mark-top"></span>
+            <span class="login-brand-mark-bars">
+              <span></span>
+              <span></span>
+              <span></span>
+            </span>
+          </span>
+          <span class="login-brand-text">企业考勤处理中心</span>
+        </div>
+        <div class="login-brand-slider" data-login-slider>
+          <article class="login-brand-slide is-active" data-slide-index="0">
+            <div class="login-brand-visual visual-query" aria-hidden="true">
+              <span class="visual-chip">查询中心</span>
+              <div class="visual-panel">
+                <span class="visual-line line-lg"></span>
+                <span class="visual-line line-md"></span>
+                <span class="visual-line line-sm"></span>
+              </div>
+            </div>
+            <div class="login-brand-copy">
+              <h2 class="login-brand-title">统一处理考勤、账套与权限数据</h2>
+              <p class="login-brand-subtitle">面向内部业务场景的考勤数据工作台，支持查询、修正、下载和账号权限控制。</p>
+            </div>
+          </article>
+          <article class="login-brand-slide" data-slide-index="1">
+            <div class="login-brand-visual visual-hours" aria-hidden="true">
+              <span class="visual-chip">工时分析</span>
+              <div class="visual-bars">
+                <span style="height: 42%"></span>
+                <span style="height: 78%"></span>
+                <span style="height: 58%"></span>
+                <span style="height: 88%"></span>
+              </div>
+            </div>
+            <div class="login-brand-copy">
+              <h2 class="login-brand-title">聚焦人员、部门与管理人员考勤分析</h2>
+              <p class="login-brand-subtitle">围绕员工考勤、异常、打卡和部门工时提供清晰一致的数据视图，帮助快速定位问题。</p>
+            </div>
+          </article>
+          <article class="login-brand-slide" data-slide-index="2">
+            <div class="login-brand-visual visual-governance" aria-hidden="true">
+              <span class="visual-chip">权限治理</span>
+              <div class="visual-grid">
+                <span></span>
+                <span></span>
+                <span></span>
+                <span></span>
+              </div>
+            </div>
+            <div class="login-brand-copy">
+              <h2 class="login-brand-title">从导入修正到账户权限形成闭环</h2>
+              <p class="login-brand-subtitle">覆盖账套导入、考勤修正、汇总下载与账号管控，让内部流程在同一套界面中高效运转。</p>
+            </div>
+          </article>
+        </div>
+        <div class="login-brand-dots" role="tablist" aria-label="品牌轮播切换">
+          <button type="button" class="login-brand-dot is-active" data-slide-target="0" aria-label="查看第 1 张品牌画面"></button>
+          <button type="button" class="login-brand-dot" data-slide-target="1" aria-label="查看第 2 张品牌画面"></button>
+          <button type="button" class="login-brand-dot" data-slide-target="2" aria-label="查看第 3 张品牌画面"></button>
+        </div>
       </div>
-      <div class="login-hero-point">
-        <span class="login-hero-point-icon"></span>
-        <span>考勤结果统一查询</span>
-      </div>
-      <div class="login-hero-point">
-        <span class="login-hero-point-icon"></span>
-        <span>人员部门权限维护</span>
-      </div>
-    </div>
-  </section>
-  <section class="login-panel-wrap">
-    <div class="card login-card">
-      <div class="card-body">
+    </section>
+    <section class="login-panel-wrap">
+      <div class="card login-card">
+        <div class="card-body">
         <div class="login-panel-top">
-          <div class="login-panel-kicker">授权访问</div>
-          <h2 class="login-panel-title">账号登录</h2>
-          <p class="login-panel-subtitle">请输入用户名和密码进入系统。</p>
+          <div class="login-panel-kicker">账号登录</div>
+          <h1 class="login-panel-title">登录考勤系统</h1>
+          <p class="login-panel-subtitle">请输入用户名和密码进入系统</p>
         </div>
         {% if error %}
-          <div class="alert alert-danger py-2">{{ error }}</div>
+          <div class="alert alert-danger login-error-alert py-2">{{ error }}</div>
         {% endif %}
-        <form method="post" action="/login" class="login-form">
+        <form method="post" action="/login" class="login-form" data-auth-form>
           <div class="mb-3">
-            <label class="form-label">用户名</label>
-            <input type="text" class="form-control" name="username" placeholder="请输入用户名" required>
+            <input type="text" class="form-control" name="username" placeholder="请输入用户名" autocomplete="username" required>
           </div>
           <div class="mb-4">
-            <label class="form-label">密码</label>
             <div class="login-password-field">
-              <input type="password" class="form-control" name="password" id="loginPasswordInput" placeholder="请输入密码" required>
-              <button class="login-eye-btn" type="button" id="toggleLoginPasswordBtn" aria-label="显示密码">
+              <input type="password" class="form-control" name="password" id="loginPasswordInput" placeholder="请输入密码" autocomplete="current-password" required>
+              <button class="login-eye-btn" type="button" data-password-toggle="#loginPasswordInput" aria-label="显示密码">
                 <svg class="login-eye-icon" aria-hidden="true" viewBox="0 0 24 24" fill="none">
                   <path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z"></path>
                   <circle cx="12" cy="12" r="2.5"></circle>
@@ -60,27 +103,32 @@
               </button>
             </div>
           </div>
-          <button type="submit" class="btn btn-primary w-100 login-submit-btn">登录系统</button>
+          <div class="login-form-row">
+            <label class="login-remember-me">
+              <input type="checkbox" name="remember_me" value="1">
+              <span>记住我</span>
+            </label>
+            <a class="login-text-link" href="{{ url_for('auth.change_password_page') }}">修改密码</a>
+          </div>
+          <div class="auth-slider" data-auth-slider>
+            <input type="hidden" name="slider_verified" value="0">
+            <div class="auth-slider-track">
+              <div class="auth-slider-fill"></div>
+              <span class="auth-slider-label">请按住滑块，拖动到最右侧完成验证</span>
+              <button type="button" class="auth-slider-thumb" aria-label="拖动滑块完成验证"></button>
+            </div>
+          </div>
+          <button type="submit" class="btn btn-primary w-100 login-submit-btn">登录</button>
         </form>
-        <div class="login-panel-footnote">仅限授权账号访问，所有操作将按角色范围控制。</div>
+        <div class="login-panel-footnote">仅限授权账号访问，登录后将按角色自动进入对应功能页面。</div>
       </div>
     </div>
-  </section>
-  <div class="login-backdrop-orb orb-left"></div>
-  <div class="login-backdrop-orb orb-right"></div>
+    </section>
+  </div>
+  <div class="login-backdrop-curve curve-top-right"></div>
+  <div class="login-backdrop-curve curve-bottom-left"></div>
+  <div class="login-backdrop-curve curve-bottom-right"></div>
 </div>
-<script>
-  document.addEventListener("DOMContentLoaded", function () {
-    const input = document.getElementById("loginPasswordInput");
-    const btn = document.getElementById("toggleLoginPasswordBtn");
-    if (!input || !btn) return;
-    btn.addEventListener("click", function () {
-      const visible = input.type === "text";
-      input.type = visible ? "password" : "text";
-      btn.setAttribute("aria-label", visible ? "显示密码" : "隐藏密码");
-      btn.classList.toggle("is-visible", !visible);
-    });
-  });
-</script>
+<script src="{{ url_for('static', filename='js/auth_forms.js') }}"></script>
 </body>
 </html>

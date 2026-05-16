@@ -303,7 +303,7 @@ class AttendanceOverrideFeatureTests(unittest.TestCase):
         self.assertEqual(payload["skipped_users"][0]["name"], "经理甲")
         self.assertEqual(payload["skipped_users"][0]["reason"], "账号已存在")
 
-    def test_user_batch_operations_support_reset_role_permissions_and_delete(self) -> None:
+    def test_user_batch_operations_support_reset_role_permissions_assignments_and_delete(self) -> None:
         create_a = self.client.post(
             "/admin/users",
             json={
@@ -386,6 +386,26 @@ class AttendanceOverrideFeatureTests(unittest.TestCase):
             self.assertEqual(user_a.effective_page_permissions(), next_permissions)
             self.assertEqual(user_b.effective_page_permissions(), next_permissions)
 
+        employee_batch_res = self.client.post(
+            "/admin/users/batch",
+            json={"action": "update_employees", "user_ids": [user_a_id, user_b_id], "emp_ids": [self.employee_id]},
+        )
+        self.assertEqual(employee_batch_res.status_code, 200)
+
+        department_batch_res = self.client.post(
+            "/admin/users/batch",
+            json={"action": "update_departments", "user_ids": [user_a_id, user_b_id], "dept_ids": [self.dept_id]},
+        )
+        self.assertEqual(department_batch_res.status_code, 200)
+
+        with self.app.app_context():
+            user_a = db.session.get(User, user_a_id)
+            user_b = db.session.get(User, user_b_id)
+            self.assertEqual([row.emp_id for row in user_a.employee_assignments], [self.employee_id])
+            self.assertEqual([row.emp_id for row in user_b.employee_assignments], [self.employee_id])
+            self.assertEqual([row.dept_id for row in user_a.department_assignments], [self.dept_id])
+            self.assertEqual([row.dept_id for row in user_b.department_assignments], [self.dept_id])
+
         delete_res = self.client.post(
             "/admin/users/batch",
             json={"action": "delete", "user_ids": [user_a_id, user_b_id]},
@@ -413,7 +433,7 @@ class AttendanceOverrideFeatureTests(unittest.TestCase):
         self.assertEqual(root_res.status_code, 302)
         self.assertTrue(root_res.headers["Location"].endswith("/employee/home"))
 
-    def test_account_create_and_update_require_employee_assignment(self) -> None:
+    def test_account_create_and_update_allow_empty_employee_assignment(self) -> None:
         create_res = self.client.post(
             "/admin/users",
             json={
@@ -424,8 +444,14 @@ class AttendanceOverrideFeatureTests(unittest.TestCase):
                 "dept_ids": [],
             },
         )
-        self.assertEqual(create_res.status_code, 400)
-        self.assertIn("员工", create_res.get_json()["error"])
+        self.assertEqual(create_res.status_code, 200)
+        user_id = create_res.get_json()["user"]["id"]
+
+        with self.app.app_context():
+            user = db.session.get(User, user_id)
+            self.assertEqual(user.employee_assignments, [])
+            self.assertEqual(user.profile_emp_no or "", "")
+            self.assertEqual(user.profile_name or "", "")
 
         create_ok = self.client.post(
             "/admin/users",
@@ -447,8 +473,11 @@ class AttendanceOverrideFeatureTests(unittest.TestCase):
                 "dept_ids": [],
             },
         )
-        self.assertEqual(update_res.status_code, 400)
-        self.assertIn("员工", update_res.get_json()["error"])
+        self.assertEqual(update_res.status_code, 200)
+
+        with self.app.app_context():
+            user = db.session.get(User, user_id)
+            self.assertEqual(user.employee_assignments, [])
 
     def test_top_nav_renders_username_and_employee_name(self) -> None:
         project_root = os.path.dirname(os.path.dirname(__file__))
@@ -803,6 +832,12 @@ class AttendanceOverrideFeatureTests(unittest.TestCase):
         self.assertIn('id="batchRoleModal"', html)
         self.assertIn('id="batchRoleSelect"', html)
         self.assertIn('id="confirmBatchRoleBtn"', html)
+        self.assertIn('id="openBatchEmployeeBtn"', html)
+        self.assertIn('id="batchEmployeeModal"', html)
+        self.assertIn('id="confirmBatchEmployeeBtn"', html)
+        self.assertIn('id="openBatchDepartmentBtn"', html)
+        self.assertIn('id="batchDepartmentModal"', html)
+        self.assertIn('id="confirmBatchDepartmentBtn"', html)
         self.assertIn('id="openBatchPermissionBtn"', html)
         self.assertIn('id="filterAdminRole"', html)
         self.assertIn('id="applyUserFiltersBtn"', html)
@@ -934,14 +969,90 @@ class AttendanceOverrideFeatureTests(unittest.TestCase):
             template_folder=os.path.join(project_root, "templates"),
             static_folder=os.path.join(project_root, "static"),
         )
+        register_routes(app)
 
         with app.test_request_context("/login"):
             html = render_template("login.html", error=None)
 
         self.assertIn("企业考勤处理中心", html)
-        self.assertIn("统一处理账套、考勤、人员与部门数据", html)
+        self.assertIn("登录考勤系统", html)
+        self.assertIn("login-surface", html)
         self.assertIn("login-brand-panel", html)
-        self.assertIn("login-capability-grid", html)
+        self.assertIn("login-brand-mark", html)
+        self.assertIn("login-brand-slider", html)
+        self.assertIn("login-backdrop-curve", html)
+        self.assertIn("记住我", html)
+        self.assertIn("修改密码", html)
+        self.assertIn("auth-slider-track", html)
+
+    def test_change_password_page_renders_login_style_layout(self) -> None:
+        project_root = os.path.dirname(os.path.dirname(__file__))
+        app = Flask(
+            "enterprise_change_password_render_test",
+            template_folder=os.path.join(project_root, "templates"),
+            static_folder=os.path.join(project_root, "static"),
+        )
+        register_routes(app)
+
+        with app.test_request_context("/change-password"):
+            html = render_template("change_password.html", error=None, success=None)
+            success_html = render_template("change_password.html", error=None, success="密码修改成功")
+
+        self.assertIn("修改密码", html)
+        self.assertIn("auth-slider-track", html)
+        self.assertIn("返回登录", html)
+        self.assertIn("data-success-redirect", success_html)
+        self.assertIn("2</span> 秒后自动返回登录页", success_html)
+
+    def test_login_with_remember_me_sets_persistent_cookie(self) -> None:
+        response = self.client.post(
+            "/login",
+            data={"username": "admin", "password": "admin123", "remember_me": "1"},
+        )
+
+        self.assertEqual(response.status_code, 302)
+        cookie_header = response.headers.get("Set-Cookie", "")
+        self.assertIn("Max-Age=2592000", cookie_header)
+
+    def test_change_password_rejects_wrong_current_password(self) -> None:
+        response = self.client.post(
+            "/change-password",
+            data={
+                "username": "admin",
+                "current_password": "wrong-password",
+                "new_password": "new-admin-123",
+                "confirm_password": "new-admin-123",
+            },
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("用户不存在或原密码错误", response.get_data(as_text=True))
+
+    def test_change_password_updates_password_and_supports_new_login(self) -> None:
+        response = self.client.post(
+            "/change-password",
+            data={
+                "username": "admin",
+                "current_password": "admin123",
+                "new_password": "new-admin-123",
+                "confirm_password": "new-admin-123",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("密码修改成功", response.get_data(as_text=True))
+
+        failed_login = self.app.test_client().post(
+            "/login",
+            data={"username": "admin", "password": "admin123"},
+        )
+        self.assertEqual(failed_login.status_code, 401)
+
+        success_login = self.app.test_client().post(
+            "/login",
+            data={"username": "admin", "password": "new-admin-123"},
+        )
+        self.assertEqual(success_login.status_code, 302)
 
     def test_representative_pages_render_workflow_classes(self) -> None:
         project_root = os.path.dirname(os.path.dirname(__file__))
@@ -1099,6 +1210,13 @@ class AttendanceOverrideFeatureTests(unittest.TestCase):
                 self.assertIn("未手动选择时，默认查询当前账号下全部可见员工", source)
                 self.assertNotIn("请先选择员工", source)
 
+    def test_accounts_filter_uses_account_profile_name_and_department_fields(self) -> None:
+        project_root = Path(__file__).resolve().parent.parent
+        source = (project_root / "static/js/accounts.js").read_text(encoding="utf-8")
+        self.assertIn("user.profile_name", source)
+        self.assertIn("user.profile_dept_id", source)
+        self.assertNotIn("const userEmpIds = Array.isArray(user.emp_ids) ? user.emp_ids : [];", source)
+
     def test_global_metric_sections_are_toggle_ready(self) -> None:
         project_root = Path(__file__).resolve().parent.parent
         base_html = (project_root / "templates/base.html").read_text(encoding="utf-8")
@@ -1108,7 +1226,7 @@ class AttendanceOverrideFeatureTests(unittest.TestCase):
         self.assertIn("js/metric_section_toggle.js", base_html)
         self.assertIn('collect(".query-metric-grid")', toggle_js)
         self.assertNotIn('collect(".manager-home-metric-grid")', toggle_js)
-        self.assertIn('collect(".module-summary-grid")', toggle_js)
+        self.assertNotIn('collect(".module-summary-grid")', toggle_js)
         self.assertIn("summary-card.dashboard-metric-card", toggle_js)
         self.assertIn('.top-nav-actions', toggle_js)
         self.assertIn(".top-nav-user", toggle_js)
@@ -1116,6 +1234,19 @@ class AttendanceOverrideFeatureTests(unittest.TestCase):
         self.assertIn("收起卡片", toggle_js)
         self.assertIn(".top-nav-metric-toggle", style_css)
         self.assertIn(".metric-toggle-target.is-collapsed", style_css)
+
+    def test_global_tables_support_sticky_header_and_sorting(self) -> None:
+        project_root = Path(__file__).resolve().parent.parent
+        pager_js = (project_root / "static/js/table_pager.js").read_text(encoding="utf-8")
+        style_css = (project_root / "static/css/style.css").read_text(encoding="utf-8")
+
+        self.assertIn("bindSort(table, tbody, state)", pager_js)
+        self.assertIn("table-sortable", pager_js)
+        self.assertIn("data-sort-direction", pager_js)
+        self.assertIn("position: sticky;", style_css)
+        self.assertIn(".table-sortable", style_css)
+        self.assertIn('.table thead th[data-sort-direction="asc"]::after', style_css)
+        self.assertIn('.table thead th[data-sort-direction="desc"]::after', style_css)
 
     def test_product_navigation_groups_pages_into_modules(self) -> None:
         admin_user = SimpleNamespace(
@@ -1170,7 +1301,7 @@ class AttendanceOverrideFeatureTests(unittest.TestCase):
 
         context = nav_context(readonly_user, "/employee/home")
         self.assertEqual(context["current_module"]["slug"], "home")
-        self.assertEqual([entry["href"] for entry in context["current_entries"]], ["/employee/home"])
+        self.assertEqual([entry["href"] for entry in context["current_entries"]], ["/employee/dashboard"])
 
     def test_module_home_routes_render_accessible_entries(self) -> None:
         home_module_res = self.client.get("/module/home", follow_redirects=False)

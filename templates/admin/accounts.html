@@ -103,6 +103,8 @@
             <div class="d-flex flex-wrap gap-2 align-items-center justify-content-lg-end">
               <span class="small text-muted" id="selectedUsersCount">已选 0 个账号</span>
               <button class="btn btn-sm btn-outline-primary" id="applyBatchRoleBtn" type="button">批量修改角色</button>
+              <button class="btn btn-sm btn-outline-primary" id="openBatchEmployeeBtn" type="button">批量修改关联员工</button>
+              <button class="btn btn-sm btn-outline-primary" id="openBatchDepartmentBtn" type="button">批量修改关联部门</button>
               <button class="btn btn-sm btn-outline-secondary" id="openBatchPermissionBtn" type="button">批量修改页面权限</button>
               <button class="btn btn-sm btn-outline-warning" id="batchResetPasswordBtn" type="button">批量重置密码</button>
               <button class="btn btn-sm btn-outline-danger" id="batchDeleteUsersBtn" type="button">批量删除账号</button>
@@ -153,6 +155,60 @@
       <div class="modal-footer">
         <button class="btn btn-outline-secondary" data-bs-dismiss="modal">取消</button>
         <button class="btn btn-primary" id="confirmBatchRoleBtn" type="button">确定</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="batchEmployeeModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">批量修改关联员工</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <p class="small text-muted">选择后将直接覆盖所选账号的关联员工；留空并确认表示清空关联员工。</p>
+        <div class="employee-lookup" id="batchEmpLookup">
+          <div class="input-group input-group-sm">
+            <input class="form-control form-control-sm" id="batchEmpSearch" placeholder="搜索姓名/工号">
+            <button class="btn btn-outline-secondary employee-picker-trigger" id="openBatchEmpPickerBtn" type="button" title="选择员工">
+              <span class="employee-picker-icon" aria-hidden="true">👤</span>
+            </button>
+          </div>
+          <div class="employee-float-list" id="batchEmpQuickList"></div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-outline-secondary" data-bs-dismiss="modal">取消</button>
+        <button class="btn btn-primary" id="confirmBatchEmployeeBtn" type="button">确定</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="batchDepartmentModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">批量修改关联部门</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <p class="small text-muted">选择后将直接覆盖所选账号的关联部门；留空并确认表示清空关联部门。</p>
+        <div class="employee-lookup" id="batchDeptLookup">
+          <div class="input-group input-group-sm">
+            <input class="form-control form-control-sm" id="batchDeptSearch" placeholder="搜索部门名称/编号">
+            <button class="btn btn-outline-secondary employee-picker-trigger" id="openBatchDeptPickerBtn" type="button" title="选择部门">
+              <span class="employee-picker-icon" aria-hidden="true">⎇</span>
+            </button>
+          </div>
+          <div class="employee-float-list" id="batchDeptQuickList"></div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-outline-secondary" data-bs-dismiss="modal">取消</button>
+        <button class="btn btn-primary" id="confirmBatchDepartmentBtn" type="button">确定</button>
       </div>
     </div>
   </div>

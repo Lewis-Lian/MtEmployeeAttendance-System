@@ -55,8 +55,6 @@ def register_admin_account_routes(admin_bp) -> None:
 
         if not username or not password:
             return jsonify({"error": "username and password are required"}), 400
-        if not normalized_emp_ids:
-            return jsonify({"error": "请至少关联一名员工，工号和姓名为必填项"}), 400
         if admin_module.User.query.filter_by(username=username).first():
             return jsonify({"error": "username already exists"}), 400
 
@@ -103,8 +101,6 @@ def register_admin_account_routes(admin_bp) -> None:
             return jsonify({"error": "invalid role"}), 400
         if not username or not password:
             return jsonify({"error": "username and password are required"}), 400
-        if not normalized_emp_ids:
-            return jsonify({"error": "请至少关联一名员工，工号和姓名为必填项"}), 400
         if admin_module.User.query.filter_by(username=username).first():
             return jsonify({"error": "username already exists"}), 400
 
@@ -208,6 +204,20 @@ def register_admin_account_routes(admin_bp) -> None:
             admin_module.db.session.commit()
             return jsonify({"status": "ok", "updated_count": len(users)})
 
+        if action == "update_employees":
+            normalized_emp_ids = [int(x) for x in (data.get("emp_ids") or []) if str(x).isdigit()]
+            for user in users:
+                admin_module._sync_user_assignments(user, normalized_emp_ids)
+            admin_module.db.session.commit()
+            return jsonify({"status": "ok", "updated_count": len(users)})
+
+        if action == "update_departments":
+            normalized_dept_ids = [int(x) for x in (data.get("dept_ids") or []) if str(x).isdigit()]
+            for user in users:
+                admin_module._sync_user_department_assignments(user, normalized_dept_ids)
+            admin_module.db.session.commit()
+            return jsonify({"status": "ok", "updated_count": len(users)})
+
         if action == "delete":
             if any(user.id == g.current_user.id for user in users):
                 return jsonify({"error": "cannot delete current user"}), 400
@@ -264,8 +274,6 @@ def register_admin_account_routes(admin_bp) -> None:
 
         if emp_ids is not None:
             normalized_emp_ids = [int(x) for x in emp_ids if str(x).isdigit()]
-            if not normalized_emp_ids:
-                return jsonify({"error": "请至少关联一名员工，工号和姓名为必填项"}), 400
             admin_module._sync_user_assignments(user, normalized_emp_ids)
         if dept_ids is not None:
             admin_module._sync_user_department_assignments(user, [int(x) for x in dept_ids if str(x).isdigit()])

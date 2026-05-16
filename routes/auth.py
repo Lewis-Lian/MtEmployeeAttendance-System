@@ -11,6 +11,7 @@ from models.user import EMPLOYEE_PAGE_PERMISSION_KEYS, HOME_PAGE_PERMISSION_KEYS
 
 
 auth_bp = Blueprint("auth", __name__)
+_REMEMBER_ME_SECONDS = 30 * 24 * 60 * 60
 
 _DEFAULT_PAGE_ENDPOINTS = (
     ("employee_dashboard", "employee.dashboard"),
@@ -137,8 +138,10 @@ def login_page():
 
 @auth_bp.route("/login", methods=["POST"])
 def login_post():
-    username = request.form.get("username") or (request.json or {}).get("username")
-    password = request.form.get("password") or (request.json or {}).get("password")
+    payload = request.get_json(silent=True) or {}
+    username = request.form.get("username") or payload.get("username")
+    password = request.form.get("password") or payload.get("password")
+    remember_me = request.form.get("remember_me") or payload.get("remember_me")
 
     user = User.query.filter_by(username=username).first()
     if not user or not user.check_password(password or ""):
@@ -151,8 +154,41 @@ def login_post():
         return jsonify({"token": token, "role": user.role, "username": user.username})
 
     resp = make_response(redirect(_landing_url_for_user(user)))
-    resp.set_cookie("access_token", token, httponly=True, samesite="Lax")
+    cookie_kwargs = {"httponly": True, "samesite": "Lax"}
+    if str(remember_me).lower() in {"1", "true", "on", "yes"}:
+        cookie_kwargs["max_age"] = _REMEMBER_ME_SECONDS
+    resp.set_cookie("access_token", token, **cookie_kwargs)
     return resp
+
+
+@auth_bp.route("/change-password", methods=["GET"])
+def change_password_page():
+    return render_template("change_password.html", error=None, success=None)
+
+
+@auth_bp.route("/change-password", methods=["POST"])
+def change_password_post():
+    username = (request.form.get("username") or "").strip()
+    current_password = request.form.get("current_password") or ""
+    new_password = request.form.get("new_password") or ""
+    confirm_password = request.form.get("confirm_password") or ""
+
+    if not username:
+        return render_template("change_password.html", error="请输入用户名", success=None), 400
+
+    user = User.query.filter_by(username=username).first()
+    if not user or not user.check_password(current_password):
+        return render_template("change_password.html", error="用户不存在或原密码错误", success=None), 400
+
+    if not new_password:
+        return render_template("change_password.html", error="请输入新密码", success=None), 400
+
+    if new_password != confirm_password:
+        return render_template("change_password.html", error="两次输入的新密码不一致", success=None), 400
+
+    user.set_password(new_password)
+    db.session.commit()
+    return render_template("change_password.html", error=None, success="密码修改成功，请返回登录页重新登录")
 
 
 @auth_bp.route("/logout", methods=["POST", "GET"])

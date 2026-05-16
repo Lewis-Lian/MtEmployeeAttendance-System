@@ -45,6 +45,96 @@
     return pager;
   }
 
+  function parseCellValue(text) {
+    const value = String(text || "").trim();
+    if (!value) return { type: "empty", value: "" };
+
+    const normalizedNumber = value.replace(/,/g, "");
+    if (/^-?\d+(?:\.\d+)?$/.test(normalizedNumber)) {
+      return { type: "number", value: Number(normalizedNumber) };
+    }
+
+    const timestamp = Date.parse(value.replace(/\./g, "-"));
+    if (!Number.isNaN(timestamp) && /[-/:\s年月日]/.test(value)) {
+      return { type: "date", value: timestamp };
+    }
+
+    return { type: "text", value: value.toLocaleLowerCase("zh-CN") };
+  }
+
+  function compareCellValues(left, right) {
+    if (left.type === "empty" && right.type === "empty") return 0;
+    if (left.type === "empty") return 1;
+    if (right.type === "empty") return -1;
+    if (left.type === right.type) {
+      if (left.value < right.value) return -1;
+      if (left.value > right.value) return 1;
+      return 0;
+    }
+    return String(left.value).localeCompare(String(right.value), "zh-CN", { numeric: true, sensitivity: "base" });
+  }
+
+  function syncSortedRows(tbody, state) {
+    state.skipNextMutation = true;
+    state.dataRows.forEach((row) => tbody.appendChild(row));
+    state.summaryRows.forEach((row) => tbody.appendChild(row));
+    state.placeholderRows.forEach((row) => tbody.appendChild(row));
+  }
+
+  function updateSortIndicators(table, state) {
+    table.querySelectorAll("thead th").forEach((th, index) => {
+      if (th.dataset.sortDisabled === "1") return;
+      th.classList.add("table-sortable");
+      if (state.sortIndex === index) {
+        th.setAttribute("data-sort-direction", state.sortDirection);
+      } else {
+        th.removeAttribute("data-sort-direction");
+      }
+    });
+  }
+
+  function bindSort(table, tbody, state) {
+    const headerCells = Array.from(table.querySelectorAll("thead th"));
+    if (!headerCells.length) return;
+
+    headerCells.forEach((th, index) => {
+      if (th.dataset.sortBound === "1") return;
+      const hasInteractive = !!th.querySelector("input, select, button, a");
+      const label = (th.textContent || "").trim();
+      if (!label || hasInteractive) {
+        th.dataset.sortDisabled = "1";
+        return;
+      }
+
+      th.addEventListener("click", () => {
+        if (state.sortIndex === index) {
+          state.sortDirection = state.sortDirection === "asc" ? "desc" : "asc";
+        } else {
+          state.sortIndex = index;
+          state.sortDirection = "asc";
+        }
+
+        state.dataRows.sort((leftRow, rightRow) => {
+          const leftCell = leftRow.children[index];
+          const rightCell = rightRow.children[index];
+          const result = compareCellValues(
+            parseCellValue(leftCell ? leftCell.textContent : ""),
+            parseCellValue(rightCell ? rightCell.textContent : "")
+          );
+          return state.sortDirection === "asc" ? result : -result;
+        });
+
+        syncSortedRows(tbody, state);
+        updateSortIndicators(table, state);
+        state.page = 1;
+        state.render();
+      });
+      th.dataset.sortBound = "1";
+    });
+
+    updateSortIndicators(table, state);
+  }
+
   function bindPager(table) {
     if (table.dataset.pagerBound === "1") return;
     const tbody = table.querySelector("tbody");
@@ -65,6 +155,10 @@
       dataRows: [],
       summaryRows: [],
       placeholderRows: [],
+      sortIndex: null,
+      sortDirection: "asc",
+      skipNextMutation: false,
+      render: () => {},
     };
 
     function collectRows() {
@@ -125,6 +219,8 @@
       pager.style.display = "flex";
     }
 
+    state.render = render;
+
     function jumpToPage() {
       const target = Number(jumpInput.value || 0);
       if (!target) return;
@@ -156,10 +252,33 @@
       jumpToPage();
     });
 
+    bindSort(table, tbody, state);
+
     const observer = new MutationObserver(() => {
+      if (state.skipNextMutation) {
+        state.skipNextMutation = false;
+        return;
+      }
+      bindSort(table, tbody, state);
+      if (state.sortIndex !== null) {
+        const direction = state.sortDirection;
+        state.sortDirection = direction === "asc" ? "desc" : "asc";
+        const activeHeader = table.querySelectorAll("thead th")[state.sortIndex];
+        if (activeHeader) activeHeader.click();
+        state.sortDirection = direction;
+      }
       render();
     });
     observer.observe(tbody, { childList: true, subtree: false });
+
+    const thead = table.querySelector("thead");
+    if (thead) {
+      const headObserver = new MutationObserver(() => {
+        bindSort(table, tbody, state);
+        updateSortIndicators(table, state);
+      });
+      headObserver.observe(thead, { childList: true, subtree: true });
+    }
 
     render();
     table.dataset.pagerBound = "1";
