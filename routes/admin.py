@@ -96,11 +96,24 @@ def _require_model(model, ident):
 
 
 def _manager_scope_employees():
-    return (
+    return _unique_employees(
+        (
         Employee.query.filter(Employee.is_manager.is_(True))
         .order_by(Employee.dept_id.asc(), Employee.emp_no.asc(), Employee.name.asc())
         .all()
+        )
     )
+
+
+def _unique_employees(rows):
+    unique_rows = []
+    seen_ids = set()
+    for row in rows or []:
+        if not row or row.id in seen_ids:
+            continue
+        seen_ids.add(row.id)
+        unique_rows.append(row)
+    return unique_rows
 
 
 def _convert_uploaded_xls_to_xlsx(xls_path: str) -> str | None:
@@ -972,7 +985,7 @@ def delete_shift(shift_id: int):
 @admin_bp.route("/employees", methods=["GET"])
 @admin_required
 def employees_list():
-    rows = Employee.query.order_by(Employee.emp_no.asc()).all()
+    rows = _unique_employees(Employee.query.order_by(Employee.emp_no.asc()).all())
     return jsonify([_serialize_employee(e) for e in rows])
 
 

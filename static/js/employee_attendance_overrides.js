@@ -92,7 +92,13 @@ function renderEmployeeHistory(rows) {
 
 function selectedEmployeeIds() {
   const value = document.getElementById("selectedEmpIds").value.trim();
-  return value ? value.split(",").map((id) => id.trim()).filter(Boolean) : [];
+  if (!value) return [];
+  const seen = new Set();
+  return value.split(",").map((id) => id.trim()).filter((id) => {
+    if (!id || seen.has(id)) return false;
+    seen.add(id);
+    return true;
+  });
 }
 
 function renderEmployeeRows(data) {

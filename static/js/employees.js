@@ -123,10 +123,15 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function idsFromHidden(hiddenEl) {
+    const seen = new Set();
     return (hiddenEl.value || "")
       .split(",")
       .map((id) => Number(id.trim()))
-      .filter(Boolean);
+      .filter((id) => {
+        if (!id || seen.has(id)) return false;
+        seen.add(id);
+        return true;
+      });
   }
 
   function normalizeText(value) {
