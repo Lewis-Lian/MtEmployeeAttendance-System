@@ -3,6 +3,17 @@
     return (v || "").toString().trim().toLowerCase().replace(/\s+/g, "");
   }
 
+  function uniqueIds(ids) {
+    const seen = new Set();
+    return (Array.isArray(ids) ? ids : [])
+      .map((id) => String(id || "").trim())
+      .filter((id) => {
+        if (!id || seen.has(id)) return false;
+        seen.add(id);
+        return true;
+      });
+  }
+
   function createHierarchy(rows, getId, getParentId, getName) {
     const map = new Map();
     const children = new Map();
@@ -291,11 +302,11 @@
     function getSelectedIds() {
       const raw = (hiddenEl.value || "").trim();
       if (!raw) return [];
-      return raw.split(",").map((x) => x.trim()).filter(Boolean);
+      return uniqueIds(raw.split(","));
     }
 
     function setSelectedIds(ids) {
-      hiddenEl.value = ids.join(",");
+      hiddenEl.value = uniqueIds(ids).join(",");
       hiddenEl.dispatchEvent(new Event("change", { bubbles: true }));
     }
 
@@ -669,10 +680,7 @@
     let deptFilter = "";
 
     function getCtxIds(ctx) {
-      return (ctx.hiddenEl.value || "")
-        .split(",")
-        .map((id) => id.trim())
-        .filter(Boolean);
+      return uniqueIds((ctx.hiddenEl.value || "").split(","));
     }
 
     function employeeById(id) {
@@ -680,9 +688,7 @@
     }
 
     function setValue(ctx, ids) {
-      const normalized = (Array.isArray(ids) ? ids : [])
-        .map((id) => String(id).trim())
-        .filter(Boolean);
+      const normalized = uniqueIds(ids);
       ctx.hiddenEl.value = normalized.join(",");
       const names = normalized
         .map((id) => getEmpName(employeeById(id) || {}))

@@ -242,7 +242,8 @@ def register_admin_attendance_override_routes(admin_bp) -> None:
     @admin_bp.route("/employee-attendance-overrides")
     @admin_required
     def employee_attendance_overrides_page():
-        employees = (
+        employees = admin_module._unique_employees(
+            (
             admin_module.Employee.query.filter_by(is_manager=False)
             .order_by(
                 admin_module.Employee.dept_id.asc(),
@@ -250,6 +251,7 @@ def register_admin_attendance_override_routes(admin_bp) -> None:
                 admin_module.Employee.name.asc(),
             )
             .all()
+        )
         )
         active_account_set = admin_module.AccountSet.query.filter_by(is_active=True).first()
         return render_template(

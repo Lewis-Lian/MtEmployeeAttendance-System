@@ -730,6 +730,40 @@ class AttendanceOverrideFeatureTests(unittest.TestCase):
             self.assertTrue(employee.is_manager)
             self.assertTrue(employee.is_nursing)
 
+    def test_employee_batch_update_keeps_employee_list_unique(self) -> None:
+        before_rows = self.client.get("/admin/employees").get_json()
+        before_ids = [row["id"] for row in before_rows]
+
+        target_ids = [self.employee_id, self.employee_b_id]
+        update_res = self.client.post(
+            "/admin/employees/batch",
+            json={
+                "action": "set_employee_stats_attendance_source",
+                "ids": target_ids,
+                "employee_stats_attendance_source": "manager",
+            },
+        )
+        self.assertEqual(update_res.status_code, 200)
+
+        after_rows = self.client.get("/admin/employees").get_json()
+        after_ids = [row["id"] for row in after_rows]
+        self.assertEqual(len(after_ids), len(set(after_ids)))
+        self.assertEqual(set(after_ids), set(before_ids))
+
+        updated_rows = {row["id"]: row for row in after_rows if row["id"] in target_ids}
+        self.assertEqual(updated_rows[self.employee_id]["employee_stats_attendance_source"], "manager")
+        self.assertEqual(updated_rows[self.employee_b_id]["employee_stats_attendance_source"], "manager")
+
+    def test_unique_employees_helper_drops_duplicate_employee_objects(self) -> None:
+        from routes import admin as admin_module
+
+        with self.app.app_context():
+            employee = db.session.get(Employee, self.employee_id)
+            manager = db.session.get(Employee, self.manager_id)
+
+        unique_rows = admin_module._unique_employees([employee, employee, manager, manager])
+        self.assertEqual([row.id for row in unique_rows], [self.employee_id, self.manager_id])
+
     def test_manager_annual_leave_import_defaults_year_when_omitted(self) -> None:
         res = self.client.post("/admin/manager-annual-leave/import")
         self.assertEqual(res.status_code, 400)
