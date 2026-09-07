@@ -31,6 +31,7 @@
 
   --qh-info: #2563eb;             /* 出差天数蓝 */
   --qh-info-grad: linear-gradient(135deg, #60a5fa 0%, #2563eb 100%);
+  --qh-kpi-index: 0;
 
   /* 动效与轻投影 */
   --qh-transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
@@ -336,6 +337,19 @@
   box-sizing: border-box;
   position: relative;
   overflow: hidden;
+  animation: qh-kpi-in 0.42s cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation-delay: calc(var(--qh-kpi-index) * 60ms);
+}
+
+@keyframes qh-kpi-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
 }
 
 .qh-kpi-card-hero:hover {

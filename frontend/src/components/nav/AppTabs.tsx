@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import "../../styles/components/app-tabs.css";
 
@@ -25,6 +25,7 @@ export default function AppTabs({
   extra,
 }: AppTabsProps) {
   const tabListRef = useRef<HTMLDivElement>(null);
+  const [refreshingHref, setRefreshingHref] = useState<string | null>(null);
 
   useEffect(() => {
     const el = tabListRef.current;
@@ -82,6 +83,12 @@ export default function AppTabs({
     };
   }, []);
 
+  function handleRefresh(href: string) {
+    setRefreshingHref(href);
+    onRefreshTab(href);
+    window.setTimeout(() => setRefreshingHref((current) => (current === href ? null : current)), 500);
+  }
+
   return (
     <section className="app-tab-bar" aria-label="已打开页面">
       <div className="app-tab-list" ref={tabListRef} role="tablist">
@@ -106,8 +113,8 @@ export default function AppTabs({
               <span className="app-tab-actions">
                 <button
                   aria-label={`刷新${tab.label}`}
-                  className="app-tab-refresh"
-                  onClick={() => onRefreshTab(tab.href)}
+                  className={`app-tab-refresh${refreshingHref === tab.href ? " is-refreshing" : ""}`}
+                  onClick={() => handleRefresh(tab.href)}
                   type="button"
                 >
                   ↻

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type CSSProperties } from "react";
 import { ApiError } from "../../api/client";
 import { fetchAttendanceCalendar, fetchHomeSummary, fetchQueryBootstrap } from "../../api/query";
 import { fetchMe } from "../../api/auth";
@@ -215,7 +215,7 @@ export default function QueryHomePage() {
         <>
           {/* 四列大卡片核心 KPI 网格 */}
           <section className="qh-main-kpis-four">
-            <div className="qh-kpi-card-hero attendance">
+            <div className="qh-kpi-card-hero attendance" style={{ "--qh-kpi-index": 0 } as CSSProperties}>
               <div className="qh-kpi-hero-label">
                 <span>考勤天数</span>
                 <span className="qh-kpi-icon-wrapper">
@@ -233,7 +233,7 @@ export default function QueryHomePage() {
               </div>
             </div>
             
-            <div className="qh-kpi-card-hero benefit">
+            <div className="qh-kpi-card-hero benefit" style={{ "--qh-kpi-index": 1 } as CSSProperties}>
               <div className="qh-kpi-hero-label">
                 <span>剩余福利天数</span>
                 <span className="qh-kpi-icon-wrapper">
@@ -250,7 +250,7 @@ export default function QueryHomePage() {
               </div>
             </div>
 
-            <div className="qh-kpi-card-hero overtime">
+            <div className="qh-kpi-card-hero overtime" style={{ "--qh-kpi-index": 2 } as CSSProperties}>
               <div className="qh-kpi-hero-label">
                 <span>剩余调休天数</span>
                 <span className="qh-kpi-icon-wrapper">
@@ -266,7 +266,7 @@ export default function QueryHomePage() {
               </div>
             </div>
 
-            <div className="qh-kpi-card-hero late-minutes">
+            <div className="qh-kpi-card-hero late-minutes" style={{ "--qh-kpi-index": 3 } as CSSProperties}>
               <div className="qh-kpi-hero-label">
                 <span>迟到早退分钟数</span>
                 <span className="qh-kpi-icon-wrapper">

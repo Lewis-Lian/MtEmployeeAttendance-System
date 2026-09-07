@@ -53,6 +53,12 @@
   box-shadow: none;
   white-space: nowrap;
   transition: var(--ent-transition);
+  animation: app-tab-in 0.2s ease-out both;
+}
+
+@keyframes app-tab-in {
+  from { opacity: 0; transform: translateY(5px) scaleX(0.96); }
+  to { opacity: 1; transform: translateY(0) scaleX(1); }
 }
 
 .app-tab-trigger,
@@ -111,4 +117,18 @@
 .app-tab-refresh {
   font-size: 12px;
   transition: var(--ent-transition);
+}
+
+.app-tab-close:active,
+.app-tab-refresh:active,
+.app-tab-trigger:active {
+  transform: scale(0.97);
+}
+
+.app-tab-refresh.is-refreshing {
+  animation: app-tab-refresh 0.5s ease-in-out;
+}
+
+@keyframes app-tab-refresh {
+  to { transform: rotate(360deg); }
 }

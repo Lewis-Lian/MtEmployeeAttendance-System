@@ -636,6 +636,15 @@ export default function SummaryDownloadPage() {
         .btn-premium-download:active {
           transform: translateY(0);
         }
+        .btn-premium-download.is-loading {
+          cursor: wait;
+        }
+        .btn-premium-download.is-loading .chevron-arrow {
+          animation: summary-download-spin 0.65s linear infinite;
+        }
+        @keyframes summary-download-spin {
+          to { transform: rotate(360deg); }
+        }
         .btn-premium-download:disabled {
           background: #334155;
           box-shadow: none;
@@ -964,7 +973,7 @@ export default function SummaryDownloadPage() {
 
         <div>
           <button
-            className="btn-premium-download"
+            className={`btn-premium-download${progressVisible ? " is-loading" : ""}`}
             disabled={enabledReportsCount === 0 || !selectedMonth}
             onClick={handleDownload}
             type="button"

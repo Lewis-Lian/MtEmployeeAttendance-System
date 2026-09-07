@@ -356,7 +356,7 @@ describe("App smoke regression", () => {
 
     expect(await screen.findByRole("heading", { name: "管理人员首页概览" })).toBeInTheDocument();
     expect(await screen.findAllByText("查询中心")).not.toHaveLength(0);
-    expect(await screen.findAllByRole("button", { name: "退出登录" })).toHaveLength(2);
+    expect(await screen.findAllByRole("button", { name: "退出登录" })).toHaveLength(1);
     expect(await screen.findByText("E001 · 员工甲 · 制造一部")).toBeInTheDocument();
     await waitFor(() => expect(window.location.pathname).toBe("/employee/home"));
   });
@@ -402,7 +402,7 @@ describe("App smoke regression", () => {
 
     expect(await screen.findByRole("button", { name: "创建账号" })).toBeInTheDocument();
     expect(await screen.findAllByText("后台管理")).not.toHaveLength(0);
-    expect(await screen.findAllByRole("button", { name: "退出登录" })).toHaveLength(2);
+    expect(await screen.findAllByRole("button", { name: "退出登录" })).toHaveLength(1);
     expect(await screen.findByText("系统管理员")).toBeInTheDocument();
     expect(await screen.findByText("A001")).toBeInTheDocument();
     await waitFor(() => expect(window.location.pathname).toBe("/admin/accounts"));

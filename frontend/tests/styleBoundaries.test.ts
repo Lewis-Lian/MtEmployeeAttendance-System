@@ -97,4 +97,28 @@ describe("style boundaries", () => {
     expect(countExactRule(legacy, ".query-filter-rail")).toBe(1);
     expect(countExactRule(legacy, ".query-workspace")).toBe(1);
   });
+
+  it("全局导航动效提供页面切换、侧栏和无障碍降级", () => {
+    expect(legacyCss).toContain("animation: tab-pane-in");
+    expect(legacyCss).toContain("transition: width 0.24s ease, padding 0.24s ease");
+    expect(legacyCss).toContain("@media (prefers-reduced-motion: reduce)");
+    expect(legacyCss).toContain("animation: none");
+  });
+
+  it("标签页动效包含打开、刷新和按压反馈", () => {
+    expect(appTabsCss).toContain("animation: app-tab-in");
+    expect(appTabsCss).toContain("transform: rotate(360deg)");
+    expect(appTabsCss).toContain("transform: scale(0.97)");
+  });
+
+  it("查询首页 KPI 使用错峰入场动效", () => {
+    expect(queryHomeCss).toContain("animation: qh-kpi-in");
+    expect(queryHomeCss).toContain("animation-delay: calc(var(--qh-kpi-index) * 60ms)");
+  });
+
+  it("侧边栏不使用当前菜单滑动高亮条，加载态和按钮保留动效反馈", () => {
+    expect(legacyCss).not.toContain(".app-side-link.is-active::after");
+    expect(legacyCss).toContain("animation: legacy-loading-pulse");
+    expect(legacyCss).toContain(".query-filter-actions .btn.is-loading::after");
+  });
 });

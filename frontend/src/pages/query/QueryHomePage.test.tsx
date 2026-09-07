@@ -94,6 +94,23 @@ describe("QueryHomePage 纯首页权限用户", () => {
     expect(mockCalendar).not.toHaveBeenCalled();
     expect(screen.queryByText("考勤日历")).toBeNull();
   });
+
+  it("首页 KPI 卡片按顺序设置错峰入场延迟", async () => {
+    render(<QueryHomePage />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("kpi-attendance")).toBeInTheDocument();
+    });
+
+    const cards = Array.from(document.querySelectorAll(".qh-kpi-card-hero"));
+    expect(cards).toHaveLength(4);
+    expect(cards.map((card) => card.getAttribute("style"))).toEqual([
+      "--qh-kpi-index: 0;",
+      "--qh-kpi-index: 1;",
+      "--qh-kpi-index: 2;",
+      "--qh-kpi-index: 3;",
+    ]);
+  });
 });
 
 describe("QueryHomePage 首页考勤日历", () => {

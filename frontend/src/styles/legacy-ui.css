@@ -511,7 +511,7 @@ body {
   border-right: 1px solid #c9d4df;
   background: linear-gradient(180deg, #f6f9fc 0%, #e9eef3 100%);
   color: #183153;
-  transition: width 0.2s ease, padding 0.2s ease;
+  transition: width 0.24s ease, padding 0.24s ease, gap 0.24s ease;
 }
 
 .app-sidebar.is-collapsed {
@@ -586,6 +586,7 @@ body {
   background: linear-gradient(180deg, #f0f4f7 0%, #e0e7ee 100%);
   color: #44586e;
   text-decoration: none;
+  transition: color 0.18s ease, background 0.18s ease, border-color 0.18s ease, transform 0.18s ease;
 }
 
 .app-module-link.is-active {
@@ -630,6 +631,7 @@ body {
   text-decoration: none;
   background: rgba(255, 255, 255, 0.72);
   border: 1px solid #d8e0e8;
+  transition: color 0.18s ease, background 0.18s ease, border-color 0.18s ease, transform 0.18s ease;
 }
 
 .app-side-link small {
@@ -641,6 +643,11 @@ body {
   background: #fff4d9;
   border-color: #e0bc63;
   color: #183153;
+}
+
+.app-side-link:hover:not(.is-active),
+.app-module-link:hover:not(.is-active) {
+  transform: translateX(2px);
 }
 
 .nav-icon {
@@ -664,7 +671,15 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: color 0.15s, background 0.15s;
+  transition: color 0.15s, background 0.15s, transform 0.15s ease;
+}
+
+.app-sidebar-toggle svg {
+  transition: transform 0.24s ease;
+}
+
+.app-sidebar.is-collapsed .app-sidebar-toggle svg {
+  transform: rotate(180deg);
 }
 
 .app-sidebar-toggle:hover {
@@ -701,15 +716,32 @@ body {
 
 .app-tab-pane.is-active {
   display: grid;
-  animation: tab-pane-in 0.18s ease-out;
+  animation: tab-pane-in 0.22s ease-out;
 }
 
 @keyframes tab-pane-in {
   from {
     opacity: 0;
+    transform: translateY(8px);
   }
   to {
     opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
+
+  .app-tab-pane.is-active {
+    animation: none;
   }
 }
 
@@ -774,6 +806,25 @@ body {
 
 .legacy-loading-state {
   border-left: 4px solid #3f6fa0;
+  position: relative;
+  overflow: hidden;
+}
+
+.legacy-loading-orb {
+  position: absolute;
+  top: 22px;
+  right: 24px;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #3f6fa0;
+  box-shadow: 0 0 0 0 rgba(63, 111, 160, 0.35);
+  animation: legacy-loading-pulse 1.4s ease-out infinite;
+}
+
+@keyframes legacy-loading-pulse {
+  70% { box-shadow: 0 0 0 8px rgba(63, 111, 160, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(63, 111, 160, 0); }
 }
 
 .module-bottom-nav {
@@ -907,6 +958,25 @@ body {
 
 .query-filter-actions .btn {
   width: 100%;
+}
+
+.query-filter-actions .btn.is-loading {
+  position: relative;
+  gap: 8px;
+}
+
+.query-filter-actions .btn.is-loading::after {
+  width: 12px;
+  height: 12px;
+  content: "";
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: query-button-spin 0.65s linear infinite;
+}
+
+@keyframes query-button-spin {
+  to { transform: rotate(360deg); }
 }
 
 .query-workspace {

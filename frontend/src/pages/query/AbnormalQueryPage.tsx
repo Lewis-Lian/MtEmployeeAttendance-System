@@ -260,7 +260,7 @@ export default function AbnormalQueryPage() {
           </div>
 
           <div className="query-filter-actions">
-            <button className="btn btn-primary" disabled={isQuerying} onClick={handleQuery} type="button">
+            <button className={`btn btn-primary${isQuerying ? " is-loading" : ""}`} disabled={isQuerying} onClick={handleQuery} type="button">
               {isQuerying ? "查询中..." : "查询"}
             </button>
             <button className="btn btn-outline-success" onClick={handleDownload} type="button">
