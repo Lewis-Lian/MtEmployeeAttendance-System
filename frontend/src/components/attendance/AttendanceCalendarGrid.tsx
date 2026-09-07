@@ -108,7 +108,7 @@ export default function AttendanceCalendarGrid({ data, selectedDate, multiSelect
         <span className="cal-badge is-bg-marriage">婚假</span>
         <span className="cal-badge is-bg-funeral">丧假</span>
         <span className="cal-badge is-bg-half">半勤</span>
-        <span className="cal-badge is-bg-evening">晚加班</span>
+        <span className="cal-badge cal-badge-evening">晚加班</span>
         <span className="cal-badge is-bg-attendance">出勤</span>
         <span className="cal-badge is-bg-absent">缺勤</span>
         <span className="cal-badge">
@@ -230,8 +230,8 @@ function overtimeLabel(overtime: AttendanceCalendarOvertime): string {
   return "加班";
 }
 
-// 七色修订版背景色口径（设计文档 2.9）：出差 > 婚假 > 丧假 > 半勤 > 晚加班 > 出勤 > 缺勤 > 无
-type CellBackgroundKey = "trip" | "marriage" | "funeral" | "half" | "evening" | "attendance" | "absent" | "leave" | "none";
+// 六色背景口径：出差 > 婚假 > 丧假 > 半勤 > 出勤 > 缺勤 > 无；晚加班不占背景色，由文字徽标表达
+type CellBackgroundKey = "trip" | "marriage" | "funeral" | "half" | "attendance" | "absent" | "leave" | "none";
 
 // 有专属背景色的假种；其余假种统一用请假蓝
 const LEAVE_STATUS_BG: Record<string, CellBackgroundKey> = {
@@ -258,9 +258,8 @@ function hasOverrideContent(override: DailyAttendanceOverrideValues | null | und
   );
 }
 
-// 逐日修正状态的背景映射：晚加 > 状态（出勤/半勤/缺勤/假种）> 无
+// 逐日修正状态的背景映射：状态（出勤/半勤/缺勤/假种）> 无；晚加修正只挂徽标不改背景
 function overrideBackgroundKey(override: DailyAttendanceOverrideValues): CellBackgroundKey {
-  if (override.is_evening_overtime) return "evening";
   const status = override.status || "";
   if (status === "全勤") return "attendance";
   if (status === "上午出勤" || status === "下午出勤") return "half";
@@ -282,7 +281,6 @@ function cellBackgroundKey(cell: DayCell, hasMonthData: boolean): CellBackground
   if (leaveTypes.includes("婚假")) return "marriage";
   if (leaveTypes.includes("丧假")) return "funeral";
   if (cell.day?.is_half_day) return "half";
-  if (cell.overtimes.some((overtime) => overtime.is_evening)) return "evening";
   // 考勤机对旷工日也会生成无刷卡的 DailyRecord（如 exception_reason=旷工），出勤须以真实刷卡判定
   if ((cell.day && hasPunch(cell.day)) || cell.overtimes.length > 0) return "attendance";
   if (hasMonthData && cell.date < todayString()) return "absent";
@@ -348,11 +346,15 @@ function renderPunchSummary(cell: DayCell) {
 }
 
 // 徽章只保留背景色表达不了的增量信息：假种文字（含修正假种与 OA 假种合并去重）、
-// 加班分类小时（节假加底色与出勤同为绿，徽章是唯一区分）、实际打卡「实」；
-// 缺勤/半勤/晚加/修正由背景色与右上角点表达，不再渲染文字徽章；
-// 周末加班按天折算（白天 1 天/晚上 0.5 天）计入出勤天数，不渲染小时徽章
+// 晚加班文字徽标（晚加不占背景色，OA 记录与手工修正合并只显示一条）；
+// 出勤类状态由背景色表达，缺勤/半勤/修正由背景色与右上角点表达；
+// 加班小时（晚加/节假/周末/普通）不渲染徽章——按天折算计入出勤天数，小时明细保留在点击弹层
 function renderBadges(cell: DayCell, override?: DailyAttendanceOverrideValues | null): ReactNode[] {
   const badges: ReactNode[] = [];
+
+  if (cell.overtimes.some((overtime) => overtime.is_evening) || override?.is_evening_overtime) {
+    badges.push(<span className="cal-badge cal-badge-evening" key="evening">晚加班</span>);
+  }
 
   // 修正假种状态与 OA 假种合并按假种去重（晚加修正优先时沿用旧口径不显示修正假种）
   const leaveTypes = new Set(cell.leaves.map((leave) => leave.leave_type));
@@ -365,30 +367,7 @@ function renderBadges(cell: DayCell, override?: DailyAttendanceOverrideValues | 
       <span className="cal-badge cal-badge-leave" key={`leave-${leaveType}`}>{leaveType}</span>,
     );
   });
-
-  // 同类型加班合并合计，每类一条；周末加班不参与徽章展示
-  const overtimeSums = { evening: 0, holiday: 0, other: 0 };
-  cell.overtimes.forEach((overtime) => {
-    if (overtime.is_evening) overtimeSums.evening += overtime.hours;
-    else if (overtime.is_holiday) overtimeSums.holiday += overtime.hours;
-    else if (overtime.is_weekend) return;
-    else overtimeSums.other += overtime.hours;
-  });
-  if (overtimeSums.evening > 0) {
-    badges.push(<span className="cal-badge cal-badge-evening" key="ot-evening">晚加 +{formatHours(overtimeSums.evening)}h</span>);
-  }
-  if (overtimeSums.holiday > 0) {
-    badges.push(<span className="cal-badge cal-badge-holiday" key="ot-holiday">节假 +{formatHours(overtimeSums.holiday)}h</span>);
-  }
-  if (overtimeSums.other > 0) {
-    badges.push(<span className="cal-badge cal-badge-overtime" key="ot-other">+{formatHours(overtimeSums.other)}h</span>);
-  }
   return badges;
-}
-
-// 合计小时去掉浮点尾差，最多保留一位小数
-function formatHours(total: number): string {
-  return String(Math.round(total * 10) / 10);
 }
 
 function renderTimes(times: string[]) {

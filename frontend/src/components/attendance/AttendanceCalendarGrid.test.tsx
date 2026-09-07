@@ -105,7 +105,10 @@ describe("AttendanceCalendarGrid", () => {
     render(<AttendanceCalendarGrid data={DATA} />);
     expect(screen.getByText("07:32-19:28")).toBeInTheDocument();
     expect(screen.getByText("晚加 2.5h")).toBeInTheDocument();
-    expect(screen.getByText("晚加 +2.5h")).toBeInTheDocument();
+    // 加班小时徽章（晚加/节假/普通）已移除；晚加班由文字徽标表达，背景按白天出勤状态取色
+    expect(screen.queryByText("晚加 +2.5h")).toBeNull();
+    expect(within(getCell("2026-07-01")).getByText("晚加班")).toBeInTheDocument();
+    expect(getCell("2026-07-01")).toHaveClass("is-bg-attendance");
     // 半勤由黄底表达，格子不再渲染半勤文字徽章；汇总条保留半勤合计
     expect(within(getCell("2026-07-02")).queryByText("半勤")).toBeNull();
     expect(screen.getByText(/半勤 1 天/)).toBeInTheDocument();
@@ -142,11 +145,13 @@ describe("AttendanceCalendarGrid", () => {
     expect(screen.queryByRole("dialog")).toBeNull();
   });
 
-  it("同日两条加班（晚间 + 周末白天）：格子只显示晚加徽章，周末小时不显示徽章，弹层完整展示", () => {
+  it("同日两条加班（晚间 + 周末白天）：格子背景按白天状态，晚加班只挂文字徽标，弹层完整展示", () => {
     render(<AttendanceCalendarGrid data={MULTI_OVERTIME_DATA} />);
-    expect(screen.getByText("晚加 +2.5h")).toBeInTheDocument();
-    // 周末加班按天折算（白天1天/晚上0.5天）已计入出勤天数与背景色，不再渲染小时徽章
+    // 加班不渲染小时徽章；背景按白天出勤状态取色（周末白天加班视同出勤绿），晚加班仅文字徽标
+    expect(screen.queryByText("晚加 +2.5h")).toBeNull();
     expect(screen.queryByText("周 +3h")).toBeNull();
+    expect(getCell("2026-07-05")).toHaveClass("is-bg-attendance");
+    expect(within(getCell("2026-07-05")).getAllByText("晚加班")).toHaveLength(1);
     fireEvent.click(screen.getByRole("button", { name: /2026-07-05/ }));
     const dialog = screen.getByRole("dialog");
     expect(within(dialog).getByText("晚上加班")).toBeInTheDocument();
@@ -186,7 +191,7 @@ describe("AttendanceCalendarGrid", () => {
 
   it("格子按状态填充背景色类", () => {
     render(<AttendanceCalendarGrid data={DATA} />);
-    expect(getCell("2026-07-01")).toHaveClass("is-bg-evening"); // 出勤 + 晚加班 → 晚加班优先
+    expect(getCell("2026-07-01")).toHaveClass("is-bg-attendance"); // 出勤 + 晚加班：背景按白天出勤，晚加班仅文字徽标
     expect(getCell("2026-07-02")).toHaveClass("is-bg-half");
     expect(getCell("2026-07-03")).toHaveClass("is-bg-trip");
     expect(getCell("2026-07-04")).toHaveClass("is-bg-absent"); // 过去无数据日
@@ -218,8 +223,8 @@ describe("AttendanceCalendarGrid", () => {
     render(<AttendanceCalendarGrid data={PRIORITY_DATA} />);
     expect(getCell("2026-07-10")).toHaveClass("is-bg-trip"); // 出差 > 婚假 > 丧假
     expect(getCell("2026-07-11")).toHaveClass("is-bg-marriage"); // 婚假 > 丧假
-    expect(getCell("2026-07-12")).toHaveClass("is-bg-half"); // 半勤 > 晚加班
-    expect(getCell("2026-07-13")).toHaveClass("is-bg-evening"); // 晚加班 > 出勤
+    expect(getCell("2026-07-12")).toHaveClass("is-bg-half"); // 半勤 > 出勤
+    expect(getCell("2026-07-13")).toHaveClass("is-bg-attendance"); // 出勤 + 晚加班：背景按白天出勤
     expect(getCell("2026-07-14")).toHaveClass("is-bg-funeral"); // 丧假 > 出勤
   });
 
@@ -248,16 +253,18 @@ describe("AttendanceCalendarGrid", () => {
     expect(container.querySelectorAll(".attendance-calendar-cell.is-bg-absent")).toHaveLength(0);
   });
 
-  it("图例渲染七色修订版七项与手工修正角点说明", () => {
+  it("图例渲染背景色项、晚加班文字徽标项与手工修正角点说明", () => {
     const { container } = render(<AttendanceCalendarGrid data={DATA} />);
     const legend = container.querySelector(".attendance-calendar-legend");
     expect(legend).toBeTruthy();
-    for (const key of ["trip", "marriage", "funeral", "half", "evening", "attendance", "absent"]) {
+    // 晚加班不再占用背景色，图例背景项为六色 + 晚加班文字徽标项
+    for (const key of ["trip", "marriage", "funeral", "half", "attendance", "absent"]) {
       expect(legend?.querySelector(`.is-bg-${key}`)).toBeTruthy();
     }
+    expect(legend?.querySelector(".is-bg-evening")).toBeNull();
     expect(screen.getByText("婚假")).toBeInTheDocument();
     expect(screen.getByText("丧假")).toBeInTheDocument();
-    expect(screen.getByText("晚加班")).toBeInTheDocument();
+    expect(within(legend as HTMLElement).getByText("晚加班")).toBeInTheDocument();
     expect(within(legend as HTMLElement).getByText("缺勤")).toBeInTheDocument(); // 图例的"缺勤"与格内徽章同名，限定图例容器
     expect(within(legend as HTMLElement).getByText("手工修正")).toBeInTheDocument(); // 角点图例项
     expect(within(legend as HTMLElement).getByText("未计实勤")).toBeInTheDocument(); // 未计入实际出勤天数的红点图例项
@@ -285,7 +292,7 @@ describe("AttendanceCalendarGrid 修正模式（可选 props）", () => {
     expect(getCell("2026-07-01")).not.toHaveClass("is-selected");
   });
 
-  it("修正状态覆盖格子背景：全勤绿/半勤黄/缺勤红/晚加橙，且带修正徽章", () => {
+  it("修正状态覆盖格子背景：全勤绿/半勤黄/缺勤红，晚加修正不影响背景仅挂徽标", () => {
     const data: AttendanceCalendarData = {
       ...DATA,
       days: [
@@ -301,10 +308,10 @@ describe("AttendanceCalendarGrid 修正模式（可选 props）", () => {
     expect(getCell("2026-07-10")).toHaveClass("is-bg-attendance");
     expect(getCell("2026-07-11")).toHaveClass("is-bg-half");
     expect(getCell("2026-07-12")).toHaveClass("is-bg-absent");
-    expect(getCell("2026-07-13")).toHaveClass("is-bg-evening");
-    // 手工修正标记为右上角点，晚加班由橙底表达不再渲染文字徽章
+    // 晚加修正不改背景色（白天有刷卡 → 出勤绿），晚加班由文字徽标表达
+    expect(getCell("2026-07-13")).toHaveClass("is-bg-attendance");
     expect(within(getCell("2026-07-10")).getByTitle("手工修正")).toBeInTheDocument();
-    expect(within(getCell("2026-07-13")).queryByText("晚加")).toBeNull();
+    expect(within(getCell("2026-07-13")).getByText("晚加班")).toBeInTheDocument();
   });
 
   it("假种修正状态：出差/婚假/丧假用专属色，其余假种用请假色", () => {
@@ -416,7 +423,7 @@ describe("AttendanceCalendarGrid 修正模式（可选 props）", () => {
     expect(within(getCell("2026-07-03")).getAllByText("病假")).toHaveLength(1);
   });
 
-  it("修正晚加与 OA 晚加班同格只显示小时徽章一条", () => {
+  it("修正晚加与 OA 晚加班同格：只显示一条「晚加班」文字徽标，背景按白天出勤", () => {
     const data: AttendanceCalendarData = {
       ...DATA,
       days: [{ ...DATA.days[0], date: "2026-07-03", override: { is_evening_overtime: true } }],
@@ -425,8 +432,9 @@ describe("AttendanceCalendarGrid 修正模式（可选 props）", () => {
     };
     render(<AttendanceCalendarGrid data={data} />);
     const cell = getCell("2026-07-03");
-    expect(within(cell).getByText("晚加 +2.5h")).toBeInTheDocument();
-    expect(within(cell).getAllByText(/晚加/)).toHaveLength(1);
+    expect(cell).toHaveClass("is-bg-attendance");
+    expect(within(cell).getAllByText("晚加班")).toHaveLength(1);
+    expect(within(cell).queryByText(/晚加 \+/)).toBeNull();
   });
 
   it("同日多条周末加班不渲染徽章，也不落入普通加班 +Xh", () => {
@@ -443,7 +451,7 @@ describe("AttendanceCalendarGrid 修正模式（可选 props）", () => {
     expect(within(cell).queryByText(/\+4h/)).toBeNull();
   });
 
-  it("同日同类型加班合并消除浮点尾差（节假 0.1+0.2 → 0.3）", () => {
+  it("节假加班不渲染小时徽章（多条同日也不合并显示）", () => {
     const data: AttendanceCalendarData = {
       ...DATA,
       overtimes: [
@@ -452,14 +460,16 @@ describe("AttendanceCalendarGrid 修正模式（可选 props）", () => {
       ],
     };
     render(<AttendanceCalendarGrid data={data} />);
-    expect(within(getCell("2026-07-05")).getByText("节假 +0.3h")).toBeInTheDocument();
+    const cell = getCell("2026-07-05");
+    expect(within(cell).queryByText(/节假 \+/)).toBeNull();
+    expect(within(cell).queryByText(/\+0\.3h/)).toBeNull();
   });
 
   it("格子徽章集中在横向徽章行内渲染", () => {
     render(<AttendanceCalendarGrid data={DATA} />);
-    const cell = getCell("2026-07-01");
+    const cell = getCell("2026-07-03");
     const badgesRow = cell.querySelector(".cal-badges");
     expect(badgesRow).toBeTruthy();
-    expect(within(cell).getByText("晚加 +2.5h").closest(".cal-badges")).toBe(badgesRow);
+    expect(within(cell).getByText("出差").closest(".cal-badges")).toBe(badgesRow);
   });
 });

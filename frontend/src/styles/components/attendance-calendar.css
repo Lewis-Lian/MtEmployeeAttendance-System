@@ -11,7 +11,6 @@
 .cal-badge-overtime { background: #fdeeee; color: #b02a2a; border-color: #f6cfcf; }
 .cal-badge-late { background: #fff8dc; color: #8a6d00; border-color: #ece1a0; }
 .cal-badge-early { background: #f3e8fd; color: #6b2fbf; border-color: #e0cffa; }
-.cal-badge-holiday { background: #fdeeee; color: #b02a2a; border-color: #f6cfcf; }
 
 .attendance-calendar-grid {
   display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px;
@@ -32,7 +31,6 @@
 .attendance-calendar-cell.is-bg-marriage { background: #f2b5c6; }
 .attendance-calendar-cell.is-bg-funeral { background: #ccd1d9; }
 .attendance-calendar-cell.is-bg-half { background: #f9e79f; }
-.attendance-calendar-cell.is-bg-evening { background: #f5cba7; }
 .attendance-calendar-cell.is-bg-attendance { background: #a9dfbf; }
 .attendance-calendar-cell.is-bg-absent { background: #ec7063; }
 .cal-day-number { font-weight: 600; color: #3c4658; }
@@ -59,7 +57,6 @@
 .attendance-calendar-legend .cal-badge.is-bg-marriage { background: #f2b5c6; }
 .attendance-calendar-legend .cal-badge.is-bg-funeral { background: #ccd1d9; }
 .attendance-calendar-legend .cal-badge.is-bg-half { background: #f9e79f; }
-.attendance-calendar-legend .cal-badge.is-bg-evening { background: #f5cba7; }
 .attendance-calendar-legend .cal-badge.is-bg-attendance { background: #a9dfbf; }
 .attendance-calendar-legend .cal-badge.is-bg-absent { background: #ec7063; }
 .attendance-calendar-cell[class*="is-bg-"]:hover { filter: brightness(0.97); }
