@@ -739,7 +739,7 @@ def build_manager_rows(
             elif bucket == "time_off" and _has_half_day_component(days):
                 half_time_off_days += 0.5
         records_by_date = {r.record_date: r for r in attendance_rows if getattr(r, "record_date", None)}
-        # 打卡天数（员工侧实际出勤口径）：单日「实际打卡」修正优先，否则真实刷卡 ≥2 次记 1 天；
+        # 打卡天数（员工侧实际出勤口径）：单日「实际打卡」修正优先，否则当日有真实刷卡（≥1 次）记 1 天；
         # 覆盖「有考勤记录的日期」∪「逐日修正表有记录的日期」。
         punch_days = _round2(
             sum(

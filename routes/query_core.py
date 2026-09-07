@@ -1640,6 +1640,18 @@ def _calendar_punch_times(record) -> dict[str, list[str]]:
     return {"check_in_times": raw_check_in, "check_out_times": raw_check_out}
 
 
+def _calendar_actual_attendance_day_value(record, override, attendance_day_value: float) -> float:
+    """日历逐日实勤（红点派生口径）：单日「实际打卡」修正优先；半勤日（当日计入
+    0.5 天）默认有实际打卡——人已到场半天，无刷卡多为月报/折算口径缺失，
+    不应标「未计实勤」红点；修正明确「不算」时仍记 0。"""
+    value = _effective_actual_attendance_day_value(record, override)
+    if value == 0.0 and attendance_day_value == 0.5 and not (
+        override is not None and override.is_actual_attendance is False
+    ):
+        return 1.0
+    return value
+
+
 def _split_overtime_by_day(rows, month: str):
     """加班条按天拆分：跨天条 effective_hours ÷ 覆盖日历天数（最后一天差额补偿），
     条级晚间(start>=17:00)/周末/节假日属性继承。同日同属性累并。
@@ -1771,9 +1783,9 @@ def _build_attendance_calendar_payload(employee: Employee, month: str) -> dict:
             "early_leave_minutes": r.early_leave_minutes or 0,
             "is_half_day": daily_attendance_values.get(r.record_date, 0.0) == 0.5,
             "attendance_days": daily_attendance_values.get(r.record_date, 0.0),
-            # 当日实际出勤天数（0/1）：前端红点派生口径——未计入即标记
-            "actual_attendance_days": _effective_actual_attendance_day_value(
-                r, daily_overrides.get(r.record_date)
+            # 当日实际出勤天数（0/1）：前端红点派生口径——未计入即标记（半勤日默认计入）
+            "actual_attendance_days": _calendar_actual_attendance_day_value(
+                r, daily_overrides.get(r.record_date), daily_attendance_values.get(r.record_date, 0.0)
             ),
             "exception_reason": r.exception_reason or "",
             "override": serialize_daily_override(daily_overrides.get(r.record_date)),
@@ -1796,7 +1808,9 @@ def _build_attendance_calendar_payload(employee: Employee, month: str) -> dict:
                 "early_leave_minutes": 0,
                 "is_half_day": daily_attendance_values.get(day, 0.0) == 0.5,
                 "attendance_days": daily_attendance_values.get(day, 0.0),
-                "actual_attendance_days": _effective_actual_attendance_day_value(None, override),
+                "actual_attendance_days": _calendar_actual_attendance_day_value(
+                    None, override, daily_attendance_values.get(day, 0.0)
+                ),
                 "exception_reason": "",
                 "override": serialize_daily_override(override),
             }
@@ -1817,7 +1831,9 @@ def _build_attendance_calendar_payload(employee: Employee, month: str) -> dict:
                 "early_leave_minutes": 0,
                 "is_half_day": attendance_days == 0.5,
                 "attendance_days": attendance_days,
-                "actual_attendance_days": _effective_actual_attendance_day_value(None, daily_overrides.get(day)),
+                "actual_attendance_days": _calendar_actual_attendance_day_value(
+                    None, daily_overrides.get(day), attendance_days
+                ),
                 "exception_reason": "",
                 "override": serialize_daily_override(daily_overrides.get(day)),
             }

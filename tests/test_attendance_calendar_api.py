@@ -502,7 +502,7 @@ class AttendanceCalendarApiTests(unittest.TestCase):
 
     def test_actual_attendance_days_field(self):
         """红点派生口径：days.actual_attendance_days 表示当日是否计入实际出勤天数——
-        刷卡 ≥2 次计 1；无刷卡计 0；「算」修正强制 1；「不算」修正强制 0。"""
+        有刷卡（≥1 次）计 1；无刷卡计 0；「算」修正强制 1；「不算」修正强制 0。"""
         from models.daily_attendance_override import DailyAttendanceOverride
 
         self._add_daily(record_date=date(2026, 7, 1), check_in_times=["07:30"],
@@ -525,6 +525,75 @@ class AttendanceCalendarApiTests(unittest.TestCase):
         self.assertEqual(days["2026-07-02"], 0.0)
         self.assertEqual(days["2026-07-03"], 1.0)
         self.assertEqual(days["2026-07-04"], 0.0)
+
+    def test_manager_single_swipe_day_counts_as_actual_attendance(self):
+        """红点派生口径：管理人员全天出勤但仅 1 次刷卡（非半勤），有刷卡即计实勤不标红点。"""
+        self._add_manager_daily(date(2026, 7, 15), {"上班1打卡时间": "07:58"})
+
+        data = self._get(f"?emp_id={self.manager_id}&month=2026-07").get_json()
+        day = {item["date"]: item for item in data["days"]}["2026-07-15"]
+        self.assertEqual(day["attendance_days"], 1.0)
+        self.assertFalse(day["is_half_day"])
+        self.assertEqual(day["actual_attendance_days"], 1.0)
+
+    def test_manager_half_day_leave_counts_as_actual_attendance(self):
+        """半勤日默认有实际打卡：半天请假折算 0.5 天的日期不标「未计实勤」红点。"""
+        for day_no in range(1, 32):
+            self._add_manager_daily(date(2026, 7, day_no))
+        with self.app.app_context():
+            db.session.add(
+                LeaveRecord(
+                    leave_no="L-MGR-HALF-ACTUAL",
+                    emp_id=self.manager_id,
+                    leave_type="补休（调休）",
+                    start_time=datetime(2026, 7, 31, 8, 0),
+                    end_time=datetime(2026, 7, 31, 12, 0),
+                    duration=0.5,
+                )
+            )
+            db.session.commit()
+
+        data = self._get(f"?emp_id={self.manager_id}&month=2026-07").get_json()
+        day = {item["date"]: item for item in data["days"]}["2026-07-31"]
+        self.assertEqual(day["attendance_days"], 0.5)
+        self.assertTrue(day["is_half_day"])
+        self.assertEqual(day["actual_attendance_days"], 1.0)
+
+    def test_synthetic_half_day_status_counts_as_actual_attendance(self):
+        """半勤日默认有实际打卡：无刷卡记录的上午/下午出勤修正日不标红点。"""
+        from models.daily_attendance_override import DailyAttendanceOverride
+
+        with self.app.app_context():
+            db.session.add(DailyAttendanceOverride(
+                emp_id=self.emp_id,
+                record_date=date(2026, 7, 30),
+                status="上午出勤",
+            ))
+            db.session.commit()
+
+        data = self._get(f"?emp_id={self.emp_id}&month=2026-07").get_json()
+        day = {item["date"]: item for item in data["days"]}["2026-07-30"]
+        self.assertEqual(day["attendance_days"], 0.5)
+        self.assertTrue(day["is_half_day"])
+        self.assertEqual(day["actual_attendance_days"], 1.0)
+
+    def test_half_day_actual_attendance_off_override_stays_zero(self):
+        """半勤日被修正明确「不算」实际打卡时仍记 0（修正优先于半勤默认）。"""
+        from models.daily_attendance_override import DailyAttendanceOverride
+
+        with self.app.app_context():
+            db.session.add(DailyAttendanceOverride(
+                emp_id=self.emp_id,
+                record_date=date(2026, 7, 30),
+                status="上午出勤",
+                is_actual_attendance=False,
+            ))
+            db.session.commit()
+
+        data = self._get(f"?emp_id={self.emp_id}&month=2026-07").get_json()
+        day = {item["date"]: item for item in data["days"]}["2026-07-30"]
+        self.assertTrue(day["is_half_day"])
+        self.assertEqual(day["actual_attendance_days"], 0.0)
 
     def test_days_fields_serialized(self):
         """days 序列化：HH:MM 数组、punch_count、迟到、异常。"""

@@ -223,7 +223,7 @@ def selected_monthly_report_raw(employee: Employee, month: str, context: str) ->
 
 
 # ---- 实际出勤（打卡口径）共享函数 -------------------------------------------
-# 员工侧与管理人员侧共用同一实现：当日真实刷卡 ≥2 次记 1 天，
+# 员工侧与管理人员侧共用同一实现：当日有真实刷卡（≥1 次）记 1 天，
 # 单日「实际打卡」修正（is_actual_attendance）优先：算 → 1、不算 → 0。
 
 
@@ -349,8 +349,8 @@ def _raw_punch_count(record) -> int:
 
 
 def _actual_attendance_day_value(record) -> float:
-    # 实际出勤天数（刷卡口径）：当日真实刷卡 >= 2 次记 1 天，否则 0 天。
-    return 1.0 if _raw_punch_count(record) >= 2 else 0.0
+    # 实际出勤天数（刷卡口径）：当日有真实刷卡（>= 1 次）记 1 天，无刷卡 0 天。
+    return 1.0 if _raw_punch_count(record) >= 1 else 0.0
 
 
 def _effective_actual_attendance_day_value(record, override) -> float:

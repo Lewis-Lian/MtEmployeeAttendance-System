@@ -1177,7 +1177,7 @@ class ManagerDailyStatusOverrideTests(unittest.TestCase):
 
 
 class ManagerPunchDaysTests(unittest.TestCase):
-    """打卡天数（员工侧实际出勤口径）：单日「实际打卡」修正优先，否则真实刷卡 ≥2 次记 1 天。"""
+    """打卡天数（员工侧实际出勤口径）：单日「实际打卡」修正优先，否则当日有真实刷卡（≥1 次）记 1 天。"""
 
     def setUp(self) -> None:
         self.tmpdir = tempfile.TemporaryDirectory()
@@ -1221,7 +1221,7 @@ class ManagerPunchDaysTests(unittest.TestCase):
             )
         )
 
-    def test_punch_days_requires_two_swipes_per_day(self) -> None:
+    def test_punch_days_counts_single_swipe_day(self) -> None:
         with self.app.app_context():
             self._seed_punch_day(date(2026, 8, 10), {"上班1打卡时间": "07:58", "下班1打卡时间": "17:32"})
             self._seed_punch_day(date(2026, 8, 11), {"上班1打卡时间": "07:58"})
@@ -1229,7 +1229,7 @@ class ManagerPunchDaysTests(unittest.TestCase):
 
             rows = build_manager_rows(ManagerAttendanceOptions(month="2026-08"), [self.manager_id])
 
-        self.assertEqual(rows[0]["punch_days"], 1.0)
+        self.assertEqual(rows[0]["punch_days"], 2.0)
 
     def test_punch_days_actual_attendance_override_takes_priority(self) -> None:
         with self.app.app_context():
