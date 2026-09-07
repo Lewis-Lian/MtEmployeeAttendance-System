@@ -53,6 +53,8 @@ from services.manager_attendance_service import (
     _leave_bucket as _manager_leave_bucket,
     ManagerAttendanceOptions,
     build_manager_rows,
+    manager_daily_attendance_values,
+    manager_daily_data_complete,
     manager_headers,
     normalize_days,
     rows_as_table,
@@ -1687,7 +1689,8 @@ def _build_attendance_calendar_payload(employee: Employee, month: str) -> dict:
     month_start, month_end = bounds
     emp_id = employee.id
 
-    views = attendance_views_by_employee(month, [employee], EMPLOYEE_STATS_CONTEXT).get(emp_id, [])
+    context = MANAGER_STATS_CONTEXT if employee.is_manager else EMPLOYEE_STATS_CONTEXT
+    views = attendance_views_by_employee(month, [employee], context).get(emp_id, [])
     views = [r for r in views if r.record_date]
 
     daily_overrides = daily_override_maps(month, [emp_id]).get(emp_id, {})
@@ -1744,6 +1747,20 @@ def _build_attendance_calendar_payload(employee: Employee, month: str) -> dict:
     leave_entries.sort(key=lambda item: (item["date"], item["leave_type"], item["start_time"]))
     leaves = leave_entries
 
+    uses_daily_attendance = not employee.is_manager or manager_daily_data_complete(month, views)
+    if employee.is_manager and uses_daily_attendance:
+        daily_attendance_values = manager_daily_attendance_values(
+            month, views, daily_overrides, evening_dates, leave_rows
+        )
+    else:
+        records_by_date = {row.record_date: row for row in views}
+        daily_attendance_values = {
+            day: _effective_attendance_day_value(
+                records_by_date.get(day), daily_overrides.get(day), day in evening_dates
+            )
+            for day in set(records_by_date) | set(daily_overrides)
+        }
+
     days = [
         {
             "date": r.record_date.isoformat(),
@@ -1753,6 +1770,7 @@ def _build_attendance_calendar_payload(employee: Employee, month: str) -> dict:
             "late_minutes": r.late_minutes or 0,
             "early_leave_minutes": r.early_leave_minutes or 0,
             "is_half_day": _is_half_day_record(r),
+            "attendance_days": daily_attendance_values.get(r.record_date, 0.0),
             # 当日实际出勤天数（0/1）：前端红点派生口径——未计入即标记
             "actual_attendance_days": _effective_actual_attendance_day_value(
                 r, daily_overrides.get(r.record_date)
@@ -1777,9 +1795,31 @@ def _build_attendance_calendar_payload(employee: Employee, month: str) -> dict:
                 "late_minutes": 0,
                 "early_leave_minutes": 0,
                 "is_half_day": False,
+                "attendance_days": daily_attendance_values.get(day, 0.0),
                 "actual_attendance_days": _effective_actual_attendance_day_value(None, override),
                 "exception_reason": "",
                 "override": serialize_daily_override(override),
+            }
+        )
+    # 仅有请假分摊的日期也要生成每日条目，保证完整逐日数据可直接汇总。
+    rendered_dates = {item["date"] for item in days}
+    for day, attendance_days in sorted(daily_attendance_values.items()):
+        if day.isoformat() in rendered_dates:
+            continue
+        days.append(
+            {
+                "date": day.isoformat(),
+                "check_in_times": [],
+                "check_out_times": [],
+                "punch_count": 0,
+                "actual_hours": 0.0,
+                "late_minutes": 0,
+                "early_leave_minutes": 0,
+                "is_half_day": attendance_days == 0.5,
+                "attendance_days": attendance_days,
+                "actual_attendance_days": _effective_actual_attendance_day_value(None, daily_overrides.get(day)),
+                "exception_reason": "",
+                "override": serialize_daily_override(daily_overrides.get(day)),
             }
         )
     days.sort(key=lambda item: item["date"])
@@ -1797,7 +1837,12 @@ def _build_attendance_calendar_payload(employee: Employee, month: str) -> dict:
             slot["count"] += 1
             slot["days"] = round(slot["days"] + 1.0, 2)
 
-    attendance_days, half_days, _ = _effective_daily_aggregate(views, daily_overrides, evening_dates)
+    attendance_days = round(sum(daily_attendance_values.values()), 2)
+    half_days = sum(1 for value in daily_attendance_values.values() if value == 0.5)
+    if employee.is_manager and not uses_daily_attendance:
+        manager_rows = build_manager_rows(ManagerAttendanceOptions(month=month), [emp_id])
+        if manager_rows:
+            attendance_days = float(manager_rows[0]["attendance_days"])
     late_total = sum(
         effective_late_minutes(r.late_minutes, daily_overrides.get(r.record_date)) for r in views
     ) + sum(
@@ -1833,6 +1878,7 @@ def _build_attendance_calendar_payload(employee: Employee, month: str) -> dict:
             "dept_name": employee.department.dept_name if employee.department else "",
         },
         "month": month,
+        "attendance_source": "daily" if uses_daily_attendance else "monthly_fallback",
         "days": days,
         "overtimes": overtimes,
         "leaves": leaves,

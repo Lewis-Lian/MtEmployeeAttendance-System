@@ -522,6 +522,74 @@ def _manager_attendance_days_from_views(
     return _round2(total)
 
 
+def manager_daily_attendance_values(
+    month: str,
+    rows: list[object],
+    daily_overrides: dict | None = None,
+    evening_dates: set | None = None,
+    leave_rows: list[LeaveRecord] | None = None,
+    factory_rest_periods_by_date: dict[date, set[str]] | None = None,
+) -> dict[date, float]:
+    """返回管理人员每天计入自动考勤的天数，月度值即为其求和。"""
+    daily_overrides = daily_overrides or {}
+    evening_dates = evening_dates or set()
+    values: dict[date, float] = {}
+
+    for row in rows:
+        day = getattr(row, "record_date", None)
+        if not day:
+            continue
+        override = daily_overrides.get(day)
+        if override is not None and override.is_evening_overtime:
+            value = 0.5
+        elif override is not None and override.status:
+            value = status_attendance_days(override.status)
+        elif day in evening_dates:
+            value = (1.0 if _has_manager_punch_record(row) and _manager_daytime_punch_exists(row) else 0.0) + 0.5
+        else:
+            value = 1.0 if _has_manager_punch_record(row) else 0.0
+        values[day] = value
+
+    for day, override in daily_overrides.items():
+        if day in values:
+            continue
+        if override.is_evening_overtime:
+            values[day] = 0.5
+        elif override.status:
+            values[day] = status_attendance_days(override.status)
+        else:
+            values[day] = 0.0
+
+    periods = factory_rest_periods_by_date or {}
+    for leave in leave_rows or []:
+        if leave.is_revoked:
+            continue
+        bucket = _leave_bucket(leave.leave_type)
+        days = normalize_days(_leave_days_in_month(leave, month))
+        if bucket in {"business_trip", "marriage", "funeral"} and periods:
+            days = max(_round2(days - _factory_rest_overlap_days(leave, periods)), 0.0)
+        target = max(leave.start_time.date(), _month_date_range(month)[0])
+        if bucket in {"business_trip", "marriage", "funeral"}:
+            values[target] = values.get(target, 0.0) + days
+        elif bucket in {"personal_sick", "time_off"} and _has_half_day_component(days):
+            values[target] = values.get(target, 0.0) - 0.5
+
+    for day, override in daily_overrides.items():
+        if (override.status or "") in {"出差", "婚假", "丧假"}:
+            values[day] = values.get(day, 0.0) + 1.0
+    return {day: _round2(value) for day, value in values.items()}
+
+
+def manager_daily_data_complete(month: str, rows: list[object]) -> bool:
+    """管理人员逐日文件须覆盖当月每个自然日，才可替代月报汇总。"""
+    bounds = _month_date_range(month)
+    if not bounds:
+        return False
+    start, end = bounds
+    covered = {getattr(row, "record_date", None) for row in rows}
+    return all(day in covered for day in (start + timedelta(days=offset) for offset in range((end - start).days)))
+
+
 def manager_day_late_minutes(row: object) -> int:
     """单日迟到分钟（管理侧口径）：打卡结果含"迟到"时取迟到时长，否则 0。"""
     raw = row.raw_data if isinstance(row.raw_data, dict) else {}
@@ -614,6 +682,16 @@ def build_manager_rows(
         raw_attendance_days = _raw_float(raw, "出勤天数")
         attendance_rows = attendance_rows_by_employee.get(employee.id, [])
         daily_overrides = daily_override_by_emp.get(employee.id, {})
+        leave_rows = leave_rows_by_employee.get(employee.id, [])
+        use_daily_attendance = manager_daily_data_complete(options.month, attendance_rows)
+        daily_attendance_values = manager_daily_attendance_values(
+            options.month,
+            attendance_rows,
+            daily_overrides,
+            evening_dates_by_emp.get(employee.id, set()),
+            leave_rows,
+            factory_rest_periods_by_date,
+        )
 
         late_early_minutes = _manager_schedule_late_minutes_from_views(employee, attendance_rows, daily_overrides)
 
@@ -626,7 +704,7 @@ def build_manager_rows(
         marriage_days = 0.0
         funeral_days = 0.0
 
-        for leave in leave_rows_by_employee.get(employee.id, []):
+        for leave in leave_rows:
             bucket = _leave_bucket(leave.leave_type)
             days = normalize_days(_leave_days_in_month(leave, options.month))
             if can_subtract_factory_rest_overlap and bucket in {"business_trip", "marriage", "funeral"}:
@@ -698,7 +776,12 @@ def build_manager_rows(
                 funeral_days += 1.0
 
         base_attendance_days = raw_attendance_days
-        if base_attendance_days is None:
+        if use_daily_attendance:
+            attendance_days = _round2(sum(daily_attendance_values.values()))
+            actual_attendance_days = _round2(
+                attendance_days - business_trip_days - marriage_days - funeral_days
+            )
+        elif base_attendance_days is None:
             base_attendance_days = _manager_attendance_days_from_views(
                 attendance_rows,
                 daily_overrides,
@@ -724,15 +807,16 @@ def build_manager_rows(
                     reported = top if top is not None else (_raw_float(nested, "出勤天数") or 0.0)
                 base_attendance_days += status_attendance_days(status) - reported
 
-        # 实际出勤天数 = 月报出勤天数(失败时按刷卡天数兜底) - 请假半天的天数 - 调休半天的天数
-        #                - 纯晚顶班加班折半天的天数 + 白班晚加班顶班折算天数
-        actual_attendance_days = _round2(
-            base_attendance_days - half_leave_days - half_time_off_days - half_overtime_days + evening_topup_days
-        )
-        # 出勤天数 = 实际出勤天数 + 出差 + 婚假 + 丧假
-        attendance_days = _round2(
-            actual_attendance_days + business_trip_days + marriage_days + funeral_days
-        )
+        if not use_daily_attendance:
+            # 实际出勤天数 = 月报出勤天数(失败时按刷卡天数兜底) - 请假半天的天数 - 调休半天的天数
+            #                - 纯晚顶班加班折半天的天数 + 白班晚加班顶班折算天数
+            actual_attendance_days = _round2(
+                base_attendance_days - half_leave_days - half_time_off_days - half_overtime_days + evening_topup_days
+            )
+            # 出勤天数 = 实际出勤天数 + 出差 + 婚假 + 丧假
+            attendance_days = _round2(
+                actual_attendance_days + business_trip_days + marriage_days + funeral_days
+            )
 
         override = override_rows_by_employee.get(employee.id)
         override_data = _override_values(override)

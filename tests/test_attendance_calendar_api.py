@@ -9,6 +9,7 @@ from models.department import Department
 from models.daily_record import DailyRecord
 from models.employee import Employee
 from models.leave import LeaveRecord
+from models.monthly_report import MonthlyReport
 from models.overtime import OvertimeRecord
 from models.user import User, UserEmployeeAssignment
 from routes import register_routes
@@ -41,7 +42,8 @@ class AttendanceCalendarApiTests(unittest.TestCase):
             db.session.add(dept)
             db.session.flush()
             emp = Employee(emp_no="E001", name="员工甲", dept_id=dept.id, is_manager=False)
-            db.session.add(emp)
+            manager = Employee(emp_no="M001", name="经理甲", dept_id=dept.id, is_manager=True)
+            db.session.add_all([emp, manager])
             db.session.flush()
             # 登录与权限授予方式与 test_api_query.py 一致：
             # page_permissions 授予 attendance_calendar + UserEmployeeAssignment 绑定可见员工。
@@ -50,8 +52,10 @@ class AttendanceCalendarApiTests(unittest.TestCase):
             db.session.add(viewer)
             db.session.flush()
             db.session.add(UserEmployeeAssignment(user_id=viewer.id, emp_id=emp.id))
+            db.session.add(UserEmployeeAssignment(user_id=viewer.id, emp_id=manager.id))
             db.session.commit()
             self.emp_id = emp.id
+            self.manager_id = manager.id
 
         self.client = attach_origin(self.app.test_client())
         self._login("viewer", "viewer123")
@@ -81,6 +85,38 @@ class AttendanceCalendarApiTests(unittest.TestCase):
         with self.app.app_context():
             db.session.add(DailyRecord(emp_id=self.emp_id, employee_payload=payload, **kwargs))
             db.session.commit()
+
+    def _add_manager_daily(self, record_date: date, raw_data=None):
+        with self.app.app_context():
+            db.session.add(
+                DailyRecord(
+                    emp_id=self.manager_id,
+                    record_date=record_date,
+                    manager_payload={"raw_data": raw_data or {}},
+                )
+            )
+            db.session.commit()
+
+    def test_complete_manager_daily_records_override_monthly_report_attendance(self):
+        """管理人员逐日数据覆盖全月后，日历与统计不再读取月报出勤天数。"""
+        with self.app.app_context():
+            db.session.add(MonthlyReport(
+                emp_id=self.manager_id, report_month="2026-07", manager_raw_data={"出勤天数": 20}
+            ))
+            db.session.commit()
+        for day_no in range(1, 32):
+            raw = {"上班1打卡时间": "08:00", "下班1打卡时间": "17:00"} if day_no == 1 else {}
+            self._add_manager_daily(date(2026, 7, day_no), raw)
+
+        data = self._get(f"?emp_id={self.manager_id}&month=2026-07").get_json()
+        self.assertEqual(data["attendance_source"], "daily")
+        self.assertEqual(data["summary"]["attendance_days"], 1.0)
+        self.assertEqual(sum(day["attendance_days"] for day in data["days"]), 1.0)
+        with self.app.app_context():
+            from services.manager_attendance_service import ManagerAttendanceOptions, build_manager_rows
+
+            rows = build_manager_rows(ManagerAttendanceOptions(month="2026-07"), [self.manager_id])
+        self.assertEqual(rows[0]["attendance_days"], 1.0)
 
     def test_evening_overtime_threshold(self):
         """17:00 边界：16:59 非晚间，17:00 晚间；hours 为小时（effective_hours 天 ×24）。"""
@@ -374,17 +410,7 @@ class AttendanceCalendarApiTests(unittest.TestCase):
 
     def test_manager_employee_allowed(self):
         """考勤日历可查询管理人员（可见范围内不再被非管理人员过滤拦截）。"""
-        with self.app.app_context():
-            dept = Department.query.first()
-            mgr = Employee(emp_no="M001", name="经理甲", dept_id=dept.id, is_manager=True)
-            db.session.add(mgr)
-            db.session.flush()
-            viewer = User.query.filter_by(username="viewer").first()
-            db.session.add(UserEmployeeAssignment(user_id=viewer.id, emp_id=mgr.id))
-            db.session.commit()
-            mgr_id = mgr.id
-
-        resp = self._get(f"?emp_id={mgr_id}&month=2026-07")
+        resp = self._get(f"?emp_id={self.manager_id}&month=2026-07")
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(resp.get_json()["employee"]["emp_no"], "M001")
 

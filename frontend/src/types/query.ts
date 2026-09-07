@@ -90,6 +90,8 @@ export interface AttendanceCalendarDay {
   late_minutes: number;
   early_leave_minutes: number;
   is_half_day: boolean;
+  /** 当日计入月度自动考勤的天数。 */
+  attendance_days?: number;
   /** 当日实际出勤天数（0/1）：未计入时前端以红点角标标记（含「不算」修正与无刷卡口径） */
   actual_attendance_days: number;
   exception_reason: string;
@@ -144,6 +146,8 @@ export interface AttendanceCalendarSummary {
 export interface AttendanceCalendarData {
   employee: AttendanceCalendarEmployee;
   month: string;
+  /** 管理人员逐日记录未覆盖整月时，为兼容历史账套回退月报口径。 */
+  attendance_source?: "daily" | "monthly_fallback";
   days: AttendanceCalendarDay[];
   overtimes: AttendanceCalendarOvertime[];
   leaves: AttendanceCalendarLeave[];

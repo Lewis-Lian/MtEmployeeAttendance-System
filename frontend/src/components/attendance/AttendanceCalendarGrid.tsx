@@ -54,6 +54,7 @@ export default function AttendanceCalendarGrid({ data, selectedDate, multiSelect
     <div className="attendance-calendar">
       <div className="attendance-calendar-summary">
         <span className="cal-badge cal-badge-attendance">出勤 {data.summary.attendance_days} 天</span>
+        {data.attendance_source === "monthly_fallback" ? <span className="cal-badge">月报兜底</span> : null}
         <span className="cal-badge">半勤 {data.summary.half_days} 天</span>
         {data.summary.leave_by_type.map((item) => (
           <span className="cal-badge cal-badge-leave" key={item.leave_type}>
@@ -153,6 +154,10 @@ export default function AttendanceCalendarGrid({ data, selectedDate, multiSelect
                   <div className="daydetail-row">
                     <span className="daydetail-label">实出勤</span>
                     <span className="daydetail-value">{selected.day.actual_hours} 小时</span>
+                  </div>
+                  <div className="daydetail-row">
+                    <span className="daydetail-label">计入考勤</span>
+                    <span className="daydetail-value">{selected.day.attendance_days ?? 0} 天</span>
                   </div>
                   {selected.day.late_minutes > 0 && (
                     <div className="daydetail-row">
