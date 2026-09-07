@@ -561,18 +561,34 @@ def manager_daily_attendance_values(
             values[day] = 0.0
 
     periods = factory_rest_periods_by_date or {}
+    month_start, month_end = _month_date_range(month)
+    leave_periods_by_date: dict[date, set[str]] = {}
     for leave in leave_rows or []:
         if leave.is_revoked:
             continue
         bucket = _leave_bucket(leave.leave_type)
         days = normalize_days(_leave_days_in_month(leave, month))
+        total_days = normalize_days(
+            overlap_duration_days(leave.start_time, leave.end_time, leave.start_time, leave.end_time)
+        )
         if bucket in {"business_trip", "marriage", "funeral"} and periods:
             days = max(_round2(days - _factory_rest_overlap_days(leave, periods)), 0.0)
-        target = max(leave.start_time.date(), _month_date_range(month)[0])
+        target = max(leave.start_time.date(), month_start)
         if bucket in {"business_trip", "marriage", "funeral"}:
             values[target] = values.get(target, 0.0) + days
-        elif bucket in {"personal_sick", "time_off"} and _has_half_day_component(days):
-            values[target] = values.get(target, 0.0) - 0.5
+        elif bucket in {"personal_sick", "time_off"} and _has_half_day_component(total_days):
+            day = target
+            last_day = min(leave.end_time.date(), month_end - timedelta(days=1))
+            while day <= last_day:
+                leave_periods_by_date.setdefault(day, set()).update(
+                    _day_periods_covered(leave.start_time, leave.end_time, day)
+                )
+                day += timedelta(days=1)
+
+    for day, leave_periods in leave_periods_by_date.items():
+        override = daily_overrides.get(day)
+        if len(leave_periods) == 1 and not (override and (override.status or override.is_evening_overtime)):
+            values[day] = 0.5
 
     for day, override in daily_overrides.items():
         if (override.status or "") in {"出差", "婚假", "丧假"}:

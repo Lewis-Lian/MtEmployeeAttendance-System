@@ -1748,7 +1748,7 @@ def _build_attendance_calendar_payload(employee: Employee, month: str) -> dict:
     leaves = leave_entries
 
     uses_daily_attendance = not employee.is_manager or manager_daily_data_complete(month, views)
-    if employee.is_manager and uses_daily_attendance:
+    if employee.is_manager:
         daily_attendance_values = manager_daily_attendance_values(
             month, views, daily_overrides, evening_dates, leave_rows
         )

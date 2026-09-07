@@ -131,6 +131,132 @@ class AttendanceCalendarApiTests(unittest.TestCase):
         self.assertEqual(day["attendance_days"], 1.0)
         self.assertFalse(day["is_half_day"])
 
+    def test_manager_half_day_leave_is_calendar_half_attendance(self):
+        """管理人员半天请假应直接落到日历 0.5 天，并参与月度逐日汇总。"""
+        for day_no in range(1, 32):
+            self._add_manager_daily(date(2026, 7, day_no))
+        with self.app.app_context():
+            db.session.add(
+                LeaveRecord(
+                    leave_no="L-MGR-HALF",
+                    emp_id=self.manager_id,
+                    leave_type="补休（调休）",
+                    start_time=datetime(2026, 7, 31, 8, 0),
+                    end_time=datetime(2026, 7, 31, 12, 0),
+                    duration=0.5,
+                )
+            )
+            db.session.commit()
+
+        data = self._get(f"?emp_id={self.manager_id}&month=2026-07").get_json()
+        day = {item["date"]: item for item in data["days"]}["2026-07-31"]
+        self.assertEqual(day["attendance_days"], 0.5)
+        self.assertTrue(day["is_half_day"])
+        self.assertEqual(data["summary"]["attendance_days"], 0.5)
+        self.assertEqual(data["summary"]["half_days"], 1)
+
+        with self.app.app_context():
+            from services.manager_attendance_service import ManagerAttendanceOptions, build_manager_rows
+
+            rows = build_manager_rows(ManagerAttendanceOptions(month="2026-07"), [self.manager_id])
+        self.assertEqual(rows[0]["attendance_days"], 0.5)
+
+    def test_manager_cross_day_leave_marks_its_partial_day_as_half_attendance(self):
+        """跨日请假应按日拆分，只把实际半天所在日期计为 0.5 天。"""
+        for day_no in range(1, 32):
+            self._add_manager_daily(date(2026, 7, day_no))
+        with self.app.app_context():
+            db.session.add(
+                LeaveRecord(
+                    leave_no="L-MGR-CROSS-HALF",
+                    emp_id=self.manager_id,
+                    leave_type="事假",
+                    start_time=datetime(2026, 7, 30, 13, 0),
+                    end_time=datetime(2026, 7, 31, 17, 0),
+                    duration=1.5,
+                )
+            )
+            db.session.commit()
+
+        data = self._get(f"?emp_id={self.manager_id}&month=2026-07").get_json()
+        days = {item["date"]: item for item in data["days"]}
+        self.assertEqual(days["2026-07-30"]["attendance_days"], 0.5)
+        self.assertTrue(days["2026-07-30"]["is_half_day"])
+        self.assertEqual(days["2026-07-31"]["attendance_days"], 0.0)
+        self.assertFalse(days["2026-07-31"]["is_half_day"])
+
+    def test_manager_monthly_fallback_calendar_still_marks_half_day_leave(self):
+        """逐日数据不完整时保留月报汇总，但请假所在日仍应显示 0.5 天半勤。"""
+        with self.app.app_context():
+            db.session.add_all(
+                [
+                    MonthlyReport(
+                        emp_id=self.manager_id,
+                        report_month="2026-07",
+                        manager_raw_data={"出勤天数": 20},
+                    ),
+                    LeaveRecord(
+                        leave_no="L-MGR-FALLBACK-HALF",
+                        emp_id=self.manager_id,
+                        leave_type="事假",
+                        start_time=datetime(2026, 7, 31, 13, 0),
+                        end_time=datetime(2026, 7, 31, 17, 0),
+                        duration=0.5,
+                    ),
+                ]
+            )
+            db.session.commit()
+
+        data = self._get(f"?emp_id={self.manager_id}&month=2026-07").get_json()
+        day = {item["date"]: item for item in data["days"]}["2026-07-31"]
+        self.assertEqual(data["attendance_source"], "monthly_fallback")
+        self.assertEqual(day["attendance_days"], 0.5)
+        self.assertTrue(day["is_half_day"])
+
+    def test_manager_short_leave_does_not_become_half_attendance(self):
+        """不足半天折算阈值的短时请假，不得因落在单个时段而提升为 0.5 天。"""
+        for day_no in range(1, 32):
+            self._add_manager_daily(date(2026, 7, day_no))
+        with self.app.app_context():
+            db.session.add(
+                LeaveRecord(
+                    leave_no="L-MGR-SHORT",
+                    emp_id=self.manager_id,
+                    leave_type="事假",
+                    start_time=datetime(2026, 7, 31, 8, 0),
+                    end_time=datetime(2026, 7, 31, 9, 0),
+                    duration=0.04,
+                )
+            )
+            db.session.commit()
+
+        data = self._get(f"?emp_id={self.manager_id}&month=2026-07").get_json()
+        day = {item["date"]: item for item in data["days"]}["2026-07-31"]
+        self.assertEqual(day["attendance_days"], 0.0)
+        self.assertFalse(day["is_half_day"])
+
+    def test_manager_cross_month_leave_keeps_half_day_in_start_month(self):
+        """跨月请假应按整张单识别半天，并标记半天实际所在的月份与日期。"""
+        for day_no in range(1, 32):
+            self._add_manager_daily(date(2026, 8, day_no))
+        with self.app.app_context():
+            db.session.add(
+                LeaveRecord(
+                    leave_no="L-MGR-CROSS-MONTH-HALF",
+                    emp_id=self.manager_id,
+                    leave_type="事假",
+                    start_time=datetime(2026, 8, 31, 13, 0),
+                    end_time=datetime(2026, 9, 1, 17, 0),
+                    duration=1.5,
+                )
+            )
+            db.session.commit()
+
+        data = self._get(f"?emp_id={self.manager_id}&month=2026-08").get_json()
+        day = {item["date"]: item for item in data["days"]}["2026-08-31"]
+        self.assertEqual(day["attendance_days"], 0.5)
+        self.assertTrue(day["is_half_day"])
+
     def test_synthetic_half_day_override_marks_calendar_day_as_half_day(self):
         """无原始记录的上午/下午出勤修正，应与最终 0.5 天口径一致。"""
         from models.daily_attendance_override import DailyAttendanceOverride
