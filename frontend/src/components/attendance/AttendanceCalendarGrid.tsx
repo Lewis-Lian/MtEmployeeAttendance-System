@@ -348,8 +348,9 @@ function renderPunchSummary(cell: DayCell) {
 }
 
 // 徽章只保留背景色表达不了的增量信息：假种文字（含修正假种与 OA 假种合并去重）、
-// 加班分类小时（周末/节假加底色与出勤同为绿，徽章是唯一区分）、实际打卡「实」；
-// 缺勤/半勤/晚加/修正由背景色与右上角点表达，不再渲染文字徽章
+// 加班分类小时（节假加底色与出勤同为绿，徽章是唯一区分）、实际打卡「实」；
+// 缺勤/半勤/晚加/修正由背景色与右上角点表达，不再渲染文字徽章；
+// 周末加班按天折算（白天 1 天/晚上 0.5 天）计入出勤天数，不渲染小时徽章
 function renderBadges(cell: DayCell, override?: DailyAttendanceOverrideValues | null): ReactNode[] {
   const badges: ReactNode[] = [];
 
@@ -365,12 +366,12 @@ function renderBadges(cell: DayCell, override?: DailyAttendanceOverrideValues | 
     );
   });
 
-  // 同类型加班合并合计，每类一条
-  const overtimeSums = { evening: 0, holiday: 0, weekend: 0, other: 0 };
+  // 同类型加班合并合计，每类一条；周末加班不参与徽章展示
+  const overtimeSums = { evening: 0, holiday: 0, other: 0 };
   cell.overtimes.forEach((overtime) => {
     if (overtime.is_evening) overtimeSums.evening += overtime.hours;
     else if (overtime.is_holiday) overtimeSums.holiday += overtime.hours;
-    else if (overtime.is_weekend) overtimeSums.weekend += overtime.hours;
+    else if (overtime.is_weekend) return;
     else overtimeSums.other += overtime.hours;
   });
   if (overtimeSums.evening > 0) {
@@ -378,9 +379,6 @@ function renderBadges(cell: DayCell, override?: DailyAttendanceOverrideValues | 
   }
   if (overtimeSums.holiday > 0) {
     badges.push(<span className="cal-badge cal-badge-holiday" key="ot-holiday">节假 +{formatHours(overtimeSums.holiday)}h</span>);
-  }
-  if (overtimeSums.weekend > 0) {
-    badges.push(<span className="cal-badge cal-badge-overtime" key="ot-weekend">周 +{formatHours(overtimeSums.weekend)}h</span>);
   }
   if (overtimeSums.other > 0) {
     badges.push(<span className="cal-badge cal-badge-overtime" key="ot-other">+{formatHours(overtimeSums.other)}h</span>);

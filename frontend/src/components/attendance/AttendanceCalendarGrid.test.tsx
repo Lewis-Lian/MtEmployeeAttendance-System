@@ -142,10 +142,11 @@ describe("AttendanceCalendarGrid", () => {
     expect(screen.queryByRole("dialog")).toBeNull();
   });
 
-  it("同日两条加班（晚间 + 周末白天）在格子与弹层都完整展示", () => {
+  it("同日两条加班（晚间 + 周末白天）：格子只显示晚加徽章，周末小时不显示徽章，弹层完整展示", () => {
     render(<AttendanceCalendarGrid data={MULTI_OVERTIME_DATA} />);
     expect(screen.getByText("晚加 +2.5h")).toBeInTheDocument();
-    expect(screen.getByText("周 +3h")).toBeInTheDocument();
+    // 周末加班按天折算（白天1天/晚上0.5天）已计入出勤天数与背景色，不再渲染小时徽章
+    expect(screen.queryByText("周 +3h")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: /2026-07-05/ }));
     const dialog = screen.getByRole("dialog");
     expect(within(dialog).getByText("晚上加班")).toBeInTheDocument();
@@ -428,7 +429,7 @@ describe("AttendanceCalendarGrid 修正模式（可选 props）", () => {
     expect(within(cell).getAllByText(/晚加/)).toHaveLength(1);
   });
 
-  it("同日同类型多条加班合并为一条合计徽章", () => {
+  it("同日多条周末加班不渲染徽章，也不落入普通加班 +Xh", () => {
     const data: AttendanceCalendarData = {
       ...DATA,
       overtimes: [
@@ -438,8 +439,8 @@ describe("AttendanceCalendarGrid 修正模式（可选 props）", () => {
     };
     render(<AttendanceCalendarGrid data={data} />);
     const cell = getCell("2026-07-05");
-    expect(within(cell).getByText("周 +4h")).toBeInTheDocument();
-    expect(within(cell).getAllByText(/周 \+/)).toHaveLength(1);
+    expect(within(cell).queryByText(/周 \+/)).toBeNull();
+    expect(within(cell).queryByText(/\+4h/)).toBeNull();
   });
 
   it("同日同类型加班合并消除浮点尾差（节假 0.1+0.2 → 0.3）", () => {
