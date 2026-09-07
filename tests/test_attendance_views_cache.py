@@ -124,6 +124,34 @@ class AttendanceViewsRequestCacheTests(unittest.TestCase):
             self.assertEqual(rows[0].late_minutes, 0)
             self.assertEqual(rows[0].early_leave_minutes, 0)
 
+    def test_manager_context_falls_back_to_employee_payload_when_manager_payload_missing(self) -> None:
+        with self.flask_app.app_context():
+            dept = Department.query.first()
+            manager = Employee(emp_no="M002", name="经理乙", dept_id=dept.id, is_manager=True)
+            db.session.add(manager)
+            db.session.flush()
+            db.session.add(
+                DailyRecord(
+                    emp_id=manager.id,
+                    record_date=date(2026, 5, 15),
+                    actual_hours=8,
+                    raw_data={"刷卡时间数据": "08:00,17:00"},
+                    employee_payload={
+                        "actual_hours": 8,
+                        "late_minutes": 0,
+                        "early_leave_minutes": 0,
+                        "raw_data": {"刷卡时间数据": "08:00,17:00"},
+                    },
+                )
+            )
+            db.session.commit()
+
+            rows = attendance_views_by_employee("2026-05", [manager], MANAGER_STATS_CONTEXT)[manager.id]
+
+            self.assertEqual(len(rows), 1)
+            self.assertEqual(rows[0].source, "employee")
+            self.assertEqual(rows[0].actual_hours, 8)
+
     def test_cache_does_not_leak_across_requests(self) -> None:
         # 缓存挂在 flask.g 上，新请求（新 app context）必须重新查库
         with self.flask_app.app_context():

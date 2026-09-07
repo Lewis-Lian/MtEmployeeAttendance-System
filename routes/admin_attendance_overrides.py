@@ -273,21 +273,14 @@ def _parse_daily_override_payload(data: dict, employee) -> tuple[dict, tuple | N
             return values, (jsonify({"error": error}), 400)
         values[key] = parsed
 
-    flag = data.get("is_evening_overtime")
-    if flag in (None, ""):
-        values["is_evening_overtime"] = None
-    elif isinstance(flag, bool):
-        values["is_evening_overtime"] = flag
-    else:
-        values["is_evening_overtime"] = str(flag).strip().lower() in ("true", "1", "yes", "是")
-
-    flag = data.get("is_actual_attendance")
-    if flag in (None, ""):
-        values["is_actual_attendance"] = None
-    elif isinstance(flag, bool):
-        values["is_actual_attendance"] = flag
-    else:
-        values["is_actual_attendance"] = str(flag).strip().lower() in ("true", "1", "yes", "是")
+    for key in ("is_evening_overtime", "is_actual_attendance"):
+        flag = data.get(key)
+        if flag in (None, ""):
+            values[key] = None
+        elif isinstance(flag, bool):
+            values[key] = flag
+        else:
+            return values, (jsonify({"error": f"{key} 必须为布尔值"}), 400)
 
     values["remark"] = (data.get("remark") or "").strip()
     return values, None

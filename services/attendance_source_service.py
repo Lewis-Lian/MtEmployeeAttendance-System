@@ -60,13 +60,27 @@ def _payload_for_source(record: DailyRecord, source: str) -> dict:
     if isinstance(payload, dict) and payload:
         return payload
     raw = record.raw_data if isinstance(record.raw_data, dict) else {}
-    return raw if isinstance(raw, dict) else {}
+    if source == ATTENDANCE_SOURCE_MANAGER:
+        return raw if _is_manager_raw_data(raw) else {}
+    return raw if raw and not _is_manager_raw_data(raw) else {}
+
+
+def _is_manager_raw_data(raw: dict) -> bool:
+    return "日期" in raw and (
+        "考勤组" in raw
+        or "上班1打卡时间" in raw
+        or "下班1打卡时间" in raw
+        or "上班2打卡时间" in raw
+        or "下班2打卡时间" in raw
+    )
 
 
 def _record_has_source_payload(record: DailyRecord, source: str) -> bool:
     payload = _payload_for_source(record, source)
     if payload:
         return True
+    if record.employee_payload or record.manager_payload or record.raw_data:
+        return False
     if source == ATTENDANCE_SOURCE_EMPLOYEE:
         return bool(record.check_in_times or record.check_out_times or record.shift_id or record.expected_hours or record.absent_hours)
     return bool(record.actual_hours or record.late_minutes or record.early_leave_minutes)

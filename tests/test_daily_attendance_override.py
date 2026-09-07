@@ -286,6 +286,14 @@ class DailyAttendanceOverrideTests(unittest.TestCase):
         )
         self.assertEqual(res.status_code, 400)
 
+    def test_put_rejects_invalid_boolean_flags(self) -> None:
+        for key in ("is_evening_overtime", "is_actual_attendance"):
+            res = self._put_daily(
+                {"month": "2026-05", "emp_id": self.employee_id, "date": "2026-05-12", key: "yes"}
+            )
+            self.assertEqual(res.status_code, 400)
+            self.assertIn("必须为布尔值", res.get_json()["error"])
+
     def test_put_locked_account_set_rejected(self) -> None:
         with self.app.app_context():
             account_set = AccountSet.query.filter_by(month="2026-05").first()
