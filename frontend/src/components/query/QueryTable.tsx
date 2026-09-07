@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { createPortal } from "react-dom";
 
+import QueryProgressOverlay from "../feedback/QueryProgressOverlay";
 import "../../styles/components/query-table.css";
 
 export interface QueryTableHeader {
@@ -236,13 +237,7 @@ export default function QueryTable({
         </div>
         <div className="master-modal-body">
           {isModalLoading ? (
-            <div className="query-modal-loading-wrap">
-              <div className="query-loading-spinner-wrap">
-                <div className="query-loading-spinner-ring" />
-                <div className="query-loading-spinner-pulse" />
-              </div>
-              <p className="query-modal-loading-text">正在加载详情，请稍后...</p>
-            </div>
+            <QueryProgressOverlay active progress={42} text="正在加载详情，请稍后..." />
           ) : null}
           {!isModalLoading && modalError ? <p className="legacy-inline-error">{modalError}</p> : null}
           {!isModalLoading && !modalError ? modalBodyContent : null}

@@ -5,6 +5,7 @@ import { useNotification } from "../feedback/Notification";
 import { fetchQueryBootstrap } from "../../api/query";
 import ErrorState from "../feedback/ErrorState";
 import LoadingState from "../feedback/LoadingState";
+import QueryProgressOverlay from "../feedback/QueryProgressOverlay";
 import EmployeePicker from "../query/EmployeePicker";
 import QueryResultPanel from "../query/QueryResultPanel";
 import QueryTable from "../query/QueryTable";
@@ -336,14 +337,7 @@ export default function AttendanceOverridesPage({
       </aside>
 
       <section className="query-workspace">
-        <div className={`query-workspace-loading ${progressVisible ? "is-active" : ""}`} role="status">
-          <div className="query-loading-spinner-wrap">
-            <div className="query-loading-spinner-ring" />
-            <div className="query-loading-spinner-pulse" />
-            <div className="query-loading-percent">{progress}%</div>
-          </div>
-          <div className="query-loading-text">{loadingText}</div>
-        </div>
+        <QueryProgressOverlay active={progressVisible} progress={progress} text={loadingText} />
         <QueryResultPanel>
           <QueryTable
             emptyText={hasQueried ? listEmptyHint : `请先查询${pickerLabel}和月份`}

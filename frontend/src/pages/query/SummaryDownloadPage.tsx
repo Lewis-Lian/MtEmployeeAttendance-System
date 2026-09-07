@@ -4,6 +4,7 @@ import { buildDownloadUrl, fetchQueryBootstrap } from "../../api/query";
 import EmployeePicker from "../../components/query/EmployeePicker";
 import ErrorState from "../../components/feedback/ErrorState";
 import LoadingState from "../../components/feedback/LoadingState";
+import QueryProgressOverlay from "../../components/feedback/QueryProgressOverlay";
 import type { QueryBootstrap } from "../../types/query";
 
 const FINAL_HEADERS = [
@@ -346,19 +347,11 @@ export default function SummaryDownloadPage() {
 
   return (
     <section className="legacy-page-section summary-download-container">
-      {/* 全覆盖式极光磨砂玻璃加载遮罩 */}
-      <div className={`query-workspace-loading ${progressVisible ? "is-active" : ""}`} role="status">
-        <div className="query-loading-spinner-wrap">
-          <div className="query-loading-spinner-ring" />
-          <div className="query-loading-spinner-pulse" />
-          <div className="query-loading-percent">{progress}%</div>
-        </div>
-        <div className="query-loading-text">{loadingText}</div>
-      </div>
+      <QueryProgressOverlay active={progressVisible} progress={progress} text={loadingText} />
 
       {/* 载入高级页内 CSS */}
       <style dangerouslySetInnerHTML={{ __html: `
-        .summary-download-container .query-workspace-loading {
+        .summary-download-container .query-progress-overlay {
           position: fixed !important;
           border-radius: 0 !important;
         }

@@ -17,6 +17,7 @@ import {
 import { clearQueryBootstrapCache } from "../../api/query";
 import ErrorState from "../../components/feedback/ErrorState";
 import LoadingState from "../../components/feedback/LoadingState";
+import QueryProgressOverlay from "../../components/feedback/QueryProgressOverlay";
 import QueryResultPanel from "../../components/query/QueryResultPanel";
 import QueryTable from "../../components/query/QueryTable";
 import type { AdminAccountSet, AdminAccountSetFactoryRestEntry, AdminAccountSetImport } from "../../types/admin";
@@ -282,15 +283,7 @@ export default function AdminDashboardPage() {
 
   return (
     <section className="account-center-page">
-      {/* 主页面的全屏极光磨砂进度条遮罩 */}
-      <div className={`query-workspace-loading ${progressVisible ? "is-active" : ""}`} style={{ position: "fixed", borderRadius: 0 }} role="status">
-        <div className="query-loading-spinner-wrap">
-          <div className="query-loading-spinner-ring" />
-          <div className="query-loading-spinner-pulse" />
-          <div className="query-loading-percent">{progress}%</div>
-        </div>
-        <div className="query-loading-text">{loadingText}</div>
-      </div>
+      <QueryProgressOverlay active={progressVisible} className="query-progress-overlay-page" progress={progress} text={loadingText} />
 
 
       {/* 顶部控制与账套信息行 */}
@@ -469,15 +462,7 @@ export default function AdminDashboardPage() {
               boxSizing: "border-box",
             }}
           >
-            {/* 弹窗内的极光磨砂进度条遮罩 */}
-            <div className={`query-workspace-loading ${progressVisible ? "is-active" : ""}`} style={{ borderRadius: "12px" }} role="status">
-              <div className="query-loading-spinner-wrap">
-                <div className="query-loading-spinner-ring" />
-                <div className="query-loading-spinner-pulse" />
-                <div className="query-loading-percent">{progress}%</div>
-              </div>
-              <div className="query-loading-text">{loadingText}</div>
-            </div>
+            <QueryProgressOverlay active={progressVisible} className="query-progress-overlay-modal" progress={progress} text={loadingText} />
 
             {/* 关闭按钮 */}
             <button

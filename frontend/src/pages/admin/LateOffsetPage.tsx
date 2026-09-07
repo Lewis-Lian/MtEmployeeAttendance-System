@@ -5,6 +5,7 @@ import { apiRequest } from "../../api/client";
 import { fetchQueryBootstrap } from "../../api/query";
 import ErrorState from "../../components/feedback/ErrorState";
 import LoadingState from "../../components/feedback/LoadingState";
+import QueryProgressOverlay from "../../components/feedback/QueryProgressOverlay";
 import { useNotification } from "../../components/feedback/Notification";
 import LateOffsetLeavesModal from "../../components/admin/LateOffsetLeavesModal";
 import EmployeePicker from "../../components/query/EmployeePicker";
@@ -408,14 +409,7 @@ export default function LateOffsetPage() {
       </aside>
 
       <section className="query-workspace">
-        {/* 全覆盖式极光磨砂玻璃加载遮罩（与其他查询页同款） */}
-        <div className={`query-workspace-loading ${isQuerying ? "is-active" : ""}`} role="status">
-          <div className="query-loading-spinner-wrap">
-            <div className="query-loading-spinner-ring" />
-            <div className="query-loading-spinner-pulse" />
-          </div>
-          <div className="query-loading-text">正在查询迟到冲抵数据...</div>
-        </div>
+        <QueryProgressOverlay active={isQuerying} progress={isQuerying ? 58 : 0} text="正在查询迟到冲抵数据..." />
         <QueryResultPanel>
           <QueryTable
             emptyText={hasQueried ? "当月没有可冲抵的迟到记录" : "请先选择月份查询"}

@@ -7,6 +7,7 @@ import QueryTable from "../../components/query/QueryTable";
 import MultiSelectDropdown from "../../components/common/MultiSelectDropdown";
 import ErrorState from "../../components/feedback/ErrorState";
 import LoadingState from "../../components/feedback/LoadingState";
+import QueryProgressOverlay from "../../components/feedback/QueryProgressOverlay";
 import type { QueryBootstrap } from "../../types/query";
 import "./dashboard-shared.css";
 
@@ -272,15 +273,7 @@ export default function AbnormalQueryPage() {
       </aside>
 
       <section className="query-workspace">
-        {/* 全覆盖式极光磨砂玻璃加载遮罩 */}
-        <div className={`query-workspace-loading ${progressVisible ? "is-active" : ""}`} role="status">
-          <div className="query-loading-spinner-wrap">
-            <div className="query-loading-spinner-ring" />
-            <div className="query-loading-spinner-pulse" />
-            <div className="query-loading-percent">{progress}%</div>
-          </div>
-          <div className="query-loading-text">{loadingText}</div>
-        </div>
+        <QueryProgressOverlay active={progressVisible} progress={progress} text={loadingText} />
         <QueryResultPanel>
           <QueryTable
             cellModal={{
