@@ -118,6 +118,36 @@ class AttendanceCalendarApiTests(unittest.TestCase):
             rows = build_manager_rows(ManagerAttendanceOptions(month="2026-07"), [self.manager_id])
         self.assertEqual(rows[0]["attendance_days"], 1.0)
 
+    def test_manager_calendar_half_day_marker_uses_final_attendance_value(self):
+        """管理人员两次短时打卡若结算为全天，日历不应标为半勤。"""
+        for day_no in range(1, 32):
+            raw = {"上班1打卡时间": "08:00", "下班1打卡时间": "17:00"}
+            if day_no == 30:
+                raw = {"上班1打卡时间": "08:00", "下班1打卡时间": "12:03"}
+            self._add_manager_daily(date(2026, 7, day_no), raw)
+
+        data = self._get(f"?emp_id={self.manager_id}&month=2026-07").get_json()
+        day = {item["date"]: item for item in data["days"]}["2026-07-30"]
+        self.assertEqual(day["attendance_days"], 1.0)
+        self.assertFalse(day["is_half_day"])
+
+    def test_synthetic_half_day_override_marks_calendar_day_as_half_day(self):
+        """无原始记录的上午/下午出勤修正，应与最终 0.5 天口径一致。"""
+        from models.daily_attendance_override import DailyAttendanceOverride
+
+        with self.app.app_context():
+            db.session.add(DailyAttendanceOverride(
+                emp_id=self.emp_id,
+                record_date=date(2026, 7, 30),
+                status="上午出勤",
+            ))
+            db.session.commit()
+
+        data = self._get(f"?emp_id={self.emp_id}&month=2026-07").get_json()
+        day = {item["date"]: item for item in data["days"]}["2026-07-30"]
+        self.assertEqual(day["attendance_days"], 0.5)
+        self.assertTrue(day["is_half_day"])
+
     def test_evening_overtime_threshold(self):
         """17:00 边界：16:59 非晚间，17:00 晚间；hours 为小时（effective_hours 天 ×24）。"""
         with self.app.app_context():

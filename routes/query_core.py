@@ -1769,7 +1769,7 @@ def _build_attendance_calendar_payload(employee: Employee, month: str) -> dict:
             "actual_hours": _calc_record_work_hours(r)[0],
             "late_minutes": r.late_minutes or 0,
             "early_leave_minutes": r.early_leave_minutes or 0,
-            "is_half_day": _is_half_day_record(r),
+            "is_half_day": daily_attendance_values.get(r.record_date, 0.0) == 0.5,
             "attendance_days": daily_attendance_values.get(r.record_date, 0.0),
             # 当日实际出勤天数（0/1）：前端红点派生口径——未计入即标记
             "actual_attendance_days": _effective_actual_attendance_day_value(
@@ -1794,7 +1794,7 @@ def _build_attendance_calendar_payload(employee: Employee, month: str) -> dict:
                 "actual_hours": 0.0,
                 "late_minutes": 0,
                 "early_leave_minutes": 0,
-                "is_half_day": False,
+                "is_half_day": daily_attendance_values.get(day, 0.0) == 0.5,
                 "attendance_days": daily_attendance_values.get(day, 0.0),
                 "actual_attendance_days": _effective_actual_attendance_day_value(None, override),
                 "exception_reason": "",
