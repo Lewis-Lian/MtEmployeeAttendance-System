@@ -50,6 +50,7 @@ from services.attendance_source_service import (
 )
 from services.manager_attendance_service import (
     MANAGER_HEADERS,
+    _factory_rest_periods_by_date,
     _leave_bucket as _manager_leave_bucket,
     ManagerAttendanceOptions,
     build_manager_rows,
@@ -1762,7 +1763,12 @@ def _build_attendance_calendar_payload(employee: Employee, month: str) -> dict:
     uses_daily_attendance = not employee.is_manager or manager_daily_data_complete(month, views)
     if employee.is_manager:
         daily_attendance_values = manager_daily_attendance_values(
-            month, views, daily_overrides, evening_dates, leave_rows
+            month,
+            views,
+            daily_overrides,
+            evening_dates,
+            leave_rows,
+            _factory_rest_periods_by_date(month),
         )
     else:
         records_by_date = {row.record_date: row for row in views}
@@ -1856,7 +1862,15 @@ def _build_attendance_calendar_payload(employee: Employee, month: str) -> dict:
     attendance_days = round(sum(daily_attendance_values.values()), 2)
     half_days = sum(1 for value in daily_attendance_values.values() if value == 0.5)
     if employee.is_manager and not uses_daily_attendance:
-        manager_rows = build_manager_rows(ManagerAttendanceOptions(month=month), [emp_id])
+        account_set = AccountSet.query.filter_by(month=month).first()
+        manager_rows = build_manager_rows(
+            ManagerAttendanceOptions(
+                month=month,
+                factory_rest_days=_manager_factory_rest_days(account_set),
+                monthly_benefit_days=(account_set.monthly_benefit_days if account_set else 0.0) or 0.0,
+            ),
+            [emp_id],
+        )
         if manager_rows:
             attendance_days = float(manager_rows[0]["attendance_days"])
     late_total = sum(

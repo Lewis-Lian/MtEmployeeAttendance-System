@@ -5,6 +5,7 @@ from datetime import date, datetime, timedelta
 from flask import Flask
 
 from models import db
+from models.account_set import AccountSet, AccountSetFactoryRestDay
 from models.department import Department
 from models.daily_record import DailyRecord
 from models.employee import Employee
@@ -117,6 +118,40 @@ class AttendanceCalendarApiTests(unittest.TestCase):
 
             rows = build_manager_rows(ManagerAttendanceOptions(month="2026-07"), [self.manager_id])
         self.assertEqual(rows[0]["attendance_days"], 1.0)
+
+    def test_manager_calendar_subtracts_business_trip_on_factory_rest_day(self):
+        """管理人员日历每日口径应与管理汇总一致：出差覆盖厂休日时不计入出勤。"""
+        with self.app.app_context():
+            account_set = AccountSet(month="2026-07", name="2026-07")
+            db.session.add(account_set)
+            db.session.flush()
+            db.session.add(
+                AccountSetFactoryRestDay(
+                    account_set_id=account_set.id,
+                    rest_date=date(2026, 7, 8),
+                    rest_period="full",
+                )
+            )
+            db.session.add(
+                LeaveRecord(
+                    leave_no="L-MGR-REST",
+                    emp_id=self.manager_id,
+                    leave_type="出差",
+                    start_time=datetime(2026, 7, 8, 8, 0),
+                    end_time=datetime(2026, 7, 8, 17, 0),
+                    duration=8,
+                    approval_status="已同意",
+                )
+            )
+            db.session.commit()
+        for day_no in range(1, 32):
+            self._add_manager_daily(date(2026, 7, day_no), {})
+
+        data = self._get(f"?emp_id={self.manager_id}&month=2026-07").get_json()
+
+        self.assertEqual(data["attendance_source"], "daily")
+        self.assertEqual(data["summary"]["attendance_days"], 0.0)
+        self.assertEqual({d["date"]: d["attendance_days"] for d in data["days"]}["2026-07-08"], 0.0)
 
     def test_manager_calendar_half_day_marker_uses_final_attendance_value(self):
         """管理人员两次短时打卡若结算为全天，日历不应标为半勤。"""

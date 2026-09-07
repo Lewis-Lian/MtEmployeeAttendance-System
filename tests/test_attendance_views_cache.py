@@ -89,6 +89,41 @@ class AttendanceViewsRequestCacheTests(unittest.TestCase):
             self.assertIsNot(manager_ctx[self.employee_id], employee_ctx[self.employee_id])
             self.assertEqual(other_month[self.employee_id], [])  # 不同月份 key 不同，独立查询
 
+    def test_manager_zero_values_do_not_fallback_to_shared_employee_columns(self) -> None:
+        with self.flask_app.app_context():
+            dept = Department.query.first()
+            manager = Employee(emp_no="M001", name="经理甲", dept_id=dept.id, is_manager=True)
+            db.session.add(manager)
+            db.session.flush()
+            db.session.add(
+                DailyRecord(
+                    emp_id=manager.id,
+                    record_date=date(2026, 5, 14),
+                    actual_hours=8,
+                    late_minutes=12,
+                    early_leave_minutes=4,
+                    employee_payload={
+                        "actual_hours": 8,
+                        "late_minutes": 12,
+                        "early_leave_minutes": 4,
+                    },
+                    manager_payload={
+                        "actual_hours": 0,
+                        "late_minutes": 0,
+                        "early_leave_minutes": 0,
+                        "raw_data": {"上班1打卡时间": "08:00", "下班1打卡时间": "17:00"},
+                    },
+                )
+            )
+            db.session.commit()
+
+            rows = attendance_views_by_employee("2026-05", [manager], MANAGER_STATS_CONTEXT)[manager.id]
+
+            self.assertEqual(len(rows), 1)
+            self.assertEqual(rows[0].actual_hours, 0)
+            self.assertEqual(rows[0].late_minutes, 0)
+            self.assertEqual(rows[0].early_leave_minutes, 0)
+
     def test_cache_does_not_leak_across_requests(self) -> None:
         # 缓存挂在 flask.g 上，新请求（新 app context）必须重新查库
         with self.flask_app.app_context():

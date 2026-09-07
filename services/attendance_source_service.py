@@ -72,6 +72,13 @@ def _record_has_source_payload(record: DailyRecord, source: str) -> bool:
     return bool(record.actual_hours or record.late_minutes or record.early_leave_minutes)
 
 
+def _payload_value_or_fallback(payload: dict, key: str, fallback: object) -> object:
+    value = payload.get(key)
+    if value is None or value == "":
+        return fallback
+    return value
+
+
 def _select_sources(configured_source: str, default_source: str) -> list[str]:
     source = configured_source or default_source
     if source == ATTENDANCE_SOURCE_AUTO_FALLBACK:
@@ -111,11 +118,9 @@ def build_attendance_record_view(record: DailyRecord, employee: Employee, contex
         if fallback_raw:
             payload.setdefault("fallback_raw_data", deepcopy(fallback_raw))
     if selected_source == ATTENDANCE_SOURCE_MANAGER:
-        actual_hours = float((payload.get("actual_hours") if isinstance(payload, dict) else None) or record.actual_hours or 0)
-        late_minutes = int((payload.get("late_minutes") if isinstance(payload, dict) else None) or record.late_minutes or 0)
-        early_leave_minutes = int(
-            (payload.get("early_leave_minutes") if isinstance(payload, dict) else None) or record.early_leave_minutes or 0
-        )
+        actual_hours = float(_payload_value_or_fallback(payload, "actual_hours", record.actual_hours) or 0)
+        late_minutes = int(_payload_value_or_fallback(payload, "late_minutes", record.late_minutes) or 0)
+        early_leave_minutes = int(_payload_value_or_fallback(payload, "early_leave_minutes", record.early_leave_minutes) or 0)
         check_in_times = list(payload.get("check_in_times") or [])
         check_out_times = list(payload.get("check_out_times") or [])
         expected_hours = float(payload.get("expected_hours") or 0)
