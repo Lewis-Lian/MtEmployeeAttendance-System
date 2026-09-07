@@ -3526,7 +3526,7 @@ input[type="checkbox"] {
   border: 1px solid rgba(148, 163, 184, 0.24) !important;
   border-radius: 18px !important;
   background: rgba(255, 255, 255, 0.88) !important;
-  box-shadow: 0 18px 50px rgba(15, 23, 42, 0.12), 0 2px 8px rgba(14, 165, 233, 0.08) !important;
+  box-shadow: 0 18px 50px rgba(15, 39, 71, 0.14), 0 2px 8px rgba(30, 64, 175, 0.1) !important;
   transform: translateY(8px) scale(0.98) !important;
   transition: transform 0.32s cubic-bezier(0.16, 1, 0.3, 1) !important;
 }
@@ -3560,7 +3560,7 @@ input[type="checkbox"] {
 }
 
 .query-progress-percent {
-  color: #0f766e !important;
+  color: #173b67 !important;
   font-size: 20px !important;
   font-variant-numeric: tabular-nums !important;
   font-weight: 760 !important;
@@ -3588,8 +3588,8 @@ input[type="checkbox"] {
 }
 
 .query-progress-fill {
-  background: linear-gradient(90deg, #0f766e 0%, #14b8a6 55%, #67e8f9 100%) !important;
-  box-shadow: 0 0 14px rgba(20, 184, 166, 0.35) !important;
+  background: linear-gradient(90deg, #102a4c 0%, #1e4f86 55%, #7db8f2 100%) !important;
+  box-shadow: 0 0 14px rgba(30, 79, 134, 0.38) !important;
   transition: transform 0.45s cubic-bezier(0.16, 1, 0.3, 1) !important;
 }
 
@@ -3625,7 +3625,7 @@ input[type="checkbox"] {
 
 .query-progress-milestone.is-reached {
   background: var(--ent-bg) !important;
-  box-shadow: 0 0 0 2px rgba(20, 184, 166, 0.24) !important;
+  box-shadow: 0 0 0 2px rgba(30, 79, 134, 0.28) !important;
 }
 
 .query-progress-text {
