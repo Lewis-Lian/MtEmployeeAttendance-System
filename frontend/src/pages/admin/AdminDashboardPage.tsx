@@ -20,6 +20,7 @@ import LoadingState from "../../components/feedback/LoadingState";
 import QueryProgressOverlay from "../../components/feedback/QueryProgressOverlay";
 import QueryResultPanel from "../../components/query/QueryResultPanel";
 import QueryTable from "../../components/query/QueryTable";
+import AccountSetSelector from "../../components/query/AccountSetSelector";
 import type { AdminAccountSet, AdminAccountSetFactoryRestEntry, AdminAccountSetImport } from "../../types/admin";
 import MonthPicker from "../../components/common/MonthPicker";
 import { useConfirm } from "../../components/feedback/ConfirmDialog";
@@ -550,24 +551,16 @@ export default function AdminDashboardPage() {
                   {/* 当前账套激活与状态卡片 */}
                   <div className="settings-card-module">
                     <div className="settings-card-title">当前账套</div>
-                    <label className="settings-field" style={{ marginBottom: "8px" }}>
-                      <select
-                        className="settings-select"
-                        onChange={(event) => setSelectedAccountSetId(Number(event.target.value || 0) || null)}
-                        value={selectedAccountSetId ?? ""}
-                      >
-                        {accountSets.length ? (
-                          accountSets.map((accountSet) => (
-                            <option key={accountSet.id} value={accountSet.id}>
-                              {accountSet.name}
-                              {accountSet.is_active ? "（当前）" : ""}
-                            </option>
-                          ))
-                        ) : (
-                          <option value="">暂无账套，请先创建</option>
-                        )}
-                      </select>
-                    </label>
+                    <AccountSetSelector
+                      accountSets={accountSets}
+                      compact
+                      label="选择账套"
+                      onChange={(month) => {
+                        const accountSet = accountSets.find((item) => item.month === month);
+                        setSelectedAccountSetId(accountSet?.id ?? null);
+                      }}
+                      value={selectedAccountSet?.month ?? ""}
+                    />
                     <div className="account-lock-notice" style={{ margin: "8px 0 0 0", fontSize: "12px", lineHeight: "1.4" }}>
                       {!selectedAccountSet
                         ? "请选择账套"

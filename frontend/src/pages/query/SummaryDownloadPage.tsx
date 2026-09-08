@@ -5,6 +5,7 @@ import EmployeePicker from "../../components/query/EmployeePicker";
 import ErrorState from "../../components/feedback/ErrorState";
 import LoadingState from "../../components/feedback/LoadingState";
 import QueryProgressOverlay from "../../components/feedback/QueryProgressOverlay";
+import AccountSetSelector from "../../components/query/AccountSetSelector";
 import type { QueryBootstrap } from "../../types/query";
 
 const FINAL_HEADERS = [
@@ -746,17 +747,13 @@ export default function SummaryDownloadPage() {
             selectedIds={selectedEmployeeIds}
           />
 
-          <label className="legacy-field">
-            <span className="legacy-field-label">账套月份</span>
-            <select className="legacy-select" onChange={(event) => setSelectedMonth(event.target.value)} value={selectedMonth}>
-              {bootstrap.account_sets.map((accountSet) => (
-                <option key={accountSet.id} value={accountSet.month}>
-                  {accountSet.name}
-                  {accountSet.is_active ? "（当前）" : ""}
-                </option>
-              ))}
-            </select>
-          </label>
+          <AccountSetSelector
+            accountSets={bootstrap.account_sets}
+            compact
+            label="账套月份"
+            onChange={setSelectedMonth}
+            value={selectedMonth}
+          />
         </div>
       </div>
 

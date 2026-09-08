@@ -8,6 +8,7 @@ import MultiSelectDropdown from "../../components/common/MultiSelectDropdown";
 import ErrorState from "../../components/feedback/ErrorState";
 import LoadingState from "../../components/feedback/LoadingState";
 import QueryProgressOverlay from "../../components/feedback/QueryProgressOverlay";
+import AccountSetSelector from "../../components/query/AccountSetSelector";
 import type { QueryBootstrap } from "../../types/query";
 import "./dashboard-shared.css";
 
@@ -230,22 +231,16 @@ export default function AbnormalQueryPage() {
           </div>
 
           <div className="query-filter-field">
-            <label className="form-label">账套</label>
-            <select
-              className="form-select"
-              onChange={(event) => {
-                setSelectedMonth(event.target.value);
+            <AccountSetSelector
+              accountSets={bootstrap.account_sets}
+              compact
+              label="账套"
+              onChange={(nextMonth) => {
+                setSelectedMonth(nextMonth);
                 setHasQueried(false);
               }}
               value={selectedMonth}
-            >
-              {bootstrap.account_sets.map((accountSet) => (
-                <option key={accountSet.id} value={accountSet.month}>
-                  {accountSet.name}
-                  {accountSet.is_active ? "（当前）" : ""}
-                </option>
-              ))}
-            </select>
+            />
           </div>
 
           <div className="query-filter-field">

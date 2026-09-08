@@ -6,6 +6,7 @@ import AttendanceCalendarGrid from "../../components/attendance/AttendanceCalend
 import ErrorState from "../../components/feedback/ErrorState";
 import LoadingState from "../../components/feedback/LoadingState";
 import KpiNumber from "../../components/query/KpiNumber";
+import AccountSetSelector from "../../components/query/AccountSetSelector";
 import type { AttendanceCalendarData, QueryBootstrap } from "../../types/query";
 import "./QueryHome.css";
 
@@ -185,18 +186,13 @@ export default function QueryHomePage() {
             <span style={{ display: "none" }}>{managerLabel}</span>
           </div>
 
-          {/* 账套月份选择器 */}
-          <div className="qh-flat-select-wrapper">
-            <span className="qh-flat-select-label">账套月份</span>
-            <select className="qh-flat-select-input" onChange={(event) => setMonth(event.target.value)} value={month}>
-              {bootstrap.account_sets.map((accountSet) => (
-                <option key={accountSet.id} value={accountSet.month}>
-                  {accountSet.name}
-                  {accountSet.is_active ? "（当前）" : ""}
-                </option>
-              ))}
-            </select>
-          </div>
+          <AccountSetSelector
+            accountSets={bootstrap.account_sets}
+            compact
+            label="账套月份"
+            onChange={setMonth}
+            value={month}
+          />
 
           {/* 数据就绪状态标签 */}
           <div className="qh-flat-status-badge">

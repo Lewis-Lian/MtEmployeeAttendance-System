@@ -1,0 +1,328 @@
+.account-set-selector {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  width: 100%;
+  box-sizing: border-box;
+  min-width: 280px;
+  padding: 12px 14px;
+  border: 1px solid rgba(148, 163, 184, 0.24);
+  border-radius: 14px;
+  background: linear-gradient(135deg, rgba(248, 250, 252, 0.96), rgba(239, 246, 255, 0.88));
+  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.05);
+}
+
+.account-set-selector.is-compact {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  min-height: 38px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.account-set-selector.is-compact.is-stacked {
+  display: flex;
+  align-items: stretch;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.account-set-selector.is-compact.is-stacked .account-set-selector-menu-wrap {
+  width: 100%;
+}
+
+.account-set-compact-label {
+  color: #475569;
+  font-size: 13px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.account-set-selector-heading,
+.account-set-selector-control,
+.account-set-selector-meta {
+  display: flex;
+  align-items: center;
+}
+
+.account-set-selector-heading {
+  gap: 10px;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.account-set-selector-icon {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #0ea5e9, #4f46e5);
+  color: #fff;
+  font-weight: 800;
+  box-shadow: 0 5px 12px rgba(37, 99, 235, 0.2);
+}
+
+.account-set-selector-icon svg {
+  width: 17px;
+  height: 17px;
+}
+
+.account-set-selector-heading > div {
+  display: grid;
+  gap: 3px;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.account-set-selector-label {
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.account-set-selector-value {
+  overflow: hidden;
+  color: #0f172a;
+  font-size: 14px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.account-set-selector-control {
+  gap: 12px;
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+.account-set-selector-meta {
+  gap: 6px;
+  color: #64748b;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.account-set-selector-badge {
+  padding: 3px 7px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.account-set-selector-badge.is-active {
+  background: #dcfce7;
+  color: #15803d;
+}
+
+.account-set-selector-badge.is-locked {
+  background: #fff7ed;
+  color: #c2410c;
+}
+
+.account-set-selector-menu-wrap {
+  position: relative;
+  min-width: 0;
+  width: 100%;
+}
+
+.account-set-selector-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-width: 128px;
+  max-width: 100%;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 8px 30px 8px 10px;
+  border: 1px solid #cbd5e1;
+  border-radius: 9px;
+  outline: none;
+  background: #fff;
+  color: #0f172a;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  transition: border-color 160ms ease, box-shadow 160ms ease;
+}
+
+.account-set-selector-trigger:hover,
+.account-set-selector-trigger:focus-visible {
+  border-color: #38bdf8;
+  box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.12);
+}
+
+.account-set-selector-trigger:disabled {
+  cursor: not-allowed;
+  opacity: 0.65;
+}
+
+.account-set-selector-trigger-content {
+  display: grid;
+  flex: 1 1 auto;
+  min-width: 0;
+  gap: 2px;
+  overflow: hidden;
+  text-align: left;
+}
+
+.account-set-selector-trigger-content strong,
+.account-set-selector-trigger-content small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.account-set-selector-trigger-content strong {
+  color: #0f172a;
+  font-size: 13px;
+}
+
+.account-set-selector-trigger-content small {
+  color: #64748b;
+  font-size: 10px;
+  font-weight: 500;
+}
+
+.account-set-selector-chevron {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+  color: #0284c7;
+  transition: transform 160ms ease;
+}
+
+.account-set-selector-chevron.is-open {
+  transform: rotate(180deg);
+}
+
+.account-set-selector.is-compact .account-set-selector-trigger {
+  min-width: 0;
+  min-height: 38px;
+  padding: 7px 11px;
+  gap: 8px;
+  border-radius: 8px;
+}
+
+.account-set-selector.is-compact .account-set-selector-trigger-content {
+  display: block;
+}
+
+.account-set-selector.is-compact .account-set-selector-trigger-content strong {
+  display: block;
+  font-size: 13px;
+}
+
+.account-set-selector.is-compact .account-set-selector-badge {
+  flex: 0 0 auto;
+}
+
+.account-set-selector-menu {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 8px);
+  right: 0;
+  width: 280px;
+  padding: 6px;
+  border: 1px solid #dbeafe;
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 16px 35px rgba(15, 23, 42, 0.16), 0 3px 8px rgba(15, 23, 42, 0.06);
+}
+
+.account-set-option {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr) auto;
+  align-items: center;
+  width: 100%;
+  gap: 8px;
+  padding: 10px 9px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: #0f172a;
+  cursor: pointer;
+  text-align: left;
+  transition: background 140ms ease, color 140ms ease;
+}
+
+.account-set-option:hover,
+.account-set-option:focus-visible,
+.account-set-option.is-selected {
+  outline: none;
+  background: #eff6ff;
+}
+
+.account-set-option-mark {
+  display: grid;
+  width: 20px;
+  height: 20px;
+  place-items: center;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  color: #2563eb;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.account-set-option.is-selected .account-set-option-mark {
+  border-color: #2563eb;
+  background: #2563eb;
+  color: #fff;
+}
+
+.account-set-option-main {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.account-set-option-main strong {
+  overflow: hidden;
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.account-set-option-main > span {
+  color: #64748b;
+  font-size: 11px;
+}
+
+.account-set-option-status {
+  display: flex;
+  gap: 4px;
+}
+
+@media (max-width: 680px) {
+  .account-set-selector {
+    display: flex;
+    align-items: stretch;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .account-set-selector-control {
+    justify-content: space-between;
+  }
+
+  .account-set-selector-menu-wrap,
+  .account-set-selector-trigger {
+    width: 100%;
+  }
+
+  .account-set-selector-menu {
+    right: auto;
+    left: 0;
+    width: 100%;
+  }
+}

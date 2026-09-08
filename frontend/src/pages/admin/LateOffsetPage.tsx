@@ -11,6 +11,7 @@ import LateOffsetLeavesModal from "../../components/admin/LateOffsetLeavesModal"
 import EmployeePicker from "../../components/query/EmployeePicker";
 import QueryResultPanel from "../../components/query/QueryResultPanel";
 import QueryTable from "../../components/query/QueryTable";
+import AccountSetSelector from "../../components/query/AccountSetSelector";
 import type { QueryBootstrap } from "../../types/query";
 
 interface LateOffsetRow {
@@ -365,19 +366,13 @@ export default function LateOffsetPage() {
           </div>
 
           <div className="query-filter-field">
-            <label className="form-label">账套</label>
-            <select
-              className="form-select"
-              onChange={(event) => setSelectedMonth(event.target.value)}
+            <AccountSetSelector
+              accountSets={bootstrap.account_sets}
+              compact
+              label="账套"
+              onChange={setSelectedMonth}
               value={selectedMonth}
-            >
-              {bootstrap.account_sets.map((accountSet) => (
-                <option key={accountSet.id} value={accountSet.month}>
-                  {accountSet.name}
-                  {accountSet.is_active ? "（当前）" : ""}
-                </option>
-              ))}
-            </select>
+            />
           </div>
           <div className="query-filter-field">
             <label className="form-label">主要操作</label>
