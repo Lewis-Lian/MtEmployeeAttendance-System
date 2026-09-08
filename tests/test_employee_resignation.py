@@ -154,6 +154,30 @@ class TestResignApi(EmployeeResignationTestBase):
             user = db.session.query(User).filter_by(username="boss").first()
             self.assertFalse(user.is_login_disabled())
 
+    def test_resign_does_not_disable_manager_viewer_bound_to_employee(self) -> None:
+        self._login()
+        with self.app.app_context():
+            user = User(
+                username="manager-viewer",
+                role="readonly",
+                profile_emp_no="M001",
+                profile_name="管理人员",
+                page_permissions={"manager_query": True},
+            )
+            user.set_password("pw123456")
+            db.session.add(user)
+            db.session.flush()
+            db.session.add(UserEmployeeAssignment(user_id=user.id, emp_id=self.active_emp_id))
+            db.session.commit()
+            user_id = user.id
+
+        response = self.client.post("/api/admin/employees/resign", json={"emp_no": "E100"})
+
+        self.assertEqual(response.status_code, 200)
+        with self.app.app_context():
+            user = db.session.get(User, user_id)
+            self.assertFalse(user.is_login_disabled())
+
     def test_resign_does_not_overwrite_other_disable_reason(self) -> None:
         self._login()
         user_id = self._bind_user("e100", self.active_emp_id)

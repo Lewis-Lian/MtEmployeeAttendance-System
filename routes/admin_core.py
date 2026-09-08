@@ -1228,6 +1228,11 @@ def _disable_accounts_for_resignation(employee: Employee) -> None:
         user = assignment.user
         if user is None or user.role == "admin":
             continue
+        profile_emp_no = (user.profile_emp_no or "").strip()
+        if profile_emp_no and profile_emp_no != employee.emp_no:
+            continue
+        if not profile_emp_no and (user.username or "").strip().lower() != employee.emp_no.lower():
+            continue
         if user.is_login_disabled():
             continue
         user.login_disabled_until_admin_unlock = True
@@ -2676,5 +2681,4 @@ def _employee_override_list_response(emp_ids: list[int], month: str) -> tuple[di
             }
         )
     return {"rows": rows, "month": month}, 200
-
 
