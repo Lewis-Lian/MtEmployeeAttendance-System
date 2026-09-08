@@ -15,7 +15,8 @@
 
 .employee-picker-modal .modal-dialog {
   width: min(1080px, 100%);
-  max-height: min(760px, calc(100vh - 48px));
+  /* 定高而非 max-height：grid 子项需要确定高度，内容超出时由 modal-body 内部滚动，footer 始终可见 */
+  height: min(760px, calc(100vh - 48px));
   display: grid;
   border-radius: 16px;
   overflow: hidden;

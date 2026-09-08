@@ -1623,15 +1623,14 @@ body {
   max-height: 420px;
 }
 
+/* 弹窗树勾选框是 disabled input，浏览器不派发其点击事件，会吞掉整行的点击 */
+.department-picker-modal .form-check-input {
+  pointer-events: none;
+}
+
 .department-picker-modal .employee-picker-selected-wrap,
 .department-picker-modal .employee-picker-tree {
   min-height: 0;
-}
-
-.department-picker-modal .employee-selected-list {
-  max-height: none;
-  min-height: 0;
-  height: 100%;
 }
 
 .department-master-page .department-lookup-card,
@@ -1885,7 +1884,8 @@ body {
 .dept-tree-all {
   width: 100%;
   min-height: 30px;
-  padding: 0 10px;
+  /* 26px = 树行展开箭头 18px + 行内间距 4px + 标签左内边距 4px，使全选勾选框与一级部门行对齐 */
+  padding: 0 10px 0 26px;
   border: 0;
   border-radius: 6px;
   background: transparent;
