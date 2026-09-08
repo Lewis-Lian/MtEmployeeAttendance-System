@@ -9,6 +9,7 @@ const mockReinstate = vi.hoisted(() => vi.fn());
 const mockCreateEmployee = vi.hoisted(() => vi.fn());
 const mockUpdateEmployee = vi.hoisted(() => vi.fn());
 const mockConfirm = vi.hoisted(() => vi.fn());
+const mockBatchEmployees = vi.hoisted(() => vi.fn());
 
 vi.mock("../../api/admin", () => ({
   fetchAdminEmployees: mockFetchEmployees,
@@ -19,7 +20,7 @@ vi.mock("../../api/admin", () => ({
   createAdminEmployee: mockCreateEmployee,
   updateAdminEmployee: mockUpdateEmployee,
   deleteAdminEmployee: vi.fn(),
-  batchAdminEmployees: vi.fn(),
+  batchAdminEmployees: mockBatchEmployees,
   importAdminEmployees: vi.fn(),
 }));
 vi.mock("../../components/feedback/Notification", () => ({
@@ -292,6 +293,57 @@ describe("EmployeesPage 离职功能", () => {
     fireEvent.click(screen.getByRole("button", { name: "确认离职" }));
 
     expect(mockResign).not.toHaveBeenCalled();
+  });
+});
+
+describe("EmployeesPage 多选功能", () => {
+  beforeEach(() => {
+    mockFetchEmployees.mockResolvedValue(employees);
+    mockFetchDepartments.mockResolvedValue([]);
+    mockFetchShifts.mockResolvedValue([]);
+    mockBatchEmployees.mockResolvedValue({ status: "ok", affected: 1 });
+    mockConfirm.mockResolvedValue(true);
+  });
+
+  it("取消当前筛选结果的全选时保留其他筛选结果之外的已选员工", async () => {
+    render(<EmployeesPage />);
+    await screen.findByText("在职员工");
+
+    const selectAll = screen.getByLabelText("选择当前筛选结果");
+    fireEvent.click(selectAll);
+    fireEvent.change(screen.getByLabelText("关键词"), { target: { value: "E300" } });
+    fireEvent.click(screen.getByLabelText("选择当前筛选结果"));
+
+    expect(screen.getByRole("region", { name: "员工批量操作" }).querySelector("strong")?.textContent).toBe("3");
+  });
+
+  it("批量工具条提交当前选中的员工", async () => {
+    render(<EmployeesPage />);
+    await screen.findByText("在职员工");
+
+    fireEvent.click(screen.getAllByLabelText("选择员工行")[0]);
+    fireEvent.change(screen.getByLabelText("批量操作"), { target: { value: "set_nursing" } });
+    fireEvent.change(screen.getByLabelText("设置哺乳假"), { target: { value: "1" } });
+    fireEvent.click(screen.getByRole("button", { name: "应用到已选" }));
+
+    await waitFor(() =>
+      expect(mockBatchEmployees).toHaveBeenCalledWith({ ids: [1], action: "set_nursing", is_nursing: true }),
+    );
+  });
+
+  it("选择批量操作后在工具条内显示输入控件", async () => {
+    render(<EmployeesPage />);
+    await screen.findByText("在职员工");
+
+    fireEvent.click(screen.getAllByLabelText("选择员工行")[0]);
+
+    expect(screen.queryByRole("dialog", { name: "批量操作" })).toBeNull();
+    fireEvent.change(screen.getByLabelText("批量操作"), { target: { value: "set_name" } });
+
+    expect(screen.getByRole("region", { name: "员工批量操作" })).toBeTruthy();
+    expect(screen.getByRole("region", { name: "员工批量操作" }).querySelector("strong")?.textContent).toBe("1");
+    expect(screen.queryByRole("dialog", { name: "批量操作" })).toBeNull();
+    expect(screen.getByLabelText("批量设置值")).toBeTruthy();
   });
 });
 

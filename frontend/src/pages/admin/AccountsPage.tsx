@@ -186,6 +186,21 @@ export default function AccountsPage() {
     return true;
   });
 
+  function toggleVisibleUserSelection(checked: boolean) {
+    const visibleIds = filteredUsers.map((user) => user.id);
+    setSelectedUserIds((current) => {
+      const next = new Set(current);
+      visibleIds.forEach((id) => {
+        if (checked) {
+          next.add(id);
+        } else {
+          next.delete(id);
+        }
+      });
+      return Array.from(next);
+    });
+  }
+
   const filteredPermissionRows = permissionCatalog.filter((row) => {
     if (permissionGroup) {
       const inSelectedGroup = row.group === permissionGroup;
@@ -204,10 +219,9 @@ export default function AccountsPage() {
     {
       label: (
         <input
+          aria-label="选择当前筛选结果"
           checked={filteredUsers.length > 0 && filteredUsers.every((user) => selectedUserIds.includes(user.id))}
-          onChange={(event) =>
-            setSelectedUserIds(event.target.checked ? filteredUsers.map((user) => user.id) : [])
-          }
+          onChange={(event) => toggleVisibleUserSelection(event.target.checked)}
           type="checkbox"
         />
       ),
@@ -227,10 +241,13 @@ export default function AccountsPage() {
   ];
   const accountTableRows = filteredUsers.map((user) => [
     <input
+      aria-label="选择账号行"
       checked={selectedUserIds.includes(user.id)}
-      onChange={() =>
+      onChange={(event) =>
         setSelectedUserIds((current) =>
-          current.includes(user.id) ? current.filter((id) => id !== user.id) : [...current, user.id],
+          event.target.checked
+            ? [...current, user.id]
+            : current.filter((id) => id !== user.id),
         )
       }
       type="checkbox"
@@ -551,6 +568,40 @@ export default function AccountsPage() {
           </div>
         </div>
 
+        {selectedUserIds.length > 0 ? (
+          <section aria-label="批量操作工具条" className="account-batch-toolbar">
+            <div className="account-batch-toolbar__summary">
+              <span className="account-batch-toolbar__icon" aria-hidden="true">✓</span>
+              <div>
+                <strong>已选择 {selectedUserIds.length} 个账号</strong>
+                <span>可对选中账号执行批量操作</span>
+              </div>
+            </div>
+
+            <div className="account-batch-toolbar__actions">
+              <div className="account-batch-toolbar__group">
+                <span className="account-batch-toolbar__group-label">修改信息</span>
+                <button className="account-action-button" onClick={() => setBatchRoleOpen(true)} type="button">修改角色</button>
+                <button className="account-action-button" onClick={() => setBatchEmployeeOpen(true)} type="button">关联员工</button>
+                <button className="account-action-button" onClick={() => setBatchDepartmentOpen(true)} type="button">关联部门</button>
+              </div>
+              <div className="account-batch-toolbar__group">
+                <span className="account-batch-toolbar__group-label">权限与安全</span>
+                <button className="account-action-button" onClick={() => setPermissionContext("batch")} type="button">页面权限</button>
+                <button className="account-action-button account-action-button--warning" onClick={() => setBatchPasswordOpen(true)} type="button">重置密码</button>
+              </div>
+              <div className="account-batch-toolbar__group account-batch-toolbar__group--danger">
+                <span className="account-batch-toolbar__group-label">危险操作</span>
+                <button className="account-action-button account-action-button--danger" onClick={() => void runBatch("delete")} type="button">删除账号</button>
+              </div>
+            </div>
+
+            <button className="account-batch-toolbar__clear" onClick={() => setSelectedUserIds([])} type="button">
+              清除选择
+            </button>
+          </section>
+        ) : null}
+
         <QueryResultPanel>
           <QueryTable
             emptyText="暂无账号数据"
@@ -664,44 +715,6 @@ export default function AccountsPage() {
           </div>
         </div>
       ) : null}
-
-      <div className="floating-batch-bar" style={{
-        position: "fixed",
-        top: "72px",
-        left: selectedUserIds.length > 0 ? "50%" : "-9999px",
-        transform: selectedUserIds.length > 0 ? "translate(-50%, 0)" : "translate(-50%, -20px)",
-        background: "rgba(255, 255, 255, 0.95)",
-        backdropFilter: "blur(16px)",
-        WebkitBackdropFilter: "blur(16px)",
-        border: "1px solid #cbd5e1",
-        borderRadius: "9999px",
-        padding: "10px 24px",
-        boxShadow: "0 10px 25px -5px rgba(15, 23, 42, 0.08), 0 8px 10px -6px rgba(15, 23, 42, 0.08)",
-        zIndex: 100,
-        display: "flex",
-        alignItems: "center",
-        gap: "16px",
-        boxSizing: "border-box",
-        flexWrap: "wrap",
-        opacity: selectedUserIds.length > 0 ? 1 : 0,
-        pointerEvents: selectedUserIds.length > 0 ? "auto" : "none",
-        transition: "opacity 0.2s ease, transform 0.2s cubic-bezier(0.16, 1, 0.3, 1)"
-      }}>
-        <div style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "13px", userSelect: "none" }}>
-          <span style={{ color: "#64748b" }}>已选择</span>
-          <strong style={{ color: "var(--ent-primary, #2563eb)", fontSize: "15px", fontWeight: "600" }}>{selectedUserIds.length}</strong>
-          <span style={{ color: "#64748b" }}>个账号</span>
-        </div>
-        <div style={{ width: "1px", height: "16px", background: "#e2e8f0" }} />
-        <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
-          <button className="account-action-button" onClick={() => setBatchRoleOpen(true)} type="button">批量修改角色</button>
-          <button className="account-action-button" onClick={() => setBatchEmployeeOpen(true)} type="button">批量修改关联员工</button>
-          <button className="account-action-button" onClick={() => setBatchDepartmentOpen(true)} type="button">批量修改关联部门</button>
-          <button className="account-action-button" onClick={() => setPermissionContext("batch")} type="button">批量修改页面权限</button>
-          <button className="account-action-button account-action-button--warning" onClick={() => setBatchPasswordOpen(true)} type="button">批量重置密码</button>
-          <button className="account-action-button account-action-button--danger" onClick={() => void runBatch("delete")} type="button">批量删除账号</button>
-        </div>
-      </div>
 
       {editingUser ? (
         <div className="master-modal-backdrop" onClick={(e) => { if (e.target === e.currentTarget) setEditingUser(null); }} style={{

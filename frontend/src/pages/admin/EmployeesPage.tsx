@@ -18,6 +18,7 @@ import {
 import type { EmployeeStatusFilter } from "../../api/admin";
 
 import DepartmentPicker from "../../components/query/DepartmentPicker";
+import EmployeeBatchToolbar from "../../components/admin/EmployeeBatchToolbar";
 import EmployeePicker from "../../components/query/EmployeePicker";
 import QueryResultPanel from "../../components/query/QueryResultPanel";
 import QueryTable from "../../components/query/QueryTable";
@@ -190,7 +191,19 @@ export default function EmployeesPage() {
   });
 
   function toggleSelected(id: number) {
-    setSelectedIds((current) => (current.includes(id) ? current.filter((item) => item !== id) : [...current, id]));
+    setSelectedIds((current) => {
+      const next = current.includes(id) ? current.filter((item) => item !== id) : [...current, id];
+      return next;
+    });
+  }
+
+  function toggleVisibleSelection(checked: boolean) {
+    const visibleIds = filteredRows.map((row) => row.id);
+    setSelectedIds((current) => {
+      const next = new Set(current);
+      visibleIds.forEach((id) => (checked ? next.add(id) : next.delete(id)));
+      return Array.from(next);
+    });
   }
 
   function clearFilters() {
@@ -525,8 +538,9 @@ export default function EmployeesPage() {
     {
       label: (
         <input
-          checked={selectedIds.length > 0 && selectedIds.length === filteredRows.length}
-          onChange={(event) => setSelectedIds(event.target.checked ? filteredRows.map((row) => row.id) : [])}
+          aria-label="选择当前筛选结果"
+          checked={filteredRows.length > 0 && filteredRows.every((row) => selectedIds.includes(row.id))}
+          onChange={(event) => toggleVisibleSelection(event.target.checked)}
           type="checkbox"
         />
       ),
@@ -622,7 +636,12 @@ export default function EmployeesPage() {
   const employeeTableRows = loading
     ? []
     : filteredRows.map((row) => [
-        <input checked={selectedIds.includes(row.id)} onChange={() => toggleSelected(row.id)} type="checkbox" />,
+        <input
+          aria-label="选择员工行"
+          checked={selectedIds.includes(row.id)}
+          onChange={() => toggleSelected(row.id)}
+          type="checkbox"
+        />,
         row.id,
         row.emp_no,
         row.name,
@@ -663,7 +682,7 @@ export default function EmployeesPage() {
     }
     if (batchAction === "set_manager") {
       return (
-        <select className="form-select" onChange={(event) => setBatchValue(event.target.value)} value={batchValue} style={{ height: "36px", padding: "0 36px 0 12px", borderRadius: "8px", minWidth: "150px" }}>
+        <select aria-label="设置人员类型" className="form-select employee-batch-value-control" onChange={(event) => setBatchValue(event.target.value)} value={batchValue}>
           <option value="">选择人员类型</option>
           <option value="0">普通员工</option>
           <option value="1">管理人员</option>
@@ -672,7 +691,7 @@ export default function EmployeesPage() {
     }
     if (batchAction === "set_nursing") {
       return (
-        <select className="form-select" onChange={(event) => setBatchValue(event.target.value)} value={batchValue} style={{ height: "36px", padding: "0 36px 0 12px", borderRadius: "8px", minWidth: "150px" }}>
+        <select aria-label="设置哺乳假" className="form-select employee-batch-value-control" onChange={(event) => setBatchValue(event.target.value)} value={batchValue}>
           <option value="">选择哺乳假</option>
           <option value="0">否</option>
           <option value="1">是</option>
@@ -684,12 +703,12 @@ export default function EmployeesPage() {
     }
     return (
       <input
-        className="form-control"
+        aria-label="批量设置值"
+        className="form-control employee-batch-value-control"
         disabled={!batchAction || batchAction === "delete"}
         onChange={(event) => setBatchValue(event.target.value)}
-        placeholder="操作值"
+        placeholder="请输入要设置的值"
         value={batchValue}
-        style={{ height: "36px", borderRadius: "8px", boxSizing: "border-box" }}
       />
     );
   }
@@ -956,129 +975,17 @@ export default function EmployeesPage() {
           <button className="account-action-button" onClick={clearFilters} type="button">清空筛选</button>
         </div>
 
-        {/* 批量操作工具条（作为多选修改器，悬浮显示在筛选器下方） */}
-        {selectedIds.length > 0 && (
-          <div className="inline-batch-bar" style={{
-            position: "absolute",
-            bottom: "-24px",
-            left: "50%",
-            transform: "translateX(-50%)",
-            zIndex: 100,
-            background: "var(--ent-bg, #ffffff)",
-            border: "1px solid var(--ent-border-strong, #cbd5e1)",
-            borderRadius: "8px",
-            padding: "8px 20px",
-            boxShadow: "var(--ent-shadow-card, 0 10px 25px -5px rgba(15, 23, 42, 0.1), 0 8px 10px -6px rgba(15, 23, 42, 0.08))",
-            display: "flex",
-            alignItems: "center",
-            gap: "16px",
-            boxSizing: "border-box",
-            flexWrap: "nowrap",
-            whiteSpace: "nowrap",
-            maxWidth: "95%"
-          }}>
-            <div style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "13px", userSelect: "none" }}>
-              <span style={{ color: "#64748b" }}>已选择</span>
-              <strong style={{ color: "var(--ent-primary, #2563eb)", fontSize: "15px", fontWeight: "600" }}>{selectedIds.length}</strong>
-              <span style={{ color: "#64748b" }}>人</span>
-            </div>
-
-            <div style={{ width: "1px", height: "16px", background: "var(--ent-border-strong, #cbd5e1)" }} />
-
-            <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-              <select
-                className="form-select"
-                onChange={(event) => { setBatchAction(event.target.value); setBatchValue(""); }}
-                value={batchAction}
-                style={{
-                  minWidth: "150px",
-                  height: "36px",
-                  borderRadius: "8px",
-                  padding: "0 36px 0 12px",
-                  fontSize: "13px",
-                }}
-              >
-                <option value="">选择批量操作</option>
-                <option value="set_name">更改姓名</option>
-                <option value="set_emp_no">更改人员编号</option>
-                <option value="set_department">更改部门</option>
-                <option value="set_shift">更改班次</option>
-                <option value="set_manager">设置人员类型</option>
-                <option value="set_nursing">设置哺乳假</option>
-                <option value="set_employee_stats_attendance_source">设置员工考勤统计来源</option>
-                <option value="set_manager_stats_attendance_source">设置管理人员考勤统计来源</option>
-              </select>
-              <div style={{ display: "inline-flex", alignItems: "center", height: "36px" }}>
-                {renderBatchValueControl()}
-              </div>
-            </div>
-
-            <button
-              className="account-action-button account-action-button--primary btn btn-primary"
-              onClick={applyBatchAction}
-              type="button"
-              style={{
-                borderRadius: "8px",
-                height: "36px",
-                padding: "0 14px",
-                display: "inline-flex",
-                alignItems: "center",
-                gap: "4px",
-                boxShadow: "none",
-                fontSize: "13px"
-              }}
-            >
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <polyline points="20 6 9 17 4 12"></polyline>
-              </svg>
-              应用到已选
-            </button>
-
-            <div style={{ width: "1px", height: "16px", background: "var(--ent-border-strong, #cbd5e1)" }} />
-
-            <div className="admin-row">
-              <button
-                className="account-action-button account-action-button--danger btn btn-danger"
-                onClick={applyBatchDelete}
-                type="button"
-                style={{
-                  borderRadius: "8px",
-                  height: "36px",
-                  padding: "0 14px",
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: "4px",
-                  background: "#ef4444",
-                  border: "none",
-                  color: "#fff",
-                  fontSize: "13px"
-                }}
-              >
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                  <polyline points="3 6 5 6 21 6"></polyline>
-                  <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-                </svg>
-                批量删除
-              </button>
-
-              <button
-                className="account-action-button"
-                onClick={() => { setSelectedIds([]); setBatchAction(""); setBatchValue(""); }}
-                type="button"
-                style={{
-                  background: "transparent",
-                  border: "none",
-                  color: "#64748b",
-                  fontSize: "13px",
-                  cursor: "pointer",
-                  padding: "0 4px"
-                }}
-              >
-                清空选择
-              </button>
-            </div>
-          </div>
-        )}
+        {selectedIds.length > 0 ? (
+          <EmployeeBatchToolbar
+            batchAction={batchAction}
+            onApply={applyBatchAction}
+            onBatchActionChange={(action) => { setBatchAction(action); setBatchValue(""); }}
+            onClear={() => { setSelectedIds([]); setBatchAction(""); setBatchValue(""); }}
+            onDelete={applyBatchDelete}
+            renderValueControl={renderBatchValueControl}
+            selectedCount={selectedIds.length}
+          />
+        ) : null}
       </div>
 
 

@@ -1315,13 +1315,13 @@ describe("App smoke regression", () => {
     expect(screen.queryByText("暂无账号数据")).toBeNull();
     expect(screen.queryByRole("button", { name: "重置密码" })).toBeNull();
 
-    fireEvent.click(screen.getAllByRole("checkbox")[1]);
-    expect(screen.getByRole("button", { name: "批量修改角色" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "批量修改关联员工" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "批量修改关联部门" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "批量修改页面权限" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "批量重置密码" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "批量删除账号" })).toBeInTheDocument();
+    fireEvent.click(screen.getAllByLabelText("选择账号行")[0]);
+    expect(screen.getByRole("button", { name: "修改角色" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "关联员工" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "关联部门" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "页面权限" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "重置密码" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "删除账号" })).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "创建账号" }));
     expect(await screen.findByText("关联员工 (限定可见个人数据)")).toBeInTheDocument();

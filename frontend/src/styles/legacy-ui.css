@@ -3524,66 +3524,6 @@ input[type="checkbox"] {
   border-color: var(--ent-border-strong) !important;
 }
 
-/* 悬浮批量操作条样式 */
-.floating-batch-bar {
-  /* 移除了 CSS 关键帧动画，改由 React inline style 的 transition 驱动以保证优雅的上下滑入退场 */
-}
-
-.floating-batch-bar .account-select,
-.floating-batch-bar .account-input,
-.floating-batch-bar .form-control,
-.floating-batch-bar .btn {
-  height: 32px !important;
-  line-height: 32px !important;
-  font-size: 13px !important;
-  border-radius: 9999px !important;
-  box-sizing: border-box !important;
-  padding-top: 0 !important;
-  padding-bottom: 0 !important;
-}
-
-.floating-batch-bar .account-select {
-  padding-left: 12px !important;
-  padding-right: 28px !important;
-}
-
-.floating-batch-bar .account-input,
-.floating-batch-bar .form-control {
-  padding-left: 14px !important;
-  padding-right: 14px !important;
-  width: 140px !important;
-}
-
-.floating-batch-bar .employee-lookup {
-  width: 150px !important;
-}
-
-.floating-batch-bar .employee-lookup .input-group {
-  flex-wrap: nowrap !important;
-}
-
-.floating-batch-bar .employee-lookup-clear {
-  border-radius: 0 !important;
-  height: 32px !important;
-  display: flex !important;
-  align-items: center !important;
-  justify-content: center !important;
-}
-
-.floating-batch-bar .employee-picker-icon {
-  margin-top: -2px !important;
-}
-
-.floating-batch-bar .btn-outline-secondary {
-  border-color: #cbd5e1 !important;
-  color: var(--ent-text-secondary) !important;
-}
-
-.floating-batch-bar .btn-outline-secondary:hover {
-  background-color: var(--ent-tertiary-bg) !important;
-  color: #334155 !important;
-}
-
 .master-modal.account-edit-modal,
 .master-modal.account-edit-modal .master-modal-body,
 .master-modal.account-edit-modal .account-grid-two,
