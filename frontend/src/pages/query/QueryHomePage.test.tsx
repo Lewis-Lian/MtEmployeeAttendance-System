@@ -111,6 +111,31 @@ describe("QueryHomePage 纯首页权限用户", () => {
       "--qh-kpi-index: 3;",
     ]);
   });
+
+  it("使用极简数据产品首页结构", async () => {
+    render(<QueryHomePage />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("kpi-attendance")).toBeInTheDocument();
+    });
+
+    expect(document.querySelector(".qh-minimal-shell")).not.toBeNull();
+    expect(screen.getByText("今日概览")).toBeInTheDocument();
+    expect(screen.getByText("本月请假构成")).toBeInTheDocument();
+  });
+
+  it("将账套选择放在独立筛选栏且不显示用户角色", async () => {
+    render(<QueryHomePage />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("kpi-attendance")).toBeInTheDocument();
+    });
+
+    expect(document.querySelector(".qh-minimal-filterbar")).not.toBeNull();
+    expect(screen.getByText("账套选择")).toBeInTheDocument();
+    expect(screen.queryByText("管理员")).toBeNull();
+    expect(screen.queryByText("只读用户")).toBeNull();
+  });
 });
 
 describe("QueryHomePage 首页考勤日历", () => {
@@ -150,8 +175,8 @@ describe("QueryHomePage 首页考勤日历", () => {
     expect(
       calendarTitle.compareDocumentPosition(ratioTitle) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
-    // 日历面板应位于右栏 qh-right-box 内，紧贴占比面板上方
-    expect(calendarTitle.closest(".qh-right-box")).not.toBeNull();
+    // 日历面板使用首页极简布局的主内容面板
+    expect(calendarTitle.closest(".qh-minimal-calendar-panel")).not.toBeNull();
   });
 
   it("日历接口失败时在面板内提示错误，不影响首页摘要", async () => {
@@ -172,7 +197,7 @@ describe("QueryHomePage 首页考勤日历", () => {
       expect(mockCalendar).toHaveBeenCalled();
     });
     await waitFor(() => {
-      expect(screen.queryByText("考勤日历")).toBeNull();
+      expect(screen.queryByRole("heading", { name: "考勤日历" })).toBeNull();
     });
     expect(screen.getByText("请假与外勤类型占比")).toBeInTheDocument();
   });
@@ -185,7 +210,7 @@ describe("QueryHomePage 首页考勤日历", () => {
       expect(mockCalendar).toHaveBeenCalled();
     });
     await waitFor(() => {
-      expect(screen.queryByText("考勤日历")).toBeNull();
+      expect(screen.queryByRole("heading", { name: "考勤日历" })).toBeNull();
       expect(screen.queryByText("无效的员工范围")).toBeNull();
     });
     expect(screen.getByText("请假与外勤类型占比")).toBeInTheDocument();

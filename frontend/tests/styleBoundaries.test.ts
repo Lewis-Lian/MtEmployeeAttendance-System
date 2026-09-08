@@ -112,8 +112,8 @@ describe("style boundaries", () => {
   });
 
   it("查询首页 KPI 使用错峰入场动效", () => {
-    expect(queryHomeCss).toContain("animation: qh-kpi-in");
-    expect(queryHomeCss).toContain("animation-delay: calc(var(--qh-kpi-index) * 60ms)");
+    expect(queryHomeCss).toContain("animation: qh-minimal-enter");
+    expect(queryHomeCss).toContain("animation-delay: calc(var(--qh-kpi-index) * 45ms)");
   });
 
   it("侧边栏不使用当前菜单滑动高亮条，加载态和按钮保留动效反馈", () => {

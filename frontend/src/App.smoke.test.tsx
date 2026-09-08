@@ -354,7 +354,7 @@ describe("App smoke regression", () => {
     const { default: App } = await import("./App");
     render(<App />);
 
-    expect(await screen.findByRole("heading", { name: "管理人员首页概览" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "今日概览" })).toBeInTheDocument();
     expect(await screen.findAllByText("查询中心")).not.toHaveLength(0);
     expect(await screen.findAllByRole("button", { name: "退出登录" })).toHaveLength(1);
     expect(await screen.findByText("E001 · 员工甲 · 制造一部")).toBeInTheDocument();
@@ -368,7 +368,7 @@ describe("App smoke regression", () => {
     const { default: App } = await import("./App");
     const { container } = render(<App />);
 
-    await screen.findByRole("heading", { name: "管理人员首页概览" });
+    await screen.findByRole("heading", { name: "今日概览" });
 
     const topNav = container.querySelector(".top-nav");
     const sideNav = container.querySelector(".app-sidebar");
@@ -386,7 +386,7 @@ describe("App smoke regression", () => {
     const { default: App } = await import("./App");
     const { container } = render(<App />);
 
-    await screen.findByRole("heading", { name: "管理人员首页概览" });
+    await screen.findByRole("heading", { name: "今日概览" });
 
     expect(container.querySelector(".app-layout > .app-sidebar")).not.toBeNull();
     expect(container.querySelector(".app-layout > .top-nav")).not.toBeNull();
