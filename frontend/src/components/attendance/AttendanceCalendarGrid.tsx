@@ -84,7 +84,7 @@ export default function AttendanceCalendarGrid({ data, selectedDate, multiSelect
           return (
             <button
               aria-label={cell.date}
-              className={`attendance-calendar-cell${cell.day || cell.overtimes.length > 0 || cell.leaves.length > 0 ? " has-data" : ""}${bgKey !== "none" ? ` is-bg-${bgKey}` : ""}${activeSelectedDate === cell.date ? " is-selected" : ""}${multiSelectedSet.has(cell.date) ? " is-multi-selected" : ""}`}
+              className={`attendance-calendar-cell attendance-calendar-cell-interactive${cell.day || cell.overtimes.length > 0 || cell.leaves.length > 0 ? " has-data" : ""}${bgKey !== "none" ? ` is-bg-${bgKey}` : ""}${activeSelectedDate === cell.date ? " is-selected" : ""}${multiSelectedSet.has(cell.date) ? " is-multi-selected" : ""}`}
               key={cell.date}
               onClick={() => handleCellClick(cell.date)}
               type="button"

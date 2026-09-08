@@ -570,6 +570,7 @@ export default function EmployeesPage() {
             <>
               <div onClick={() => setOpenMenuId(null)} style={{ position: "fixed", inset: 0, zIndex: 40 }} />
               <div
+                className={`account-upload-dropzone${isDragOver ? " is-dragover" : ""}`}
                 style={{
                   position: "absolute",
                   right: 0,
@@ -1265,7 +1266,7 @@ export default function EmployeesPage() {
                 <a className="account-action-button" href="/api/admin/employees/template" style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: "13.5px", padding: "8px 16px", borderRadius: "6px", color: "#2563eb", background: "#eff6ff", border: "1px solid #bfdbfe", fontWeight: "500", textDecoration: "none" }}>
                   ↓ 下载示例模板
                 </a>
-                <button className="account-action-button account-action-button--primary" disabled={isImporting} type="submit" style={{ padding: "8px 32px", borderRadius: "8px", fontWeight: "500", fontSize: "14px", boxShadow: "0 2px 4px rgba(37, 99, 235, 0.2)" }}>
+                <button className={`account-action-button account-action-button--primary${isImporting ? " is-loading" : ""}`} disabled={isImporting} type="submit" style={{ padding: "8px 32px", borderRadius: "8px", fontWeight: "500", fontSize: "14px", boxShadow: "0 2px 4px rgba(37, 99, 235, 0.2)" }}>
                   {isImporting ? "导入中..." : "开始导入"}
                 </button>
               </div>

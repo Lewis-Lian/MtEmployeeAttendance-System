@@ -35,7 +35,10 @@
   flex-shrink: 0;
   color: var(--ent-text-tertiary);
   font-size: 10px;
+  transition: transform 180ms ease;
 }
+
+.multi-select-trigger[aria-expanded="true"] .multi-select-arrow { transform: rotate(180deg); }
 
 .multi-select-panel {
   position: fixed;
@@ -91,6 +94,25 @@
 
 .multi-select-option:hover {
   background: var(--ent-tertiary-bg);
+}
+
+.multi-select-option {
+  animation: multi-select-option-in 180ms ease-out both;
+  animation-delay: calc(var(--multi-select-index, 0) * 25ms);
+  transition: background-color 150ms ease, transform 150ms ease;
+}
+
+.multi-select-option:hover { transform: translateX(2px); }
+
+@keyframes multi-select-option-in {
+  from { opacity: 0; transform: translateY(3px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .multi-select-arrow,
+  .multi-select-option { transition: none; animation: none; }
+  .multi-select-option:hover { transform: none; }
 }
 
 .multi-select-option input {

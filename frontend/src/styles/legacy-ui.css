@@ -975,6 +975,53 @@ body {
   animation: query-button-spin 0.65s linear infinite;
 }
 
+.account-upload-dropzone {
+  transition: transform 180ms ease, border-color 180ms ease, background-color 180ms ease, box-shadow 180ms ease !important;
+}
+
+.account-upload-dropzone:hover,
+.account-upload-dropzone.is-dragover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 18px rgba(59, 130, 246, 0.12);
+}
+
+.account-action-button.is-loading {
+  position: relative;
+  gap: 8px;
+  cursor: wait;
+}
+
+.account-action-button.is-loading::after {
+  width: 12px;
+  height: 12px;
+  content: "";
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: query-button-spin 0.65s linear infinite;
+}
+
+.settings-card-module {
+  animation: admin-card-in 0.3s ease-out both;
+}
+
+.settings-card-module:nth-child(2) { animation-delay: 50ms; }
+.settings-card-module:nth-child(3) { animation-delay: 100ms; }
+.settings-card-module:nth-child(4) { animation-delay: 150ms; }
+
+@keyframes admin-card-in {
+  from { opacity: 0; transform: translateY(7px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .account-upload-dropzone,
+  .settings-card-module { transition: none !important; animation: none; }
+  .account-upload-dropzone:hover,
+  .account-upload-dropzone.is-dragover { transform: none; }
+  .account-action-button.is-loading::after { animation: none; }
+}
+
 @keyframes query-button-spin {
   to { transform: rotate(360deg); }
 }
@@ -4619,6 +4666,23 @@ input[type="checkbox"] {
 .month-picker-cell:hover {
   background: #f5f5f5 !important;
   color: #262626 !important;
+}
+
+.month-picker-cell {
+  animation: month-picker-cell-in 180ms ease-out both;
+  transition: background 0.15s ease, color 0.15s ease, transform 0.15s ease !important;
+}
+
+.month-picker-cell:hover { transform: translateY(-1px); }
+
+@keyframes month-picker-cell-in {
+  from { opacity: 0; transform: translateY(3px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .month-picker-cell { animation: none; }
+  .month-picker-cell:hover { transform: none; }
 }
 
 .month-picker-cell.is-selected {

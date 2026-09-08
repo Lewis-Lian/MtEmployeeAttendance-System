@@ -402,6 +402,7 @@ export default function QueryPage({
             cellModal={cellModal}
             emptyText={queryTableEmptyText}
             headers={tableHeaders}
+            isRefreshing={isQuerying}
             rowMeta={tableRowMeta}
             rows={tableRows}
           />

@@ -608,6 +608,7 @@ export default function DepartmentsPage() {
             {/* 批量导入专区 */}
             <form className="account-upload-group" encType="multipart/form-data" onSubmit={submitImport} style={{ display: "flex", flexDirection: "column", gap: "16px", margin: 0 }}>
               <div
+                className={`account-upload-dropzone${isDragOver ? " is-dragover" : ""}`}
                 style={{
                   padding: "32px 20px",
                   background: isDragOver ? "#eff6ff" : "#f8fafc",
@@ -689,7 +690,7 @@ export default function DepartmentsPage() {
                 <a className="account-action-button" href="/api/admin/departments/template" style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: "13.5px", padding: "8px 16px", borderRadius: "6px", color: "#2563eb", background: "#eff6ff", border: "1px solid #bfdbfe", fontWeight: "500", textDecoration: "none" }}>
                   ↓ 下载示例模板
                 </a>
-                <button className="account-action-button account-action-button--primary" disabled={isImporting} type="submit" style={{ padding: "8px 32px", borderRadius: "8px", fontWeight: "500", fontSize: "14px", boxShadow: "0 2px 4px rgba(37, 99, 235, 0.2)" }}>
+                <button className={`account-action-button account-action-button--primary${isImporting ? " is-loading" : ""}`} disabled={isImporting} type="submit" style={{ padding: "8px 32px", borderRadius: "8px", fontWeight: "500", fontSize: "14px", boxShadow: "0 2px 4px rgba(37, 99, 235, 0.2)" }}>
                   {isImporting ? "导入中..." : "开始导入"}
                 </button>
               </div>

@@ -74,6 +74,20 @@ describe("QueryTable", () => {
     expect(tableWrap.classList.contains("is-dragging")).toBe(false);
   });
 
+  it("结果行按顺序设置入场动效，并支持刷新状态", () => {
+    const { container } = render(
+      <QueryTable headers={["姓名"]} rows={[["员工甲"], ["员工乙"]]} isRefreshing />,
+    );
+
+    const rows = Array.from(container.querySelectorAll("tbody tr"));
+    expect(container.querySelector(".legacy-table-panel.is-refreshing")).not.toBeNull();
+    expect(rows.map((row) => row.className)).toEqual(["query-table-row", "query-table-row"]);
+    expect(rows.map((row) => row.getAttribute("style"))).toEqual([
+      "--query-row-index: 0;",
+      "--query-row-index: 1;",
+    ]);
+  });
+
   it("点击表头会按旧版行为在升序和降序之间切换", () => {
     const rows = [
       ["E003", "员工丙", "12"],

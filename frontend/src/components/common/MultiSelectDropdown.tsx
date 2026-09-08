@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import type { CSSProperties } from "react";
 import { createPortal } from "react-dom";
 import DropdownMotion from "../motion/DropdownMotion";
 import "../../styles/components/multi-select-dropdown.css";
@@ -122,7 +123,7 @@ function MultiSelectDropdown({
           </div>
           <div className="multi-select-list" role="group">
             {options.map((option) => (
-              <label key={option.key} className="multi-select-option">
+              <label key={option.key} className="multi-select-option" style={{ "--multi-select-index": options.indexOf(option) } as CSSProperties}>
                 <input
                   checked={Boolean(value[option.key])}
                   onChange={(event) => toggleKey(option.key, event.target.checked)}

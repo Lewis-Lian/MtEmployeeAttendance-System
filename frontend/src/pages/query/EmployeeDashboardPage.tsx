@@ -284,6 +284,7 @@ export default function EmployeeDashboardPage() {
         <QueryProgressOverlay active={progressVisible} progress={progress} text={loadingText} />
         <QueryResultPanel>
           <QueryTable
+            isRefreshing={isQuerying}
             cellModal={{
               getModal: ({ headerLabel, rowMeta }) => {
                 const meta = rowMeta as DashboardRowMeta | undefined;

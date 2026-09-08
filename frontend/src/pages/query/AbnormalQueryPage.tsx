@@ -297,6 +297,7 @@ export default function AbnormalQueryPage() {
             }}
             emptyText={queryTableEmptyText}
             headers={tableHeaders}
+            isRefreshing={isQuerying}
             rowMeta={tableRowMeta}
             rows={tableRows}
           />

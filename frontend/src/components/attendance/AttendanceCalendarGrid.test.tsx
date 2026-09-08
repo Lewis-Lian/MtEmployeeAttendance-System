@@ -116,6 +116,15 @@ describe("AttendanceCalendarGrid", () => {
     expect(screen.getByText(/出勤 1\.5 天/)).toBeInTheDocument();
   });
 
+  it("日历格子和明细弹层提供动效钩子", () => {
+    render(<AttendanceCalendarGrid data={DATA} />);
+    expect(getCell("2026-07-01")).toHaveClass("attendance-calendar-cell-interactive");
+
+    fireEvent.click(getCell("2026-07-01"));
+    expect(screen.getByRole("dialog")).toHaveClass("attendance-calendar-daydetail");
+    expect(screen.getByRole("dialog").querySelector(".daydetail-card")).toHaveClass("daydetail-card");
+  });
+
   it("迟到/早退不再渲染格子徽章，弹层明细行保留", () => {
     render(<AttendanceCalendarGrid data={DATA} />);
     expect(screen.queryByText("迟 12′")).not.toBeInTheDocument();

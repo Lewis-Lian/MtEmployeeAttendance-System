@@ -121,4 +121,12 @@ describe("style boundaries", () => {
     expect(legacyCss).toContain("animation: legacy-loading-pulse");
     expect(legacyCss).toContain(".query-filter-actions .btn.is-loading::after");
   });
+
+  it("查询表格、日历和选择器样式包含分层入场反馈", () => {
+    expect(queryTableCss).toContain(".query-table-row");
+    expect(queryTableCss).toContain("@keyframes query-table-row-in");
+    expect(readSource("components/attendance/AttendanceCalendarGrid.tsx")).toContain("attendance-calendar-cell-interactive");
+    expect(readSource("styles/components/employee-picker.css")).toContain("@keyframes employee-picker-card-in");
+    expect(readSource("styles/components/multi-select-dropdown.css")).toContain("@keyframes multi-select-option-in");
+  });
 });

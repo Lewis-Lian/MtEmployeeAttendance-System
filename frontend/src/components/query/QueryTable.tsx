@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { ReactNode } from "react";
+import type { CSSProperties, ReactNode } from "react";
 import { createPortal } from "react-dom";
 
 import QueryProgressOverlay from "../feedback/QueryProgressOverlay";
@@ -20,6 +20,7 @@ interface QueryTableProps {
   wrapClassName?: string;
   tableClassName?: string;
   cellModal?: QueryTableCellModalConfig;
+  isRefreshing?: boolean;
 }
 
 export interface QueryTableCellModalContext {
@@ -55,6 +56,7 @@ export default function QueryTable({
   wrapClassName,
   tableClassName,
   cellModal,
+  isRefreshing = false,
 }: QueryTableProps) {
   const tableWrapRef = useRef<HTMLDivElement | null>(null);
   const safeHeaders = headers.length ? headers.map(normalizeHeader) : [normalizeHeader("结果")];
@@ -248,7 +250,7 @@ export default function QueryTable({
 
   return (
     <>
-    <div className={["legacy-table-panel", panelClassName].filter(Boolean).join(" ")}>
+    <div className={["legacy-table-panel", isRefreshing ? "is-refreshing" : "", panelClassName].filter(Boolean).join(" ")}>
       <div className={["legacy-table-wrap", wrapClassName].filter(Boolean).join(" ")} ref={tableWrapRef}>
         <table className={["legacy-table", tableClassName].filter(Boolean).join(" ")}>
           <thead>
@@ -288,7 +290,11 @@ export default function QueryTable({
               </tr>
             ) : (
               visibleRows.map((item, rowIndex) => (
-                <tr key={`row-${safePage}-${rowIndex}`}>
+                <tr
+                  className="query-table-row"
+                  key={`row-${safePage}-${rowIndex}`}
+                  style={{ "--query-row-index": rowIndex } as CSSProperties}
+                >
                   {safeHeaders.map((_, columnIndex) => (
                     <td key={`cell-${rowIndex}-${columnIndex}`} className="legacy-table-body-cell">
                       {(() => {

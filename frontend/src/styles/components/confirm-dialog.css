@@ -13,6 +13,12 @@
   place-items: center;
   padding: 24px;
   box-sizing: border-box;
+  animation: confirm-backdrop-in 180ms ease-out;
+}
+
+@keyframes confirm-backdrop-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 
 /* 弹窗卡片 */
@@ -25,6 +31,17 @@
   border: 1px solid var(--ent-border-strong);
   overflow: hidden;
   font-family: "PingFang SC", "Microsoft YaHei", sans-serif;
+  animation: confirm-card-in 220ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes confirm-card-in {
+  from { opacity: 0; transform: translateY(8px) scale(0.97); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .confirm-backdrop,
+  .confirm-card { animation: none; }
 }
 
 /* 弹窗头部 */

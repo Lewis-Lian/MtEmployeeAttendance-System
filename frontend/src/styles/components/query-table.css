@@ -1,3 +1,23 @@
+.legacy-table-panel.is-refreshing .legacy-table {
+  opacity: 0.56;
+  transition: opacity 0.2s ease;
+}
+
+.query-table-row {
+  animation: query-table-row-in 0.28s ease-out both;
+  animation-delay: calc(var(--query-row-index, 0) * 20ms);
+}
+
+@keyframes query-table-row-in {
+  from { opacity: 0; transform: translateY(5px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .legacy-table-panel.is-refreshing .legacy-table { transition: none; }
+  .query-table-row { animation: none; }
+}
+
 .table-pager {
   display: flex;
   align-items: center;
