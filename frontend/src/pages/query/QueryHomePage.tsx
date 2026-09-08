@@ -5,7 +5,6 @@ import AttendanceCalendarGrid from "../../components/attendance/AttendanceCalend
 import ErrorState from "../../components/feedback/ErrorState";
 import LoadingState from "../../components/feedback/LoadingState";
 import KpiNumber from "../../components/query/KpiNumber";
-import AccountSetSelector from "../../components/query/AccountSetSelector";
 import type { AttendanceCalendarData, QueryBootstrap } from "../../types/query";
 import "./QueryHome.css";
 
@@ -128,8 +127,6 @@ export default function QueryHomePage() {
     return <LoadingState message="正在准备查询首页..." />;
   }
 
-  const activeAccountSet = bootstrap.account_sets.find((accountSet) => accountSet.month === month) ?? null;
-
   // 假勤数据各百分比计算，用于占比条渲染
   const personalSick = Number(summary?.personal_sick_days ?? 0);
   const injury = Number(summary?.injury_days ?? 0);
@@ -159,14 +156,9 @@ export default function QueryHomePage() {
         <div>
           <p className="qh-minimal-eyebrow">MT EMPHUB / ATTENDANCE</p>
           <h2>今日概览</h2>
-          <p className="qh-minimal-subtitle"><span>{managerInfo?.emp_no || "-"} · {managerInfo?.name || "未绑定管理人员"} · {managerInfo?.dept_name || "暂无部门"}</span><span> · {activeAccountSet?.name ?? "未选择账套"}</span></p>
+          <p className="qh-minimal-subtitle">{managerInfo?.emp_no || "-"} · {managerInfo?.name || "未绑定管理人员"} · {managerInfo?.dept_name || "暂无部门"}</p>
         </div>
       </header>
-
-      <div className="qh-minimal-filterbar">
-        <div><strong>数据范围</strong><span>选择月份后查看对应的考勤与请假数据</span></div>
-        <AccountSetSelector accountSets={bootstrap.account_sets} compact label="账套月份" onChange={setMonth} value={month} />
-      </div>
 
       {isLoading ? <LoadingState message="正在加载首页摘要..." /> : null}
       {error && !isLoading ? <ErrorState description={error} title="首页摘要加载失败" /> : null}

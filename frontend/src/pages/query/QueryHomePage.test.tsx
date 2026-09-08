@@ -124,15 +124,16 @@ describe("QueryHomePage 纯首页权限用户", () => {
     expect(screen.getByText("本月请假构成")).toBeInTheDocument();
   });
 
-  it("将账套选择放在独立筛选栏且不显示用户角色", async () => {
+  it("首页不显示数据范围和账套选择", async () => {
     render(<QueryHomePage />);
 
     await waitFor(() => {
       expect(screen.getByTestId("kpi-attendance")).toBeInTheDocument();
     });
 
-    expect(document.querySelector(".qh-minimal-filterbar")).not.toBeNull();
-    expect(screen.getByText("账套选择")).toBeInTheDocument();
+    expect(document.querySelector(".qh-minimal-filterbar")).toBeNull();
+    expect(screen.queryByText("数据范围")).toBeNull();
+    expect(screen.queryByLabelText("账套月份")).toBeNull();
     expect(screen.queryByText("管理员")).toBeNull();
     expect(screen.queryByText("只读用户")).toBeNull();
   });
