@@ -120,10 +120,11 @@ describe("style boundaries", () => {
     expect(queryHomeCss).not.toContain(".qh-minimal-");
   });
 
-  it("侧边栏不使用当前菜单滑动高亮条，加载态和按钮保留动效反馈", () => {
+  it("侧边栏不使用当前菜单滑动高亮条，加载态不显示动画图形", () => {
     expect(legacyCss).not.toContain(".app-side-link.is-active::after");
-    expect(legacyCss).toContain("animation: legacy-loading-orbit");
-    expect(legacyCss).toContain(".legacy-loading-visual");
+    expect(legacyCss).not.toContain("animation: legacy-loading-orbit");
+    expect(legacyCss).not.toContain(".legacy-loading-visual");
+    expect(legacyCss).toContain(".legacy-loading-skeleton");
     expect(legacyCss).toContain(".query-filter-actions .btn.is-loading::after");
   });
 

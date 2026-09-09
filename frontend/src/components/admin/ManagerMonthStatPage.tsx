@@ -248,7 +248,7 @@ export default function ManagerMonthStatPage({
   }
 
   if (isLoading) {
-    return <LoadingState message={`正在准备${title}页面...`} />;
+    return <LoadingState message={`正在准备${title}页面...`} variant="table" />;
   }
 
   if (loadError || !bootstrap) {

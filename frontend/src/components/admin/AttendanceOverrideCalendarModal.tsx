@@ -483,7 +483,7 @@ export default function AttendanceOverrideCalendarModal({
               <div className="account-lock-notice is-locked">{month || "-"} 账套已锁定，仅可查看</div>
             ) : null}
             {isLoading ? (
-              <LoadingState message="正在加载考勤日历..." />
+              <LoadingState message="正在加载考勤日历..." variant="calendar" />
             ) : loadError ? (
               <ErrorState description={loadError} title="日历数据加载失败" />
             ) : calendar ? (

@@ -272,7 +272,7 @@ export default function AppShell({ onLogout, user }: AppShellProps) {
           />
         ) : null}
         <div className="app-content">
-          {isLoading ? <LoadingState message="正在准备导航..." /> : null}
+          {isLoading ? <LoadingState message="正在准备导航..." variant="navigation" /> : null}
           {error ? <ErrorState description={error} title="导航加载失败" /> : null}
           {!isLoading && !error
             ? tabs.map((tab) => {

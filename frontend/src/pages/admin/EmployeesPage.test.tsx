@@ -55,7 +55,7 @@ describe("EmployeesPage 加载状态", () => {
     render(<EmployeesPage />);
 
     const status = screen.getByRole("status");
-    expect(status.querySelector(".legacy-loading-visual")).toBeInTheDocument();
+    expect(status.querySelector(".legacy-loading-visual")).not.toBeInTheDocument();
     expect(screen.getByText("正在加载员工列表...")).toHaveClass("legacy-loading-announcement");
   });
 });

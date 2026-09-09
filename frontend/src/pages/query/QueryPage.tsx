@@ -281,7 +281,7 @@ export default function QueryPage({
   }
 
   if (isLoading) {
-    return <LoadingState message="正在准备查询页..." />;
+    return <LoadingState message="正在准备查询页..." variant="table" />;
   }
 
   if (error && !bootstrap) {

@@ -275,7 +275,7 @@ export default function AdminDashboardPage() {
   }
 
   if (isLoading) {
-    return <LoadingState message="正在加载账套中心..." />;
+    return <LoadingState message="正在加载账套中心..." variant="table" />;
   }
 
   if (error && !accountSets.length && !selectedAccountSet) {

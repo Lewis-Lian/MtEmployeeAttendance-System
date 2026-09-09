@@ -29,3 +29,13 @@ if (typeof window !== "undefined" && !window.ResizeObserver) {
     },
   });
 }
+
+// jsdom 自定义元素不会加载 NumberFlow 的 HTMLElement 实现，补齐更新钩子以便测试真实数值更新流程。
+if (typeof HTMLElement !== "undefined") {
+  const elementPrototype = HTMLElement.prototype as HTMLElement & {
+    willUpdate?: () => void;
+    didUpdate?: () => void;
+  };
+  elementPrototype.willUpdate ??= () => {};
+  elementPrototype.didUpdate ??= () => {};
+}

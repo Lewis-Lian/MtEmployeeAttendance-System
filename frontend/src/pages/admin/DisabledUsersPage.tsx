@@ -45,7 +45,7 @@ export default function DisabledUsersPage() {
   }
 
   if (isLoading) {
-    return <LoadingState message="正在准备禁用用户页面..." />;
+    return <LoadingState message="正在准备禁用用户页面..." variant="table" />;
   }
 
   if (loadError) {

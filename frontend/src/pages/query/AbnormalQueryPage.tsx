@@ -189,7 +189,7 @@ export default function AbnormalQueryPage() {
   }
 
   if (isLoading) {
-    return <LoadingState message="正在准备员工异常查询页..." />;
+    return <LoadingState message="正在准备员工异常查询页..." variant="table" />;
   }
 
   if (error && !bootstrap) {

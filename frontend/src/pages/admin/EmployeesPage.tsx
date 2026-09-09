@@ -1029,7 +1029,7 @@ export default function EmployeesPage() {
 
       <QueryResultPanel>
         {loading ? (
-          <LoadingState message="正在加载员工列表..." />
+          <LoadingState message="正在加载员工列表..." variant="table" contentOnly headers={employeeTableHeaders.map((header) => typeof header === "string" ? header : typeof header.label === "string" ? header.label : "")} />
         ) : (
           <QueryTable
             emptyText="暂无员工数据"

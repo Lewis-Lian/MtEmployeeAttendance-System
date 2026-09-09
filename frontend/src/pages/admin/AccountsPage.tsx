@@ -283,7 +283,7 @@ export default function AccountsPage() {
   ]);
 
   if (loading) {
-    return <LoadingState message="正在准备账号管理页面..." />;
+    return <LoadingState message="正在准备账号管理页面..." variant="table" />;
   }
 
   if (loadError) {

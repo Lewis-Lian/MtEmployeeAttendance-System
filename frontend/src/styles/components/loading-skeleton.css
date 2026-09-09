@@ -1,0 +1,87 @@
+.legacy-loading-state {
+  padding: 0;
+  min-height: 0;
+  align-content: start;
+  place-items: stretch;
+}
+
+.legacy-loading-state .legacy-loading-skeleton {
+  width: 100%;
+  min-width: 0;
+  gap: 20px;
+}
+
+.legacy-loading-state .skeleton-line {
+  display: block;
+  flex: 0 0 auto;
+  max-width: 100%;
+  border: 0;
+  border-radius: 4px;
+  background: var(--ent-border, #e2e8f0);
+  box-shadow: none;
+  min-height: 0;
+  margin: 0;
+}
+
+.legacy-loading-state .legacy-loading-skeleton-kpis {
+  grid-template-columns: minmax(280px, 1.15fr) minmax(360px, .85fr);
+  gap: 0;
+  animation: none;
+}
+
+.legacy-loading-skeleton-kpis .qh-editorial-narrative { display: grid; gap: 12px; }
+.legacy-loading-skeleton-kpis .skeleton-number {
+  color: transparent;
+  background: rgba(255, 255, 255, .17);
+  border-radius: 6px;
+  user-select: none;
+}
+.legacy-loading-skeleton-table .legacy-table-body-cell { height: 42px; box-sizing: border-box; }
+.legacy-loading-state .legacy-loading-skeleton-kpis .skeleton-line {
+  background: rgba(255, 255, 255, .17);
+}
+
+.legacy-loading-state .legacy-loading-skeleton-table {
+  padding: 0;
+  gap: 0;
+  overflow: hidden;
+  border-radius: 8px;
+}
+
+.skeleton-table-row {
+  display: grid;
+  grid-template-columns: .4fr 1fr 1.2fr 1fr 1fr .8fr;
+  align-items: center;
+  min-height: 42px;
+  padding: 0 16px;
+  gap: 20px;
+  border-bottom: 1px solid var(--ent-border, #e2e8f0);
+}
+.skeleton-table-row.is-heading { background: var(--ent-secondary-bg); min-height: 46px; }
+.skeleton-table-row:nth-child(odd):not(.is-heading) { background: var(--ent-tertiary-bg); }
+.skeleton-pagination { display: flex; justify-content: space-between; align-items: center; padding: 10px 16px; }
+.skeleton-field { display: grid; gap: 9px; min-width: 0; }
+.legacy-loading-state .skeleton-input {
+  display: block;
+  width: 100%;
+  height: 36px;
+  box-sizing: border-box;
+  border: 1px solid var(--ent-border-strong);
+  border-radius: 4px;
+  background: var(--ent-tertiary-bg);
+}
+.legacy-loading-state .legacy-loading-skeleton--form { padding: 24px; box-sizing: border-box; background: var(--ent-bg); border: 1px solid var(--ent-border-strong); border-radius: 8px; }
+.legacy-loading-state .legacy-loading-skeleton-form-fields { gap: 24px; }
+.legacy-loading-state .attendance-calendar-grid { animation: none; }
+.legacy-loading-state .attendance-calendar-cell { cursor: default; gap: 10px; box-sizing: border-box; }
+
+@media (max-width: 900px) {
+  .legacy-loading-state .legacy-loading-skeleton-kpis { grid-template-columns: 1fr 1fr; }
+  .legacy-loading-state .legacy-loading-skeleton-toolbar,
+  .legacy-loading-state .legacy-loading-skeleton-form-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .skeleton-table-row { gap: 10px; padding-inline: 10px; }
+}
+
+@media (max-width: 680px) {
+  .legacy-loading-state .legacy-loading-skeleton-kpis { grid-template-columns: 1fr; }
+}

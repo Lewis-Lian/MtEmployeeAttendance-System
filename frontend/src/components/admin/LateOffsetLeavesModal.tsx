@@ -77,7 +77,7 @@ export default function LateOffsetLeavesModal({
           </div>
           <div className="master-modal-body">
             {isLoading ? (
-              <LoadingState message="正在加载请假记录..." />
+              <LoadingState message="正在加载请假记录..." variant="table" />
             ) : loadError ? (
               <ErrorState description={loadError} title="请假记录加载失败" />
             ) : rows.length ? (

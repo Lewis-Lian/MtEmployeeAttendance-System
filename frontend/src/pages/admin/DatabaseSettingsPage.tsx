@@ -161,7 +161,7 @@ export default function DatabaseSettingsPage() {
     }
   }
 
-  if (loading) return <LoadingState message="正在加载数据库设置..." />;
+  if (loading) return <LoadingState message="正在加载数据库设置..." variant="form" />;
 
   if (!unlocked) {
     return (

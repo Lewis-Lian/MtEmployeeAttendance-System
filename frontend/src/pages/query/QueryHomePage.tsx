@@ -150,7 +150,7 @@ export default function QueryHomePage() {
   }
 
   if (!bootstrap) {
-    return <LoadingState message="正在准备查询首页..." />;
+    return <div className="query-home-container qh-editorial-shell"><section className="qh-editorial-page"><div className="qh-editorial-page-inner"><header className="qh-editorial-header" aria-hidden="true"><div className="qh-editorial-meta">&nbsp;</div><p className="qh-editorial-eyebrow">MONTHLY ATTENDANCE</p><h2>考勤月报</h2></header><LoadingState message="正在准备查询首页..." variant="home" /></div></section></div>;
   }
 
   // 假勤数据各百分比计算，用于占比条渲染
@@ -187,7 +187,7 @@ export default function QueryHomePage() {
             <h2>{monthTitle}</h2>
           </header>
 
-          {isLoading ? <LoadingState message="正在加载首页摘要..." /> : null}
+          {isLoading ? <LoadingState message="正在加载首页摘要..." variant="home" /> : null}
           {error && !isLoading ? <ErrorState description={error} title="首页摘要加载失败" /> : null}
 
           {!isLoading && !error ? (
@@ -240,7 +240,7 @@ export default function QueryHomePage() {
               ) : calendarData ? (
                 <AttendanceCalendarGrid data={calendarData} />
               ) : (
-                <p className="qh-editorial-muted">正在加载考勤日历...</p>
+                <LoadingState message="正在加载考勤日历..." variant="calendar" />
               )}
                 </section>
               </div>

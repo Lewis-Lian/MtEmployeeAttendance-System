@@ -91,7 +91,7 @@ export default function AttendanceCalendarPage() {
       </aside>
 
       <section className="query-workspace">
-        {loading ? <LoadingState /> : null}
+        {loading ? <LoadingState variant="calendar" /> : null}
         {data ? <AttendanceCalendarGrid data={data} /> : null}
         {!data && !loading ? <div className="text-muted">选择员工和月份后点击查询。</div> : null}
       </section>
