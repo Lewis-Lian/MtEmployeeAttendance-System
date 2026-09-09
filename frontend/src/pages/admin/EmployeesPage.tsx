@@ -1,4 +1,5 @@
-import { FormEvent, useEffect, useRef, useState } from "react";
+import { FormEvent, MouseEvent as ReactMouseEvent, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 
 import { buildApiUrl } from "../../api/client";
 import { useNotification } from "../../components/feedback/Notification";
@@ -118,6 +119,7 @@ export default function EmployeesPage() {
   const [resignDate, setResignDate] = useState(() => todayLocalDate());
   const [isResigning, setIsResigning] = useState(false);
   const [openMenuId, setOpenMenuId] = useState<number | null>(null);
+  const [menuPosition, setMenuPosition] = useState<{ top: number; left: number } | null>(null);
 
   const notification = useNotification();
   const confirm = useConfirm();
@@ -403,6 +405,15 @@ export default function EmployeesPage() {
     setEditForm(employeeToForm(row));
   }
 
+  function openRowMenu(rowId: number, event: ReactMouseEvent<HTMLButtonElement>) {
+    const triggerRect = event.currentTarget.getBoundingClientRect();
+    setMenuPosition({
+      top: triggerRect.bottom + 4,
+      left: Math.max(8, triggerRect.right - 140),
+    });
+    setOpenMenuId(rowId);
+  }
+
   async function submitImport(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = event.currentTarget;
@@ -568,67 +579,92 @@ export default function EmployeesPage() {
 
   function renderRowActions(row: AdminEmployee) {
     const menuOpen = openMenuId === row.id;
+    const rowMenu = menuOpen && menuPosition
+      ? createPortal(
+          <>
+            <div
+              onClick={() => setOpenMenuId(null)}
+              style={{ position: "fixed", inset: 0, zIndex: "calc(var(--z-dropdown, 1200) - 1)" }}
+            />
+            <div
+              className="employee-row-actions-menu"
+              style={{
+                position: "fixed",
+                top: menuPosition.top,
+                left: menuPosition.left,
+                zIndex: "var(--z-dropdown, 1200)",
+                background: "#ffffff",
+                border: "1px solid var(--ent-border-strong, #cbd5e1)",
+                borderRadius: "8px",
+                boxShadow: "0 10px 25px -5px rgba(15, 23, 42, 0.15)",
+                minWidth: "120px",
+                padding: "4px",
+                whiteSpace: "nowrap",
+              }}
+            >
+              {row.resigned_at ? (
+                <button
+                  className="account-action-button"
+                  onClick={() => {
+                    setOpenMenuId(null);
+                    void reinstateEmployee(row);
+                  }}
+                  style={{ display: "block", width: "100%", border: "none", textAlign: "left", padding: "8px 12px", borderRadius: "6px" }}
+                  type="button"
+                >
+                  恢复在职
+                </button>
+              ) : (
+                <button
+                  className="account-action-button"
+                  onClick={() => {
+                    setOpenMenuId(null);
+                    openResignModal(row.emp_no);
+                  }}
+                  style={{ display: "block", width: "100%", border: "none", textAlign: "left", padding: "8px 12px", borderRadius: "6px" }}
+                  type="button"
+                >
+                  办理离职
+                </button>
+              )}
+              <button
+                className="account-action-button account-action-button--danger"
+                onClick={() => {
+                  setOpenMenuId(null);
+                  void removeEmployee(row);
+                }}
+                style={{ display: "block", width: "100%", border: "none", textAlign: "left", padding: "8px 12px", borderRadius: "6px" }}
+                type="button"
+              >
+                删除
+              </button>
+            </div>
+          </>,
+          document.body,
+        )
+      : null;
     return (
-      <div className="toolbar" style={{ position: "relative" }}>
-        <button className="account-action-button" onClick={() => openEdit(row)} type="button">编辑</button>
-        <div style={{ position: "relative", display: "inline-block" }}>
+      <div className="toolbar employee-row-actions" style={{ position: "relative" }}>
+        <div className="employee-row-action-group">
+          <button className="account-action-button employee-row-action-edit" onClick={() => openEdit(row)} type="button">编辑</button>
           <button
-            aria-label="更多操作"
-            className="account-action-button"
-            onClick={() => setOpenMenuId(menuOpen ? null : row.id)}
+            aria-expanded={menuOpen}
+            aria-label="员工操作菜单"
+            className="account-action-button employee-row-menu-trigger"
+            onClick={(event) => {
+              if (menuOpen) {
+                setOpenMenuId(null);
+              } else {
+                openRowMenu(row.id, event);
+              }
+            }}
+            onMouseEnter={(event) => openRowMenu(row.id, event)}
             type="button"
           >
-            ⋯
+            ▾
           </button>
-          {menuOpen ? (
-            <>
-              <div onClick={() => setOpenMenuId(null)} style={{ position: "fixed", inset: 0, zIndex: 40 }} />
-              <div
-                className={`account-upload-dropzone${isDragOver ? " is-dragover" : ""}`}
-                style={{
-                  position: "absolute",
-                  right: 0,
-                  top: "calc(100% + 4px)",
-                  zIndex: 50,
-                  background: "#ffffff",
-                  border: "1px solid var(--ent-border-strong, #cbd5e1)",
-                  borderRadius: "8px",
-                  boxShadow: "0 10px 25px -5px rgba(15, 23, 42, 0.15)",
-                  minWidth: "120px",
-                  padding: "4px",
-                  whiteSpace: "nowrap",
-                }}
-              >
-                {row.resigned_at ? (
-                  <button
-                    className="account-action-button"
-                    onClick={() => {
-                      setOpenMenuId(null);
-                      void reinstateEmployee(row);
-                    }}
-                    style={{ display: "block", width: "100%", border: "none", textAlign: "left", padding: "8px 12px", borderRadius: "6px" }}
-                    type="button"
-                  >
-                    恢复在职
-                  </button>
-                ) : (
-                  <button
-                    className="account-action-button"
-                    onClick={() => {
-                      setOpenMenuId(null);
-                      openResignModal(row.emp_no);
-                    }}
-                    style={{ display: "block", width: "100%", border: "none", textAlign: "left", padding: "8px 12px", borderRadius: "6px" }}
-                    type="button"
-                  >
-                    办理离职
-                  </button>
-                )}
-              </div>
-            </>
-          ) : null}
         </div>
-        <button className="account-action-button account-action-button--danger" onClick={() => removeEmployee(row)} type="button">删除</button>
+        {rowMenu}
       </div>
     );
   }

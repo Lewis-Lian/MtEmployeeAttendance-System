@@ -8,6 +8,7 @@ const mockResign = vi.hoisted(() => vi.fn());
 const mockReinstate = vi.hoisted(() => vi.fn());
 const mockCreateEmployee = vi.hoisted(() => vi.fn());
 const mockUpdateEmployee = vi.hoisted(() => vi.fn());
+const mockDeleteEmployee = vi.hoisted(() => vi.fn());
 const mockConfirm = vi.hoisted(() => vi.fn());
 const mockBatchEmployees = vi.hoisted(() => vi.fn());
 
@@ -19,7 +20,7 @@ vi.mock("../../api/admin", () => ({
   reinstateAdminEmployee: mockReinstate,
   createAdminEmployee: mockCreateEmployee,
   updateAdminEmployee: mockUpdateEmployee,
-  deleteAdminEmployee: vi.fn(),
+  deleteAdminEmployee: mockDeleteEmployee,
   batchAdminEmployees: mockBatchEmployees,
   importAdminEmployees: vi.fn(),
 }));
@@ -89,28 +90,53 @@ describe("EmployeesPage 离职功能", () => {
     );
   });
 
-  it("已离职行通过更多操作菜单提供恢复在职", async () => {
+  it("鼠标移到下拉箭头后，已离职行显示恢复在职和删除", async () => {
     mockReinstate.mockResolvedValue({ status: "ok", employee: employees[1] });
     render(<EmployeesPage />);
     await screen.findByText("在职员工");
     fireEvent.change(screen.getByLabelText("在职状态"), { target: { value: "resigned" } });
 
-    fireEvent.click(await screen.findByRole("button", { name: "更多操作" }));
+    const menuTrigger = await screen.findByRole("button", { name: "员工操作菜单" });
+    expect(menuTrigger.parentElement).toHaveClass("employee-row-action-group");
+    fireEvent.mouseEnter(menuTrigger);
+    expect(await screen.findByRole("button", { name: "恢复在职" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "删除" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "删除" }).closest(".legacy-table-wrap")).toBeNull();
     fireEvent.click(await screen.findByRole("button", { name: "恢复在职" }));
 
     await waitFor(() => expect(mockReinstate).toHaveBeenCalledWith(2));
   });
 
-  it("在职行通过更多操作菜单发起办理离职并预填工号", async () => {
+  it("在职行鼠标移到下拉箭头后显示办理离职和删除，并预填工号", async () => {
     render(<EmployeesPage />);
     await screen.findByText("在职员工");
 
-    fireEvent.click(screen.getAllByRole("button", { name: "更多操作" })[0]);
-    // 顶部"办理离职"主入口与菜单项同名，取最后渲染的菜单项
+    const menuTrigger = screen.getAllByRole("button", { name: "员工操作菜单" })[0];
+    expect(menuTrigger.parentElement).toHaveClass("employee-row-action-group");
+    fireEvent.mouseEnter(menuTrigger);
     const resignButtons = screen.getAllByRole("button", { name: "办理离职" });
     fireEvent.click(resignButtons[resignButtons.length - 1]);
 
     expect(await screen.findByLabelText("离职人员编号/姓名/卡号")).toHaveValue("E100");
+  });
+
+  it("删除按钮仅在下拉面板中触发行删除确认", async () => {
+    mockDeleteEmployee.mockResolvedValue({ status: "ok" });
+    render(<EmployeesPage />);
+    await screen.findByText("在职员工");
+
+    expect(screen.queryByRole("button", { name: "删除" })).toBeNull();
+    fireEvent.mouseEnter(screen.getAllByRole("button", { name: "员工操作菜单" })[0]);
+    fireEvent.click(await screen.findByRole("button", { name: "删除" }));
+
+    await waitFor(() => expect(mockDeleteEmployee).toHaveBeenCalledWith(1));
+  });
+
+  it("员工行操作按钮保持在同一行", async () => {
+    render(<EmployeesPage />);
+    await screen.findByText("在职员工");
+
+    expect(screen.getAllByRole("button", { name: "编辑" })[0].parentElement?.parentElement).toHaveClass("employee-row-actions");
   });
 
   it("办理离职输入在职员工工号后回显灰色只读信息供核对", async () => {

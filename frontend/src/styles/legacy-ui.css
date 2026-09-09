@@ -2366,6 +2366,30 @@ body {
   align-items: center;
 }
 
+.employee-row-action-group {
+  display: inline-flex;
+  align-items: stretch;
+}
+
+.employee-row-actions {
+  flex-wrap: nowrap;
+  white-space: nowrap;
+}
+
+.employee-row-action-group .employee-row-action-edit {
+  border-top-right-radius: 0 !important;
+  border-bottom-right-radius: 0 !important;
+}
+
+.employee-row-action-group .employee-row-menu-trigger {
+  min-width: 28px;
+  padding-right: 8px !important;
+  padding-left: 8px !important;
+  border-left: 0 !important;
+  border-top-left-radius: 0 !important;
+  border-bottom-left-radius: 0 !important;
+}
+
 .account-primary-button {
   width: 100%;
   justify-content: center;
@@ -2869,6 +2893,10 @@ body {
   min-width: 1320px;
 }
 
+.master-table--employees .legacy-table-body-cell {
+  white-space: nowrap;
+}
+
 .master-static-head {
   min-height: 40px;
   display: flex;
@@ -3315,6 +3343,14 @@ body {
   border-bottom: 1px solid var(--ent-border) !important;
   color: var(--ent-text) !important;
   font-size: 13px !important;
+}
+
+.legacy-table tbody tr:nth-child(odd) > .legacy-table-body-cell {
+  background: var(--ent-bg) !important;
+}
+
+.legacy-table tbody tr:nth-child(even) > .legacy-table-body-cell {
+  background: #f3f8ff !important;
 }
 
 .legacy-table-head-button {
