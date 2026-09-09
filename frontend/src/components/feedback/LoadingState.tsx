@@ -6,11 +6,16 @@ interface LoadingStateProps {
 
 export default function LoadingState({ message = "正在加载数据..." }: LoadingStateProps) {
   return (
-    <section className="legacy-feedback-block legacy-loading-state" role="status">
-      <span aria-hidden="true" className="legacy-loading-orb" />
-      <p className="legacy-feedback-kicker">系统提示</p>
-      <h2 className="legacy-feedback-title">正在处理</h2>
-      <p className="legacy-feedback-body">{message}</p>
+    <section aria-busy="true" aria-live="polite" className="legacy-feedback-block legacy-loading-state" role="status">
+      <div aria-hidden="true" className="legacy-loading-visual">
+        <span className="legacy-loading-orbit" />
+        <span className="legacy-loading-page">
+          <span />
+          <span />
+          <span />
+        </span>
+      </div>
+      <p className="legacy-loading-announcement">{message}</p>
     </section>
   );
 }

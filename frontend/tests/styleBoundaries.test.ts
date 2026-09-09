@@ -122,7 +122,8 @@ describe("style boundaries", () => {
 
   it("侧边栏不使用当前菜单滑动高亮条，加载态和按钮保留动效反馈", () => {
     expect(legacyCss).not.toContain(".app-side-link.is-active::after");
-    expect(legacyCss).toContain("animation: legacy-loading-pulse");
+    expect(legacyCss).toContain("animation: legacy-loading-orbit");
+    expect(legacyCss).toContain(".legacy-loading-visual");
     expect(legacyCss).toContain(".query-filter-actions .btn.is-loading::after");
   });
 

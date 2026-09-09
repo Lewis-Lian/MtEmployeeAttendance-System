@@ -46,6 +46,20 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
+describe("EmployeesPage 加载状态", () => {
+  it("员工列表请求期间显示公共加载动效", () => {
+    mockFetchEmployees.mockReturnValue(new Promise(() => {}));
+    mockFetchDepartments.mockReturnValue(new Promise(() => {}));
+    mockFetchShifts.mockReturnValue(new Promise(() => {}));
+
+    render(<EmployeesPage />);
+
+    const status = screen.getByRole("status");
+    expect(status.querySelector(".legacy-loading-visual")).toBeInTheDocument();
+    expect(screen.getByText("正在加载员工列表...")).toHaveClass("legacy-loading-announcement");
+  });
+});
+
 describe("EmployeesPage 离职功能", () => {
   beforeEach(() => {
     mockFetchEmployees.mockResolvedValue(employees);

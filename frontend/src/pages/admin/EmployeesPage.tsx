@@ -2,6 +2,7 @@ import { FormEvent, MouseEvent as ReactMouseEvent, useEffect, useRef, useState }
 import { createPortal } from "react-dom";
 
 import { buildApiUrl } from "../../api/client";
+import LoadingState from "../../components/feedback/LoadingState";
 import { useNotification } from "../../components/feedback/Notification";
 import { useConfirm } from "../../components/feedback/ConfirmDialog";
 import {
@@ -1028,15 +1029,7 @@ export default function EmployeesPage() {
 
       <QueryResultPanel>
         {loading ? (
-          <div className="legacy-table-panel master-table-panel master-table-panel--with-filter">
-            <div className="legacy-table-wrap">
-              <table className="legacy-table master-table master-table--employees">
-                <tbody>
-                  <tr><td className="legacy-table-empty-cell">正在加载员工列表...</td></tr>
-                </tbody>
-              </table>
-            </div>
-          </div>
+          <LoadingState message="正在加载员工列表..." />
         ) : (
           <QueryTable
             emptyText="暂无员工数据"
