@@ -196,6 +196,25 @@ describe("QueryHomePage 首页考勤日历", () => {
     expect(calendarTitle.closest(".qh-editorial-calendar")).not.toBeNull();
   });
 
+  it("将月报、日历和其余信息分成三个可滚动页面", async () => {
+    mockCalendar.mockResolvedValue(calendarPayload);
+    render(<QueryHomePage />);
+
+    await waitFor(() => {
+      expect(screen.getByText("周一")).toBeInTheDocument();
+    });
+
+    const pages = document.querySelectorAll(".qh-editorial-page");
+    expect(pages).toHaveLength(3);
+    expect(pages[0]).toContainElement(screen.getByRole("region", { name: "本月整体表现" }));
+    expect(pages[0]).not.toContainElement(screen.getByRole("heading", { name: "考勤日历" }));
+    expect(pages[1]).toContainElement(screen.getByRole("heading", { name: "考勤日历" }));
+    expect(pages[1]).not.toContainElement(screen.getByText("请假与外勤类型占比"));
+    expect(pages[2]).toContainElement(screen.getByText("请假与外勤类型占比"));
+    expect(screen.getByRole("region", { name: "月度收束" })).toBeInTheDocument();
+    expect(screen.getByTestId("leave-total")).toHaveTextContent("0");
+  });
+
   it("日历接口失败时在面板内提示错误，不影响首页摘要", async () => {
     mockCalendar.mockRejectedValue(new ApiError("服务器错误", 500, null));
     render(<QueryHomePage />);

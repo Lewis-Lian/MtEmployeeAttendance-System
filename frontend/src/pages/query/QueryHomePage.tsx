@@ -175,22 +175,23 @@ export default function QueryHomePage() {
 
   return (
     <div className="query-home-container qh-editorial-shell">
-      <header className="qh-editorial-header">
-        <div className="qh-editorial-meta" aria-label="月报身份信息">
-          <span>{monthLabel}</span>
-          <span>{managerInfo?.dept_name || "暂无部门"}</span>
-          <span>{managerInfo?.emp_no || "-"} · {managerInfo?.name || "未绑定管理人员"}</span>
-        </div>
-        <p className="qh-editorial-eyebrow">MONTHLY ATTENDANCE</p>
-        <h2>{monthTitle}</h2>
-      </header>
+      <section aria-label="月报概览" className="qh-editorial-page qh-editorial-page-one">
+        <div className="qh-editorial-page-inner">
+          <header className="qh-editorial-header">
+            <div className="qh-editorial-meta" aria-label="月报身份信息">
+              <span>{monthLabel}</span>
+              <span>{managerInfo?.dept_name || "暂无部门"}</span>
+              <span>{managerInfo?.emp_no || "-"} · {managerInfo?.name || "未绑定管理人员"}</span>
+            </div>
+            <p className="qh-editorial-eyebrow">MONTHLY ATTENDANCE</p>
+            <h2>{monthTitle}</h2>
+          </header>
 
-      {isLoading ? <LoadingState message="正在加载首页摘要..." /> : null}
-      {error && !isLoading ? <ErrorState description={error} title="首页摘要加载失败" /> : null}
+          {isLoading ? <LoadingState message="正在加载首页摘要..." /> : null}
+          {error && !isLoading ? <ErrorState description={error} title="首页摘要加载失败" /> : null}
 
-      {!isLoading && !error ? (
-        <div className="qh-editorial-content">
-          <section aria-label="本月整体表现" className="qh-editorial-hero">
+          {!isLoading && !error ? (
+            <section aria-label="本月整体表现" className="qh-editorial-hero">
             <div className="qh-editorial-lead">
               <p className="qh-editorial-label">本月出勤</p>
               <div className="qh-editorial-attendance">
@@ -216,10 +217,17 @@ export default function QueryHomePage() {
                 <strong><KpiNumber testId="kpi-late" value={summary?.late_early_minutes ?? 0} /><small>分钟</small></strong>
               </article>
             </div>
-          </section>
+            </section>
+          ) : null}
+        </div>
+      </section>
 
+      {!isLoading && !error ? (
+        <>
           {managerEmployeeId && !calendarForbidden ? (
-            <section className="qh-editorial-calendar">
+            <section aria-label="考勤日历" className="qh-editorial-page qh-editorial-page-two">
+              <div className="qh-editorial-page-inner">
+                <section className="qh-editorial-calendar">
               <div className="qh-editorial-section-heading">
                 <div>
                   <p>MONTH IN REVIEW</p>
@@ -234,17 +242,33 @@ export default function QueryHomePage() {
               ) : (
                 <p className="qh-editorial-muted">正在加载考勤日历...</p>
               )}
+                </section>
+              </div>
             </section>
           ) : null}
 
-          <section className="qh-editorial-leave">
-            <div className="qh-editorial-section-heading">
-              <div>
-                <p>LEAVE NOTES</p>
-                <h3>本月请假构成</h3>
+          <section aria-label="月度收束" className="qh-editorial-page qh-editorial-page-three">
+            <div className="qh-editorial-page-inner">
+              <div className="qh-editorial-closeout-intro">
+                <p className="qh-editorial-closeout-kicker">MONTHLY CLOSE</p>
+                <div>
+                  <p className="qh-editorial-closeout-index">03 / 03</p>
+                  <h3>本月考勤<br />汇总</h3>
+                </div>
+                <p className="qh-editorial-closeout-copy">汇总本月请假、外勤及相关数据状态，全面掌握考勤情况。</p>
               </div>
-              <span>共 {leaveTotal} 天</span>
-            </div>
+
+              <section className="qh-editorial-leave">
+                <div className="qh-editorial-leave-heading">
+                  <div>
+                    <p>LEAVE NOTES</p>
+                    <h3>本月请假构成</h3>
+                  </div>
+                  <div className="qh-editorial-leave-total">
+                    <strong data-testid="leave-total">{leaveTotal}</strong>
+                    <span>天</span>
+                  </div>
+                </div>
             <p className="qh-editorial-assistive-title">请假与外勤类型占比</p>
             {leaveTotal > 0 ? (
               <div className="qh-editorial-leave-body">
@@ -270,13 +294,15 @@ export default function QueryHomePage() {
             ) : (
               <p className="qh-editorial-muted">本月无请假记录</p>
             )}
-          </section>
+              </section>
 
-          <footer className="qh-editorial-status">
-            <span>数据状态</span>
-            <p>{message}</p>
-          </footer>
-        </div>
+              <footer className="qh-editorial-status">
+                <span>数据状态</span>
+                <p>{message}</p>
+              </footer>
+            </div>
+          </section>
+        </>
       ) : null}
     </div>
   );
