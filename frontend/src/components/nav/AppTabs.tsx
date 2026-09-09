@@ -7,12 +7,27 @@ export interface AppTabItem {
   label: string;
 }
 
+export function reorderTabs(tabs: AppTabItem[], draggedHref: string, targetHref: string): AppTabItem[] {
+  const draggedIndex = tabs.findIndex((tab) => tab.href === draggedHref);
+  const targetIndex = tabs.findIndex((tab) => tab.href === targetHref);
+
+  if (draggedIndex < 0 || targetIndex < 0 || draggedIndex === targetIndex) {
+    return tabs;
+  }
+
+  const nextTabs = [...tabs];
+  const [draggedTab] = nextTabs.splice(draggedIndex, 1);
+  nextTabs.splice(targetIndex, 0, draggedTab);
+  return nextTabs;
+}
+
 interface AppTabsProps {
   currentPath: string;
   tabs: AppTabItem[];
   onCloseTab: (href: string) => void;
   onNavigate: (href: string) => void;
   onRefreshTab: (href: string) => void;
+  onReorderTab: (draggedHref: string, targetHref: string) => void;
   extra?: React.ReactNode;
 }
 
@@ -22,10 +37,14 @@ export default function AppTabs({
   onCloseTab,
   onNavigate,
   onRefreshTab,
+  onReorderTab,
   extra,
 }: AppTabsProps) {
   const tabListRef = useRef<HTMLDivElement>(null);
+  const draggedHrefRef = useRef<string | null>(null);
   const [refreshingHref, setRefreshingHref] = useState<string | null>(null);
+  const [draggedHref, setDraggedHref] = useState<string | null>(null);
+  const [dragOverHref, setDragOverHref] = useState<string | null>(null);
 
   useEffect(() => {
     const el = tabListRef.current;
@@ -38,6 +57,10 @@ export default function AppTabs({
     let scrollLeft = 0;
 
     const handleMouseDown = (e: MouseEvent) => {
+      if ((e.target as HTMLElement).closest(".app-tab-button")) {
+        isDown = false;
+        return;
+      }
       isDown = true;
       startX = e.pageX - el.offsetLeft;
       scrollLeft = el.scrollLeft;
@@ -89,6 +112,36 @@ export default function AppTabs({
     window.setTimeout(() => setRefreshingHref((current) => (current === href ? null : current)), 500);
   }
 
+  function handleDragStart(href: string, event: React.DragEvent<HTMLDivElement>) {
+    draggedHrefRef.current = href;
+    setDraggedHref(href);
+    event.dataTransfer.effectAllowed = "move";
+    event.dataTransfer.setData("text/plain", href);
+  }
+
+  function handleDragOver(href: string, event: React.DragEvent<HTMLDivElement>) {
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "move";
+    if (draggedHrefRef.current !== href) {
+      setDragOverHref(href);
+    }
+  }
+
+  function handleDrop(href: string, event: React.DragEvent<HTMLDivElement>) {
+    event.preventDefault();
+    const dragged = draggedHrefRef.current;
+    if (dragged && dragged !== href) {
+      onReorderTab(dragged, href);
+    }
+    handleDragEnd();
+  }
+
+  function handleDragEnd() {
+    draggedHrefRef.current = null;
+    setDraggedHref(null);
+    setDragOverHref(null);
+  }
+
   return (
     <section className="app-tab-bar" aria-label="已打开页面">
       <div className="app-tab-list" ref={tabListRef} role="tablist">
@@ -97,7 +150,12 @@ export default function AppTabs({
 
           return (
             <div
-              className={`app-tab-button${isActive ? " is-active" : ""}`}
+              className={`app-tab-button${isActive ? " is-active" : ""}${draggedHref === tab.href ? " is-dragging" : ""}${dragOverHref === tab.href ? " is-drag-over" : ""}`}
+              draggable
+              onDragEnd={handleDragEnd}
+              onDragOver={(event) => handleDragOver(tab.href, event)}
+              onDragStart={(event) => handleDragStart(tab.href, event)}
+              onDrop={(event) => handleDrop(tab.href, event)}
               key={tab.href}
               role="presentation"
             >

@@ -5,7 +5,7 @@ import { logout, type AuthUser } from "../api/auth";
 import { clearQueryBootstrapCache, fetchNavigation } from "../api/query";
 import AppModuleNav from "../components/nav/AppModuleNav";
 import AppPageNav from "../components/nav/AppPageNav";
-import AppTabs, { type AppTabItem } from "../components/nav/AppTabs";
+import AppTabs, { reorderTabs, type AppTabItem } from "../components/nav/AppTabs";
 import ErrorState from "../components/feedback/ErrorState";
 import LoadingState from "../components/feedback/LoadingState";
 import Logo from "../components/common/Logo";
@@ -141,6 +141,10 @@ export default function AppShell({ onLogout, user }: AppShellProps) {
     }));
   }
 
+  function handleReorderTab(draggedHref: string, targetHref: string) {
+    setTabs((currentTabs) => reorderTabs(currentTabs, draggedHref, targetHref));
+  }
+
   function handleCloseTab(href: string) {
     if (tabs.length <= 1) {
       return;
@@ -233,6 +237,7 @@ export default function AppShell({ onLogout, user }: AppShellProps) {
             onCloseTab={handleCloseTab}
             onNavigate={handleNavigateTab}
             onRefreshTab={handleRefreshTab}
+            onReorderTab={handleReorderTab}
             tabs={tabs}
             extra={
               <div className="top-nav-actions" style={{ display: "flex", alignItems: "center", gap: "10px" }}>
