@@ -248,7 +248,7 @@ export default function ManagerMonthStatPage({
   }
 
   if (isLoading) {
-    return <LoadingState message={`正在准备${title}页面...`} variant="table" />;
+    return <LoadingState filterFields={3} headers={tableHeaders.map((header) => typeof header === "string" ? header : typeof header.label === "string" ? header.label : "")} message={`正在准备${title}页面...`} variant="query-page" />;
   }
 
   if (loadError || !bootstrap) {

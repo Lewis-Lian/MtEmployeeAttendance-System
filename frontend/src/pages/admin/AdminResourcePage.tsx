@@ -58,7 +58,7 @@ export default function AdminResourcePage({ title, description, endpoint, column
   }, [endpoint]);
 
   if (isLoading) {
-    return <LoadingState message="正在加载后台页面..." variant="table" />;
+    return <LoadingState headers={columns.map((column) => column.label)} message="正在加载后台页面..." variant="admin-page" />;
   }
 
   if (error) {

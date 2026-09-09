@@ -283,7 +283,7 @@ export default function AccountsPage() {
   ]);
 
   if (loading) {
-    return <LoadingState message="正在准备账号管理页面..." variant="table" />;
+    return <LoadingState headers={accountTableHeaders.map((header) => typeof header === "string" ? header : typeof header.label === "string" ? header.label : "")} message="正在准备账号管理页面..." variant="account-page" />;
   }
 
   if (loadError) {

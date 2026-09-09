@@ -102,6 +102,16 @@ describe("AttendanceOverrideCalendarModal", () => {
     mockFetchCalendar.mockResolvedValue(calendarData());
   });
 
+  it("加载数据时保持最终弹窗的日历与编辑面板双栏结构", () => {
+    mockFetchCalendar.mockReturnValue(new Promise(() => {}));
+    renderModal();
+
+    const dialog = screen.getByRole("dialog", { name: "编辑员工考勤修正" });
+    expect(dialog.querySelector(".attendance-override-calendar-layout")).toBeInTheDocument();
+    expect(dialog.querySelector(".attendance-override-calendar-main .attendance-calendar-grid")).toBeInTheDocument();
+    expect(dialog.querySelector(".attendance-override-calendar-side .attendance-override-daypanel")).toBeInTheDocument();
+  });
+
   it("打开时拉取日历数据并渲染汇总条", async () => {
     renderModal();
     await waitFor(() => {

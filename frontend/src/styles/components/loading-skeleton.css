@@ -30,12 +30,6 @@
 }
 
 .legacy-loading-skeleton-kpis .qh-editorial-narrative { display: grid; gap: 12px; }
-.legacy-loading-skeleton-kpis .skeleton-number {
-  color: transparent;
-  background: rgba(255, 255, 255, .17);
-  border-radius: 6px;
-  user-select: none;
-}
 .legacy-loading-skeleton-table .legacy-table-body-cell { height: 42px; box-sizing: border-box; }
 .legacy-loading-state .legacy-loading-skeleton-kpis .skeleton-line {
   background: rgba(255, 255, 255, .17);
@@ -48,17 +42,6 @@
   border-radius: 8px;
 }
 
-.skeleton-table-row {
-  display: grid;
-  grid-template-columns: .4fr 1fr 1.2fr 1fr 1fr .8fr;
-  align-items: center;
-  min-height: 42px;
-  padding: 0 16px;
-  gap: 20px;
-  border-bottom: 1px solid var(--ent-border, #e2e8f0);
-}
-.skeleton-table-row.is-heading { background: var(--ent-secondary-bg); min-height: 46px; }
-.skeleton-table-row:nth-child(odd):not(.is-heading) { background: var(--ent-tertiary-bg); }
 .skeleton-pagination { display: flex; justify-content: space-between; align-items: center; padding: 10px 16px; }
 .skeleton-field { display: grid; gap: 9px; min-width: 0; }
 .legacy-loading-state .skeleton-input {
@@ -75,11 +58,240 @@
 .legacy-loading-state .attendance-calendar-grid { animation: none; }
 .legacy-loading-state .attendance-calendar-cell { cursor: default; gap: 10px; box-sizing: border-box; }
 
+.legacy-loading-state.query-page-shell {
+  width: 100%;
+  min-height: calc(100vh - var(--app-header-height, 56px));
+  overflow: visible;
+}
+
+.legacy-loading-state .loading-query-filter .query-filter-heading,
+.legacy-loading-state .loading-query-filter .query-filter-body {
+  display: grid;
+  align-content: start;
+  gap: 14px;
+}
+
+.legacy-loading-state .query-workspace,
+.legacy-loading-state .query-result-panel,
+.legacy-loading-state .query-result-table {
+  min-width: 0;
+}
+
+.legacy-loading-state .query-result-panel {
+  overflow: hidden;
+}
+
+.legacy-loading-state.account-center-page,
+.legacy-loading-state.legacy-page-section,
+.legacy-loading-state.database-unlock-loading {
+  display: block;
+  width: 100%;
+  overflow: visible;
+}
+
+.loading-account-center,
+.loading-account-page,
+.loading-admin-page,
+.loading-summary-download {
+  display: grid;
+  gap: 16px;
+  width: 100%;
+}
+
+.loading-account-center .account-top-control-row,
+.loading-account-page .account-top-control-row,
+.loading-account-center .account-panel-selector,
+.loading-account-page .account-panel-selector,
+.loading-account-center .active-account-set-summary-bar,
+.loading-account-page .active-account-set-summary-bar,
+.loading-account-center .account-card-header,
+.loading-account-page .account-card-header {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.loading-account-center .account-top-control-row,
+.loading-account-page .account-top-control-row,
+.loading-account-center .account-card-header,
+.loading-account-page .account-card-header {
+  justify-content: space-between;
+}
+
+.loading-account-center .active-account-set-summary-bar,
+.loading-account-page .active-account-set-summary-bar {
+  min-height: 36px;
+  padding: 0 14px;
+  border: 1px solid var(--ent-border-strong);
+  border-radius: var(--ent-radius-lg, 8px);
+  background: var(--ent-secondary-bg, #f8fafc);
+}
+
+.loading-account-page .master-filter-panel {
+  margin-bottom: 0;
+}
+
+.loading-account-center {
+  gap: 0;
+}
+
+.loading-account-center .account-top-control-row {
+  gap: 12px;
+  margin: 16px 0;
+}
+
+.loading-account-center .account-workflow {
+  display: block;
+}
+
+.loading-account-center .account-workflow-main {
+  width: 100%;
+}
+
+.loading-account-center .account-card-header {
+  padding: 12px 4px;
+  border-bottom: 0;
+  background: transparent;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.loading-account-action {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  box-sizing: border-box;
+  padding: 8px 16px;
+  border-radius: 8px;
+  background: var(--ent-tertiary-bg);
+  color: var(--ent-text-secondary);
+  font-size: 13.5px;
+  font-weight: 600;
+}
+
+.loading-account-center .active-account-set-summary-bar {
+  box-sizing: border-box;
+  gap: 16px;
+  padding: 0 16px;
+  font-size: 13.5px;
+  color: var(--ent-text-secondary);
+}
+
+.loading-account-summary-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 34px;
+}
+
+.loading-account-summary-item + .loading-account-summary-item {
+  position: relative;
+  padding-left: 17px;
+}
+
+.loading-account-summary-item + .loading-account-summary-item::before {
+  position: absolute;
+  left: 0;
+  height: 16px;
+  width: 1px;
+  background: var(--ent-border-strong);
+  content: "";
+}
+
+.loading-admin-page .legacy-page-heading,
+.loading-admin-page .admin-resource-panel-head > div {
+  display: grid;
+  gap: 10px;
+}
+
+.loading-admin-page .legacy-page-side-info,
+.loading-admin-page .admin-resource-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.loading-summary-download .step-card {
+  box-sizing: border-box;
+  padding: 24px;
+  border: 1px solid var(--ent-border, #e2e8f0);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, .85);
+}
+
+.loading-step-heading {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.loading-step-heading > div {
+  display: grid;
+  gap: 8px;
+}
+
+.loading-step-content {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px 20px;
+}
+
+.legacy-loading-state.database-unlock-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  box-sizing: border-box;
+  padding: 40px 20px;
+  background: #f3f4f6;
+}
+
+.loading-database-unlock-card {
+  display: grid;
+  width: min(100%, 400px);
+  box-sizing: border-box;
+  gap: 16px;
+  padding: 40px;
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, .1);
+}
+
+.loading-attendance-override-modal .legacy-loading-skeleton--calendar {
+  max-width: none;
+}
+
+.loading-attendance-override-modal .attendance-override-daypanel,
+.loading-attendance-override-modal .daypanel-section,
+.loading-attendance-override-modal .daypanel-rows,
+.loading-daypanel-fields {
+  display: grid;
+  gap: 12px;
+}
+
+.loading-attendance-override-modal .daydetail-row,
+.loading-attendance-override-modal .daypanel-title,
+.loading-attendance-override-modal .daypanel-actions,
+.loading-daypanel-chips {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.loading-daypanel-chips {
+  justify-content: flex-start;
+  flex-wrap: wrap;
+}
+
 @media (max-width: 900px) {
   .legacy-loading-state .legacy-loading-skeleton-kpis { grid-template-columns: 1fr 1fr; }
   .legacy-loading-state .legacy-loading-skeleton-toolbar,
   .legacy-loading-state .legacy-loading-skeleton-form-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .skeleton-table-row { gap: 10px; padding-inline: 10px; }
+  .loading-step-content { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 680px) {

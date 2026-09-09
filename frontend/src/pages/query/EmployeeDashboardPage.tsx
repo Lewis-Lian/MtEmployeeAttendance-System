@@ -194,7 +194,7 @@ export default function EmployeeDashboardPage() {
   }
 
   if (isLoading) {
-    return <LoadingState message="正在准备员工考勤数据查询页..." variant="table" />;
+    return <LoadingState filterFields={3} message="正在准备员工考勤数据查询页..." variant="query-page" />;
   }
 
   if (error && !bootstrap) {

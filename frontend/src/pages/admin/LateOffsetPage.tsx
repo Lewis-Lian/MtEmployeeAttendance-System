@@ -234,7 +234,7 @@ export default function LateOffsetPage() {
   const selectedRows = pendingRows.filter((row) => selectedKeys.has(rowKey(row)));
 
   if (isLoading) {
-    return <LoadingState message="正在准备管理人员迟到冲抵页面..." variant="table" />;
+    return <LoadingState filterFields={3} message="正在准备管理人员迟到冲抵页面..." variant="query-page" />;
   }
 
   if (!bootstrap) {

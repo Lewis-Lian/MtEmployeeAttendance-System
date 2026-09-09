@@ -1242,6 +1242,12 @@ body {
   min-width: 1160px;
 }
 
+.attendance-override-page .attendance-override-table th,
+.attendance-override-page .attendance-override-table td,
+.attendance-override-page .attendance-override-table button {
+  white-space: nowrap;
+}
+
 /* 迟到冲抵页：首列仅复选框，收窄列宽（该表格类与考勤修正页共用，需限定页面作用域） */
 .late-offset-page .attendance-override-table th:first-child,
 .late-offset-page .attendance-override-table td:first-child {
@@ -5060,31 +5066,30 @@ input[type="checkbox"] {
 }
 /* 右栏未选中时的骨架占位（模拟当天面板结构，微光扫过） */
 .daypanel-skeleton {
-  border: 1px solid #e3e9f2;
-  border-radius: 14px;
-  padding: 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  background: var(--ent-bg);
+  pointer-events: none;
+  user-select: none;
 }
 .daypanel-skeleton-title,
 .daypanel-skeleton-row,
 .daypanel-skeleton-chip,
-.daypanel-skeleton-field {
+.daypanel-skeleton-field,
+.daypanel-skeleton-radio,
+.daypanel-skeleton-action {
   display: block;
   border-radius: 6px;
   background: linear-gradient(90deg, #edf1f7 25%, #f8fafd 37%, #edf1f7 63%);
   background-size: 400% 100%;
   animation: daypanel-skeleton-shimmer 1.3s ease infinite;
 }
-.daypanel-skeleton-title { height: 16px; width: 45%; border-radius: 5px; }
-.daypanel-skeleton-row { height: 13px; width: 88%; }
-.daypanel-skeleton-row--short { width: 62%; }
-.daypanel-skeleton-block { display: flex; flex-wrap: wrap; gap: 7px; }
-.daypanel-skeleton-chip { height: 26px; width: 64px; border-radius: 13px; }
-.daypanel-skeleton-field { height: 34px; flex: 1 1 70px; }
-.daypanel-skeleton-field--wide { flex-basis: 100%; }
+.daypanel-skeleton-title { height: 16px; width: 132px; max-width: 55%; border-radius: 5px; }
+.daypanel-skeleton-row { height: 13px; width: 64px; align-self: center; }
+.daypanel-skeleton-chip { padding: 5px 13px; border: 1px solid transparent; border-radius: 15px; font-size: 13px; color: transparent; }
+.daypanel-skeleton-current { padding: 2px 10px; margin-left: auto; font-size: 12px; font-weight: 600; border: 0; border-radius: 10px; }
+.daypanel-skeleton-field { height: 30px; width: 100%; border-radius: 8px; }
+.daypanel-skeleton-textarea { height: 48px; }
+.daypanel-skeleton-choice { display: inline-flex; align-items: center; gap: 4px; font-size: 13px; color: #6b7686; }
+.daypanel-skeleton-radio { width: 13px; height: 13px; border-radius: 50%; }
+.daypanel-skeleton-action { padding: 4px 16px; border: 1px solid transparent; font-size: 13px; color: transparent; }
 @keyframes daypanel-skeleton-shimmer {
   0% { background-position: 100% 0; }
   100% { background-position: 0 0; }
@@ -5093,7 +5098,9 @@ input[type="checkbox"] {
   .daypanel-skeleton-title,
   .daypanel-skeleton-row,
   .daypanel-skeleton-chip,
-  .daypanel-skeleton-field { animation: none; }
+  .daypanel-skeleton-field,
+  .daypanel-skeleton-radio,
+  .daypanel-skeleton-action { animation: none; }
 }
 @media (max-width: 1024px) {
   .attendance-override-calendar-layout { grid-template-columns: 1fr; }

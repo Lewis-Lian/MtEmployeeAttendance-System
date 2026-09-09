@@ -291,7 +291,7 @@ export default function SummaryDownloadPage() {
   }
 
   if (isLoading) {
-    return <LoadingState message="正在准备汇总下载页..." variant="table" />;
+    return <LoadingState message="正在准备汇总下载页..." variant="summary-download" />;
   }
 
   if (error && !bootstrap) {

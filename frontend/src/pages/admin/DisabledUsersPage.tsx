@@ -45,7 +45,7 @@ export default function DisabledUsersPage() {
   }
 
   if (isLoading) {
-    return <LoadingState message="正在准备禁用用户页面..." variant="table" />;
+    return <LoadingState headers={["用户名", "姓名", "工号", "累计错误次数", "禁用状态", "操作"]} message="正在准备禁用用户页面..." variant="account-list" />;
   }
 
   if (loadError) {

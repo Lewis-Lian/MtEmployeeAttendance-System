@@ -483,7 +483,7 @@ export default function AttendanceOverrideCalendarModal({
               <div className="account-lock-notice is-locked">{month || "-"} 账套已锁定，仅可查看</div>
             ) : null}
             {isLoading ? (
-              <LoadingState message="正在加载考勤日历..." variant="calendar" />
+              <LoadingState message="正在加载考勤日历..." variant="attendance-override-modal" />
             ) : loadError ? (
               <ErrorState description={loadError} title="日历数据加载失败" />
             ) : calendar ? (
@@ -498,28 +498,78 @@ export default function AttendanceOverrideCalendarModal({
                 </div>
                 <aside className="attendance-override-calendar-side">
                   {isMultiSelect ? renderBatchPanel() : selectedDay ? renderDayPanel() : (
-                    <div aria-hidden="true" className="daypanel-skeleton">
-                      <span className="daypanel-skeleton-title" />
-                      <span className="daypanel-skeleton-row" />
-                      <span className="daypanel-skeleton-row daypanel-skeleton-row--short" />
-                      <span className="daypanel-skeleton-row" />
-                      <div className="daypanel-skeleton-block">
-                        <span className="daypanel-skeleton-chip" />
-                        <span className="daypanel-skeleton-chip" />
-                        <span className="daypanel-skeleton-chip" />
-                        <span className="daypanel-skeleton-chip" />
-                      </div>
-                      <div className="daypanel-skeleton-block">
-                        <span className="daypanel-skeleton-field" />
-                        <span className="daypanel-skeleton-field" />
-                        <span className="daypanel-skeleton-field daypanel-skeleton-field--wide" />
-                      </div>
-                    </div>
+                    renderDayPanelSkeleton()
                   )}
                 </aside>
               </div>
             ) : null}
           </div>
+        </div>
+      </div>
+    );
+  }
+
+  function renderDayPanelSkeleton() {
+    return (
+      <div aria-hidden="true" className="attendance-override-daypanel daypanel-skeleton">
+        <div className="daypanel-section daypanel-detail">
+          <div className="daypanel-title">
+            <span className="daypanel-skeleton-title" />
+            <span className="daypanel-title-hint">原始考勤</span>
+          </div>
+          <div className="daypanel-rows">
+            {["上班卡", "下班卡", "打卡次数", "实出勤"].map((label) => (
+              <div className="daydetail-row" key={label}>
+                <span className="daydetail-label">{label}</span>
+                <span className="daypanel-skeleton-row" />
+              </div>
+            ))}
+          </div>
+        </div>
+        <div className="daypanel-section daypanel-status">
+          <div className="daypanel-title">
+            <span>假种（点击即保存；出勤状态点格子循环切换）</span>
+            <span className="daypanel-skeleton-chip daypanel-skeleton-current">当前：跟随系统</span>
+          </div>
+          <div className="daypanel-status-group">
+            {leaveStatuses.map((status) => (
+              <span className="daypanel-skeleton-chip" key={status}>{status}</span>
+            ))}
+          </div>
+        </div>
+        <div className="daypanel-section daypanel-extra">
+          <div className="daypanel-extra-header">
+            <span className="daypanel-toggle">更多信息{detailExpanded ? "▲" : "▼"}</span>
+          </div>
+          {detailExpanded ? (
+            <div className="daypanel-extra-form">
+              {[["晚上加班", "0.5 出勤"], ["实际打卡", "计 1 天"]].map(([label, hint]) => (
+                <div className="daypanel-field daypanel-field--tri" key={label}>
+                  <span className="daypanel-field-label">{label}<span className="daypanel-field-sub">{hint}</span></span>
+                  <div className="attendance-override-batch-choices">
+                    {TRI_CHOICES.map(([value, text]) => (
+                      <span className="daypanel-skeleton-choice" key={value}>
+                        <span className="daypanel-skeleton-radio" />{text}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              ))}
+              {["工时（小时）", "迟到分钟", "早退分钟"].map((label) => (
+                <div className="daypanel-field" key={label}>
+                  <span className="daypanel-field-label">{label}</span>
+                  <span className="daypanel-skeleton-field" />
+                </div>
+              ))}
+              <div className="daypanel-field daypanel-field-wide">
+                <span className="daypanel-field-label">备注</span>
+                <span className="daypanel-skeleton-field daypanel-skeleton-textarea" />
+              </div>
+              <div className="daypanel-actions">
+                <span className="daypanel-skeleton-action">保存修正</span>
+              </div>
+            </div>
+          ) : null}
         </div>
       </div>
     );

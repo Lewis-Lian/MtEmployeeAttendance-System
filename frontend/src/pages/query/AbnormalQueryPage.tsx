@@ -189,7 +189,7 @@ export default function AbnormalQueryPage() {
   }
 
   if (isLoading) {
-    return <LoadingState message="正在准备员工异常查询页..." variant="table" />;
+    return <LoadingState filterFields={3} headers={["部门名称", "人员编号", "人员姓名", "异常考勤次数"]} message="正在准备员工异常查询页..." variant="query-page" />;
   }
 
   if (error && !bootstrap) {

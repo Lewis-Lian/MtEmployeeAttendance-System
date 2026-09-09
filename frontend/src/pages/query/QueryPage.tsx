@@ -281,7 +281,7 @@ export default function QueryPage({
   }
 
   if (isLoading) {
-    return <LoadingState message="正在准备查询页..." variant="table" />;
+    return <LoadingState filterFields={fields.length + (options.length ? 1 : 0)} headers={columns.map((column) => column.label)} message="正在准备查询页..." variant="query-page" />;
   }
 
   if (error && !bootstrap) {
