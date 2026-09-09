@@ -53,11 +53,12 @@ describe("style boundaries", () => {
     expect(css).not.toMatch(/z-index\s*:\s*[1-9]\d{3,}/);
   });
 
-  it("首页主体容器不隐藏长内容溢出", () => {
+  it("编辑式首页继承工作区背景且不隐藏长内容", () => {
     const css = stripComments(queryHomeCss);
-    const containerRule = css.match(/\.query-home-container\s*\{[^}]*\}/)?.[0] ?? "";
+    const shellRule = css.match(/\.query-home-container\.qh-editorial-shell\s*\{[^}]*\}/)?.[0] ?? "";
 
-    expect(containerRule).not.toMatch(/overflow\s*:\s*hidden/);
+    expect(shellRule).not.toMatch(/overflow\s*:\s*hidden/);
+    expect(shellRule).not.toMatch(/background(?:-color|-image)?\s*:/);
   });
 
   it("核心全局组件样式在所属组件文件中不重复定义 exact selector", () => {
@@ -111,9 +112,12 @@ describe("style boundaries", () => {
     expect(appTabsCss).toContain("transform: scale(0.97)");
   });
 
-  it("查询首页 KPI 使用错峰入场动效", () => {
-    expect(queryHomeCss).toContain("animation: qh-minimal-enter");
-    expect(queryHomeCss).toContain("animation-delay: calc(var(--qh-kpi-index) * 45ms)");
+  it("编辑式首页使用藏青主题、限定日历覆盖并提供动效降级", () => {
+    expect(queryHomeCss).toContain("--qh-navy: #153354");
+    expect(queryHomeCss).toContain(".qh-editorial-shell .attendance-calendar");
+    expect(queryHomeCss).toContain("animation: qh-editorial-rise");
+    expect(queryHomeCss).toContain("@media (prefers-reduced-motion: reduce)");
+    expect(queryHomeCss).not.toContain(".qh-minimal-");
   });
 
   it("侧边栏不使用当前菜单滑动高亮条，加载态和按钮保留动效反馈", () => {
