@@ -95,33 +95,49 @@ describe("QueryHomePage 纯首页权限用户", () => {
     expect(screen.queryByText("考勤日历")).toBeNull();
   });
 
-  it("首页 KPI 卡片按顺序设置错峰入场延迟", async () => {
+  it("使用编辑式个人月报结构突出本月整体表现", async () => {
     render(<QueryHomePage />);
 
     await waitFor(() => {
       expect(screen.getByTestId("kpi-attendance")).toBeInTheDocument();
     });
 
-    const cards = Array.from(document.querySelectorAll(".qh-kpi-card-hero"));
-    expect(cards).toHaveLength(4);
-    expect(cards.map((card) => card.getAttribute("style"))).toEqual([
-      "--qh-kpi-index: 0;",
-      "--qh-kpi-index: 1;",
-      "--qh-kpi-index: 2;",
-      "--qh-kpi-index: 3;",
-    ]);
+    expect(document.querySelector(".qh-editorial-shell")).not.toBeNull();
+    expect(screen.getByRole("heading", { name: "5月考勤月报" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "本月整体表现" })).toBeInTheDocument();
+    expect(screen.getByText("本月出勤")).toBeInTheDocument();
+    expect(screen.getByText("本月请假构成")).toBeInTheDocument();
+    expect(document.querySelectorAll(".qh-editorial-stat")).toHaveLength(3);
+    expect(document.querySelector(".qh-minimal-kpis")).toBeNull();
   });
 
-  it("使用极简数据产品首页结构", async () => {
+  it("有迟到早退时生成只基于摘要数据的提醒", async () => {
+    mockHomeSummary.mockResolvedValueOnce({
+      has_data: true,
+      month: "2026-05",
+      account_set_name: "2026年5月",
+      support_message: "已加载首页摘要",
+      manager: { emp_no: "100701010", name: "余兆中", dept_name: "制造一部" },
+      summary: { attendance_days: 20, late_early_minutes: 18 },
+    });
+
     render(<QueryHomePage />);
 
     await waitFor(() => {
-      expect(screen.getByTestId("kpi-attendance")).toBeInTheDocument();
+      expect(screen.getByTestId("monthly-narrative")).toHaveTextContent(
+        "本月已记录出勤 20 天，累计迟到早退 18 分钟，请留意异常记录。",
+      );
     });
+  });
 
-    expect(document.querySelector(".qh-minimal-shell")).not.toBeNull();
-    expect(screen.getByText("今日概览")).toBeInTheDocument();
-    expect(screen.getByText("本月请假构成")).toBeInTheDocument();
+  it("无迟到早退时生成平稳的事实型总结", async () => {
+    render(<QueryHomePage />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("monthly-narrative")).toHaveTextContent(
+        "本月已记录出勤 20 天，暂未发现迟到早退记录。",
+      );
+    });
   });
 
   it("首页不显示数据范围和账套选择", async () => {
@@ -176,8 +192,8 @@ describe("QueryHomePage 首页考勤日历", () => {
     expect(
       calendarTitle.compareDocumentPosition(ratioTitle) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
-    // 日历面板使用首页极简布局的主内容面板
-    expect(calendarTitle.closest(".qh-minimal-calendar-panel")).not.toBeNull();
+    // 日历面板位于编辑式月报的主内容区域
+    expect(calendarTitle.closest(".qh-editorial-calendar")).not.toBeNull();
   });
 
   it("日历接口失败时在面板内提示错误，不影响首页摘要", async () => {

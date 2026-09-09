@@ -1,4 +1,4 @@
-import { useEffect, useState, type CSSProperties } from "react";
+import { useEffect, useState } from "react";
 import { ApiError } from "../../api/client";
 import { fetchAttendanceCalendar, fetchHomeSummary, fetchQueryBootstrap } from "../../api/query";
 import AttendanceCalendarGrid from "../../components/attendance/AttendanceCalendarGrid";
@@ -7,6 +7,32 @@ import LoadingState from "../../components/feedback/LoadingState";
 import KpiNumber from "../../components/query/KpiNumber";
 import type { AttendanceCalendarData, QueryBootstrap } from "../../types/query";
 import "./QueryHome.css";
+
+function formatMonthLabel(month: string): string {
+  const match = /^(\d{4})-(\d{2})$/.exec(month);
+  if (!match) {
+    return month || "当前月份";
+  }
+  return `${match[1]}年${Number(match[2])}月`;
+}
+
+function formatMonthTitle(month: string): string {
+  const match = /^\d{4}-(\d{2})$/.exec(month);
+  return match ? `${Number(match[1])}月考勤月报` : "考勤月报";
+}
+
+function buildMonthlyNarrative(summary: Record<string, number | string> | null): string {
+  const attendance = Number(summary?.attendance_days ?? 0);
+  const lateEarly = Number(summary?.late_early_minutes ?? 0);
+
+  if (lateEarly > 0) {
+    return `本月已记录出勤 ${attendance} 天，累计迟到早退 ${lateEarly} 分钟，请留意异常记录。`;
+  }
+  if (attendance > 0) {
+    return `本月已记录出勤 ${attendance} 天，暂未发现迟到早退记录。`;
+  }
+  return "本月暂无可展示的考勤记录。";
+}
 
 export default function QueryHomePage() {
   const [bootstrap, setBootstrap] = useState<QueryBootstrap | null>(null);
@@ -135,70 +161,122 @@ export default function QueryHomePage() {
   const funeral = Number(summary?.funeral_days ?? 0);
   const leaveTotal = personalSick + injury + trip + marriage + funeral;
 
-  const kpis = [
-    { key: "attendance", label: "考勤天数", value: summary?.attendance_days ?? 0, unit: "天", testId: "kpi-attendance" },
-    { key: "benefit", label: "剩余福利", value: summary?.benefit_days ?? 0, unit: "天", testId: "kpi-benefit" },
-    { key: "overtime", label: "剩余调休", value: summary?.overtime_remaining_days ?? 0, unit: "天", testId: "kpi-overtime" },
-    { key: "late", label: "迟到早退", value: summary?.late_early_minutes ?? 0, unit: "分钟", testId: "kpi-late" },
+  const leaveItems = [
+    { label: "事病假", value: personalSick },
+    { label: "工伤", value: injury },
+    { label: "出差", value: trip },
+    { label: "婚假", value: marriage },
+    { label: "丧假", value: funeral },
   ];
 
-  const leaveItems = [
-    { label: "事病假", value: personalSick, className: "sick" },
-    { label: "工伤", value: injury, className: "injury" },
-    { label: "出差", value: trip, className: "trip" },
-    { label: "婚假", value: marriage, className: "marriage" },
-    { label: "丧假", value: funeral, className: "funeral" },
-  ];
+  const monthLabel = formatMonthLabel(month);
+  const monthTitle = formatMonthTitle(month);
+  const monthlyNarrative = buildMonthlyNarrative(summary);
 
   return (
-    <div className="query-home-container qh-minimal-shell">
-      <header className="qh-minimal-header">
-        <div>
-          <p className="qh-minimal-eyebrow">MT EMPHUB / ATTENDANCE</p>
-          <h2>今日概览</h2>
-          <p className="qh-minimal-subtitle">{managerInfo?.emp_no || "-"} · {managerInfo?.name || "未绑定管理人员"} · {managerInfo?.dept_name || "暂无部门"}</p>
+    <div className="query-home-container qh-editorial-shell">
+      <header className="qh-editorial-header">
+        <div className="qh-editorial-meta" aria-label="月报身份信息">
+          <span>{monthLabel}</span>
+          <span>{managerInfo?.dept_name || "暂无部门"}</span>
+          <span>{managerInfo?.emp_no || "-"} · {managerInfo?.name || "未绑定管理人员"}</span>
         </div>
+        <p className="qh-editorial-eyebrow">MONTHLY ATTENDANCE</p>
+        <h2>{monthTitle}</h2>
       </header>
 
       {isLoading ? <LoadingState message="正在加载首页摘要..." /> : null}
       {error && !isLoading ? <ErrorState description={error} title="首页摘要加载失败" /> : null}
 
       {!isLoading && !error ? (
-        <>
-          <section className="qh-minimal-kpis" aria-label="关键指标">
-            {kpis.map((kpi, index) => (
-              <div className={`qh-kpi-card-hero qh-minimal-kpi ${kpi.key}`} key={kpi.key} style={{ "--qh-kpi-index": index } as CSSProperties}>
-                <span className="qh-minimal-kpi-label">{kpi.label}</span>
-                <div className="qh-minimal-kpi-value"><KpiNumber testId={kpi.testId} value={kpi.value} /><small>{kpi.unit}</small></div>
-                <span className="qh-minimal-kpi-rule" />
+        <div className="qh-editorial-content">
+          <section aria-label="本月整体表现" className="qh-editorial-hero">
+            <div className="qh-editorial-lead">
+              <p className="qh-editorial-label">本月出勤</p>
+              <div className="qh-editorial-attendance">
+                <KpiNumber testId="kpi-attendance" value={summary?.attendance_days ?? 0} />
+                <small>天</small>
               </div>
-            ))}
+              <p className="qh-editorial-narrative" data-testid="monthly-narrative">
+                {monthlyNarrative}
+              </p>
+            </div>
+
+            <div className="qh-editorial-stats">
+              <article className="qh-editorial-stat">
+                <span>剩余福利</span>
+                <strong><KpiNumber testId="kpi-benefit" value={summary?.benefit_days ?? 0} /><small>天</small></strong>
+              </article>
+              <article className="qh-editorial-stat">
+                <span>剩余调休</span>
+                <strong><KpiNumber testId="kpi-overtime" value={summary?.overtime_remaining_days ?? 0} /><small>天</small></strong>
+              </article>
+              <article className="qh-editorial-stat">
+                <span>迟到早退</span>
+                <strong><KpiNumber testId="kpi-late" value={summary?.late_early_minutes ?? 0} /><small>分钟</small></strong>
+              </article>
+            </div>
           </section>
 
-          <div className="qh-minimal-grid">
-            {managerEmployeeId && !calendarForbidden ? (
-              <section className="qh-minimal-panel qh-minimal-calendar-panel">
-                <div className="qh-minimal-panel-heading"><div><p className="qh-minimal-panel-kicker">PERSONAL RECORD</p><h3>考勤日历</h3></div><span>{month || "-"}</span></div>
-                {calendarError ? <p className="qh-minimal-error">{calendarError}</p> : calendarData ? <AttendanceCalendarGrid data={calendarData} /> : <p className="qh-minimal-muted">正在加载考勤日历...</p>}
-              </section>
-            ) : null}
+          {managerEmployeeId && !calendarForbidden ? (
+            <section className="qh-editorial-calendar">
+              <div className="qh-editorial-section-heading">
+                <div>
+                  <p>MONTH IN REVIEW</p>
+                  <h3>考勤日历</h3>
+                </div>
+                <span>{monthLabel}</span>
+              </div>
+              {calendarError ? (
+                <p className="qh-editorial-error">{calendarError}</p>
+              ) : calendarData ? (
+                <AttendanceCalendarGrid data={calendarData} />
+              ) : (
+                <p className="qh-editorial-muted">正在加载考勤日历...</p>
+              )}
+            </section>
+          ) : null}
 
-            <div className="qh-minimal-side">
-              <section className="qh-minimal-panel">
-                <div className="qh-minimal-panel-heading"><div><p className="qh-minimal-panel-kicker">MONTHLY BREAKDOWN</p><h3>本月请假构成</h3></div><span>共 {leaveTotal} 天</span></div>
-                <p className="qh-minimal-assistive-title">请假与外勤类型占比</p>
-                {leaveTotal > 0 ? (
-                  <div className="qh-minimal-breakdown">
-                    <div className="qh-minimal-stack-bar">{leaveItems.map((item) => item.value > 0 ? <span className={item.className} key={item.label} style={{ width: `${(item.value / leaveTotal) * 100}%` }} title={`${item.label}: ${item.value}天`} /> : null)}</div>
-                    {leaveItems.map((item) => <div className="qh-minimal-breakdown-row" key={item.label}><span><i className={item.className} />{item.label}</span><strong>{item.value} 天</strong></div>)}
-                  </div>
-                ) : <p className="qh-minimal-muted">本月暂无请假或出差记录</p>}
-              </section>
-
-              <section className="qh-minimal-note"><span className="qh-minimal-note-mark">i</span><div><strong>数据状态</strong><p>{message}</p></div></section>
+          <section className="qh-editorial-leave">
+            <div className="qh-editorial-section-heading">
+              <div>
+                <p>LEAVE NOTES</p>
+                <h3>本月请假构成</h3>
+              </div>
+              <span>共 {leaveTotal} 天</span>
             </div>
-          </div>
-        </>
+            <p className="qh-editorial-assistive-title">请假与外勤类型占比</p>
+            {leaveTotal > 0 ? (
+              <div className="qh-editorial-leave-body">
+                <div className="qh-editorial-leave-track" aria-hidden="true">
+                  {leaveItems.map((item, index) => item.value > 0 ? (
+                    <span
+                      className={`tone-${index + 1}`}
+                      key={item.label}
+                      style={{ width: `${(item.value / leaveTotal) * 100}%` }}
+                      title={`${item.label}: ${item.value}天`}
+                    />
+                  ) : null)}
+                </div>
+                <div className="qh-editorial-leave-list">
+                  {leaveItems.map((item, index) => (
+                    <div className="qh-editorial-leave-item" key={item.label}>
+                      <span><i className={`tone-${index + 1}`} />{item.label}</span>
+                      <strong>{item.value}<small>天</small></strong>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <p className="qh-editorial-muted">本月无请假记录</p>
+            )}
+          </section>
+
+          <footer className="qh-editorial-status">
+            <span>数据状态</span>
+            <p>{message}</p>
+          </footer>
+        </div>
       ) : null}
     </div>
   );
